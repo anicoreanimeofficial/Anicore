@@ -56,13 +56,23 @@ async function api(path, options = {}) {
       }
     });
     
-    const data = await res.json();
+    const contentType = res.headers.get('content-type');
     
-    if (!res.ok) {
-      throw new Error(data.detail || data.message || 'Request failed');
+    // Check if response is JSON
+    if (contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.detail || data.message || 'Request failed');
+      }
+      
+      return data;
+    } else {
+      // Handle non-JSON responses (HTML error pages)
+      const text = await res.text();
+      console.error('Non-JSON response:', text.substring(0, 200));
+      throw new Error('Server error. Please try again later.');
     }
-    
-    return data;
   } catch (error) {
     console.error('API Error:', error);
     throw error;
@@ -74,24 +84,38 @@ async function api(path, options = {}) {
 function openAuth(mode = 'login') {
   authMode = mode;
   const modal = document.getElementById('authModal');
-  const title = modal.querySelector('h2');
-  const btn = modal.querySelector('button[type="submit"]');
-  
-  title.textContent = mode === 'login' ? 'Welcome Back' : 'Create Account';
-  btn.textContent = mode === 'login' ? 'Sign In' : 'Register';
-  
+  const title = document.getElementById('authTitle');
+  const subtitle = document.getElementById('authSubtitle');
+  const btn = document.getElementById('authBtn');
+  const toggleText = document.getElementById('toggleText');
+  const toggleBtn = document.getElementById('toggleAuthBtn');
+  const passInput = document.getElementById('authPass');
+
   // Clear previous errors
   const existingError = modal.querySelector('.error-message');
   if (existingError) existingError.remove();
-  
+
+  if (mode === 'login') {
+    title.textContent = 'Welcome Back';
+    subtitle.textContent = 'Sign in to continue your journey.';
+    btn.textContent = 'Sign In';
+    toggleText.textContent = "Don't have an account?";
+    toggleBtn.textContent = 'Create Account';
+    passInput.autocomplete = 'current-password';
+  } else {
+    title.textContent = 'Join ANICORE';
+    subtitle.textContent = 'Create your free account and build your watchlist.';
+    btn.textContent = 'Create Account';
+    toggleText.textContent = 'Already have an account?';
+    toggleBtn.textContent = 'Sign In Instead';
+    passInput.autocomplete = 'new-password';
+  }
+
   modal.classList.remove('hidden');
 }
 
 function closeAuth() {
-  const modal = document.getElementById('authModal');
-  modal.classList.add('hidden');
-  
-  // Clear form
+  document.getElementById('authModal').classList.add('hidden');
   document.getElementById('authEmail').value = '';
   document.getElementById('authPass').value = '';
 }
@@ -108,16 +132,21 @@ function showError(message) {
   const form = modal.querySelector('form');
   form.insertBefore(errorDiv, form.firstChild);
   
-  // Auto-remove after 5 seconds
   setTimeout(() => errorDiv.remove(), 5000);
 }
 
+// Toggle Button Event Listener
+document.getElementById('toggleAuthBtn').addEventListener('click', () => {
+  openAuth(authMode === 'login' ? 'register' : 'login');
+});
+
+// Form Submission
 document.getElementById('authForm').onsubmit = async (e) => {
   e.preventDefault();
   
   const email = document.getElementById('authEmail').value.trim();
   const pass = document.getElementById('authPass').value;
-  const btn = e.target.querySelector('button[type="submit"]');
+  const btn = document.getElementById('authBtn');
   
   if (!email || !pass) {
     showError('Please fill in all fields');
@@ -129,13 +158,12 @@ document.getElementById('authForm').onsubmit = async (e) => {
     return;
   }
   
-  // Disable button
   btn.disabled = true;
+  const originalText = btn.textContent;
   btn.textContent = authMode === 'login' ? 'Signing in...' : 'Creating account...';
   
   try {
     const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-    
     const res = await api(endpoint, { 
       method: 'POST', 
       body: JSON.stringify({ email, password: pass })
@@ -145,25 +173,19 @@ document.getElementById('authForm').onsubmit = async (e) => {
       closeAuth();
       await checkUser();
       
-      // Show success message
-      const successMsg = document.createElement('div');
-      successMsg.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(110deg,#ff3f82,#9a5cff);color:white;padding:15px 30px;border-radius:12px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.3);';
-      successMsg.textContent = authMode === 'login' ? 'Welcome back!' : 'Account created!';
-      document.body.appendChild(successMsg);
-      setTimeout(() => successMsg.remove(), 3000);
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(110deg,#ff3f82,#9a5cff);color:white;padding:15px 30px;border-radius:12px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.3);';
+      toast.textContent = authMode === 'login' ? 'Welcome back!' : 'Account created!';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
     }
   } catch (error) {
     showError(error.message || 'Failed to authenticate. Please try again.');
   } finally {
     btn.disabled = false;
-    btn.textContent = authMode === 'login' ? 'Sign In' : 'Register';
+    btn.textContent = originalText;
   }
 };
-
-// Add toggle between login/register
-document.getElementById('authModal').querySelector('h2').addEventListener('click', () => {
-  openAuth(authMode === 'login' ? 'register' : 'login');
-});
 
 async function checkUser() {
   try {
@@ -246,7 +268,6 @@ async function loadAnime(page = 1) {
         grid.appendChild(card);
       });
       
-      // Load more button
       if (page > 1) {
         const loadMoreBtn = document.getElementById('loadMoreAnime');
         if (loadMoreBtn) {
@@ -338,18 +359,18 @@ async function openDetail(type, id) {
       <p class="muted">
         👁️ ${item.views || 0} views | 
         ⭐ ${item.rating || 'N/A'} | 
-         ${item.year || 'N/A'}
+        📅 ${item.year || 'N/A'}
       </p>
       ${item.genres && item.genres.length ? `<p><span class="muted">Genres:</span> ${item.genres.join(', ')}</p>` : ''}
       ${item.ai_recap ? `
         <div style="background:linear-gradient(145deg,rgba(154,92,255,.15),rgba(255,63,130,.15));padding:15px;border-radius:12px;margin:15px 0;border:1px solid rgba(154,92,255,.3);">
-          <strong style="color:var(--purple);display:block;margin-bottom:8px;"> AI Recap:</strong>
+          <strong style="color:var(--purple);display:block;margin-bottom:8px;">🤖 AI Recap:</strong>
           <span style="font-size:14px;line-height:1.5;">${item.ai_recap}</span>
         </div>
       ` : ''}
       <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
         <button class="primary" onclick="addToWatchlist('${type}', '${id}')" style="flex:1;min-width:120px;">
-           Add to Watchlist
+          ♡ Add to Watchlist
         </button>
         <button class="outline" onclick="alert('AR Viewer coming soon!')" style="flex:1;min-width:120px;">
           📷 View in AR
@@ -425,7 +446,6 @@ document.getElementById('detailModal').addEventListener('click', (e) => {
   if (e.target.id === 'detailModal') closeDetail();
 });
 
-// Close on Escape key
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeAuth();
@@ -439,7 +459,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAnime(1);
   loadTvShows();
   
-  // Set current year in footer if exists
   const yearEl = document.getElementById('yearNow');
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 });
