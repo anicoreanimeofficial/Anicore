@@ -1,5 +1,5 @@
-const CACHE = "anicore-v3";
-const ASSETS = ["/", "/assets/style.css?v=3", "/assets/app.js?v=3", "/manifest.json"];
+const CACHE = "anicore-v4";
+const ASSETS = ["/", "/assets/style.css?v=4", "/assets/app.js?v=4", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
   console.log("[sw] installing", CACHE);
@@ -22,7 +22,6 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
 
-  // Network-first for HTML so new script tags always reach the browser
   if (url.pathname === "/" || url.pathname === "/index.html") {
     e.respondWith(
       fetch(e.request)
@@ -38,7 +37,6 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Cache-first for assets
   e.respondWith(
     caches.match(e.request).then((cached) => {
       if (cached) return cached;
