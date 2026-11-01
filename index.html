@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b0e">
+  <meta name="description" content="Anicore — discover anime, explore episodes and build your watchlist.">
+  <title>{{ app_name }} — Anime Hub</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/"><span class="brand-mark">λ</span> ANICORE<span class="brand-tm">™</span></a>
+  <nav><a class="active" href="/">Home</a><a href="#catalogue">Anime</a><a href="#watchlist" id="watchlist-link">Watchlist</a><a href="/admin">Admin</a></nav>
+  <div class="account" id="account-area"><button class="btn btn-outline" id="open-auth">Sign in</button></div>
+</header>
+<main>
+  <section class="hero">
+    <div class="hero-shade"></div>
+    <div class="hero-copy">
+      <span class="eyebrow"><i></i> YOUR NEXT OBSESSION STARTS HERE</span>
+      <h1>ENTER THE<br><span>ANIMEVERSE.</span></h1>
+      <p>Discover unforgettable stories, explore new worlds, and keep your watchlist close.</p>
+      <a class="btn btn-red" href="#catalogue">Explore anime <b>↗</b></a>
+    </div>
+    <div class="hero-stamp">ANICORE<br><small>ANIME HUB / EST. 2026</small></div>
+  </section>
+
+  <section class="ticker"><span>✦ DISCOVER</span><span>✦ EXPLORE</span><span>✦ WATCH</span><span>✦ REPEAT</span><span>✦ DISCOVER</span></section>
+
+  <section class="content-section" id="catalogue">
+    <div class="section-head"><div><span class="eyebrow">THE COLLECTION</span><h2>Find your <em>next anime.</em></h2></div><span class="section-note">A WORLD OF STORIES</span></div>
+    <div class="filters">
+      <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search anime titles..."></label>
+      <select id="genre"><option value="">All genres</option><option>Action</option><option>Adventure</option><option>Comedy</option><option>Drama</option><option>Fantasy</option><option>Romance</option><option>Sci-Fi</option><option>Supernatural</option></select>
+    </div>
+    <div id="anime-grid" class="anime-grid"><div class="empty">Loading the anime collection...</div></div>
+  </section>
+
+  <section class="content-section split-section" id="watchlist">
+    <div class="section-head"><div><span class="eyebrow">SAVED FOR LATER</span><h2>Your <em>watchlist.</em></h2></div><span class="section-note">SIGN IN TO SYNC</span></div>
+    <div id="watchlist-grid" class="anime-grid"><div class="empty">Sign in to see your saved anime.</div></div>
+  </section>
+</main>
+<footer><a class="brand" href="/"><span class="brand-mark">λ</span> ANICORE<span class="brand-tm">™</span></a><p>Made for anime fans. Only watch content you are authorized to access.</p><span>© 2026 ANICORE</span></footer>
+
+<div class="modal" id="auth-modal"><div class="modal-panel auth-panel"><button class="modal-close" data-close="auth-modal">×</button><span class="eyebrow">WELCOME TO ANICORE</span><h2 id="auth-title">Sign in.</h2><form id="auth-form"><label>Email<input type="email" id="auth-email" required autocomplete="email"></label><label>Password<input type="password" id="auth-password" required minlength="8" autocomplete="current-password"></label><button class="btn btn-red full" type="submit" id="auth-submit">Sign in</button></form><p class="form-switch"><span id="auth-switch-text">New here?</span> <button id="auth-switch" class="text-button">Create account</button></p><p class="form-message" id="auth-message"></p></div></div>
+<div class="modal" id="anime-modal"><div class="modal-panel detail-panel"><button class="modal-close" data-close="anime-modal">×</button><div id="anime-detail"></div></div></div>
+<div class="toast" id="toast"></div>
+<script src="/static/app.js"></script>
+</body></html>
