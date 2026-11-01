@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#09090d">
+  <title>Anicore — Your Anime Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="logo" href="#">λɴίȻΘરε<span>™</span></a>
+    <nav>
+      <a href="#home">Home</a>
+      <a href="#catalogue">Anime</a>
+      <a href="#watchlist">Watchlist</a>
+      <button id="authOpen" class="outline">Sign in</button>
+      <button id="adminOpen" class="outline hidden">Admin</button>
+      <button id="logoutBtn" class="outline hidden">Logout</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" id="home">
+      <div class="hero-content">
+        <span class="eyebrow">YOUR ANIME UNIVERSE</span>
+        <h1>Discover your next <span>favourite anime.</span></h1>
+        <p>Explore anime, discover episodes and keep track of your watchlist.</p>
+        <a href="#catalogue" class="primary">Explore Anime</a>
+      </div>
+    </section>
+
+    <section class="section" id="catalogue">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">EXPLORE</span>
+          <h2>Anime Catalogue</h2>
+        </div>
+        <span id="animeCount" class="muted"></span>
+      </div>
+
+      <div class="filters">
+        <input id="search" placeholder="Search anime..." type="search">
+        <select id="genreFilter">
+          <option value="">All genres</option>
+          <option>Action</option>
+          <option>Adventure</option>
+          <option>Comedy</option>
+          <option>Drama</option>
+          <option>Fantasy</option>
+          <option>Romance</option>
+          <option>Sci-Fi</option>
+          <option>Thriller</option>
+        </select>
+      </div>
+
+      <div id="animeGrid" class="anime-grid">
+        <p class="muted">Loading anime...</p>
+      </div>
+    </section>
+
+    <section class="section" id="watchlist">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">YOUR COLLECTION</span>
+          <h2>My Watchlist</h2>
+        </div>
+      </div>
+      <div id="watchlistGrid" class="anime-grid">
+        <p class="muted">Sign in to use your watchlist.</p>
+      </div>
+    </section>
+
+    <section class="section hidden" id="adminPanel">
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">CONTROL CENTRE</span>
+          <h2>Admin Studio</h2>
+        </div>
+        <button id="refreshAdmin" class="outline">Refresh</button>
+      </div>
+
+      <div class="admin-grid">
+        <form id="animeForm" class="panel">
+          <h3>Add / Edit Anime</h3>
+          <input id="animeId" type="hidden">
+          <label>Anime title</label>
+          <input id="animeTitle" required placeholder="Anime title">
+          <label>Description</label>
+          <textarea id="animeDescription" placeholder="Anime description"></textarea>
+          <label>Genres (comma separated)</label>
+          <input id="animeGenres" placeholder="Action, Fantasy">
+          <div class="two">
+            <div>
+              <label>Year</label>
+              <input id="animeYear" type="number" placeholder="2026">
+            </div>
+            <div>
+              <label>Rating</label>
+              <input id="animeRating" placeholder="8.5">
+            </div>
+          </div>
+          <label>Poster image URL</label>
+          <input id="animePoster" type="url" placeholder="https://...">
+          <label>Banner image URL</label>
+          <input id="animeBanner" type="url" placeholder="https://...">
+          <label>Status</label>
+          <select id="animeStatus">
+            <option>Ongoing</option>
+            <option>Completed</option>
+            <option>Upcoming</option>
+          </select>
+          <button class="primary" type="submit">Save Anime</button>
+          <button class="outline" type="button" id="clearAnime">Clear Form</button>
+        </form>
+
+        <form id="episodeForm" class="panel">
+          <h3>Add / Edit Episode</h3>
+          <input id="episodeIndex" type="hidden">
+          <label>Select anime</label>
+          <select id="episodeAnime" required>
+            <option value="">Choose anime</option>
+          </select>
+          <div class="two">
+            <div>
+              <label>Season</label>
+              <input id="episodeSeason" type="number" value="1" min="1">
+            </div>
+            <div>
+              <label>Episode number</label>
+              <input id="episodeNumber" type="number" required min="1">
+            </div>
+          </div>
+          <label>Episode title</label>
+          <input id="episodeTitle" placeholder="Episode title">
+          <label>Telegram post link</label>
+          <input id="telegramUrl" type="url" required placeholder="https://t.me/channel/123">
+          <p class="hint">Paste the public Telegram channel post link. The Watch button opens that post.</p>
+          <label>Description</label>
+          <textarea id="episodeDescription" placeholder="Episode description"></textarea>
+          <label>Thumbnail URL (optional)</label>
+          <input id="episodeThumbnail" type="url" placeholder="https://...">
+          <label>Duration (optional)</label>
+          <input id="episodeDuration" placeholder="24 min">
+          <button class="primary" type="submit">Save Episode</button>
+          <button class="outline" type="button" id="clearEpisode">Clear Form</button>
+        </form>
+      </div>
+
+      <div class="panel manager">
+        <h3>Anime Manager</h3>
+        <div id="adminAnimeList"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="authModal" class="modal hidden">
+    <div class="modal-card">
+      <button class="close" id="authClose">×</button>
+      <h2 id="authTitle">Welcome back</h2>
+      <p class="muted" id="authSubtitle">Sign in to your Anicore account.</p>
+      <form id="authForm">
+        <input id="authEmail" type="email" placeholder="Email address" required>
+        <input id="authPassword" type="password" placeholder="Password (minimum 6 characters)" required minlength="6">
+        <button class="primary" id="authSubmit" type="submit">Sign in</button>
+      </form>
+      <p class="switch-auth">
+        <span id="switchText">Don't have an account?</span>
+        <button id="switchAuth" class="text-button">Create account</button>
+      </p>
+      <p id="authMessage" class="hint"></p>
+    </div>
+  </div>
+
+  <div id="detailModal" class="modal hidden">
+    <div class="modal-card detail-card">
+      <button class="close" id="detailClose">×</button>
+      <div id="detailContent"></div>
+    </div>
+  </div>
+
+  <footer>
+    <a class="logo" href="#">λɴίȻΘરε™</a>
+    <p>Your anime hub.</p>
+    <p class="muted">© <span id="yearNow"></span> Anicore</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
