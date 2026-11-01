@@ -1,464 +1,532 @@
-const API = "";
-let currentPage = { anime: 1, movies: 1, tv: 1 };
-let lastScrollY = window.scrollY;
-let authMode = 'login';
+'use strict';
 
-// --- Navigation & UI ---
+const $ = (id) => document.getElementById(id);
+const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
+const PAGE_SIZE = 20;
+
+const state = { user: null, authMode: 'login' };
+
+// One config per browsable list (anime / tv_show / movie)
+const LISTS = {
+  anime:   { endpoint: '/api/anime',   grid: 'animeGrid', more: 'loadMoreAnime',  search: 'animeSearch', empty: 'No anime found.',    page: 0, q: '' },
+  tv_show: { endpoint: '/api/tvshows', grid: 'tvGrid',    more: 'loadMoreTv',     search: 'tvSearch',    empty: 'No TV shows found.', page: 0, q: '' },
+  movie:   { endpoint: '/api/movies',  grid: 'movieGrid', more: 'loadMoreMovies', search: 'movieSearch', empty: 'No movies found.',   page: 0, q: '' },
+};
+const PAGE_TYPES = { anime: 'anime', tv: 'tv_show', movies: 'movie' };
+
+// --- Helpers ---
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+function safeUrl(url) {
+  return /^https?:\/\//i.test(url || '') ? url : '';
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString();
+}
+
+function toast(message, kind = 'ok') {
+  const el = document.createElement('div');
+  el.className = `toast ${kind}`;
+  el.setAttribute('role', 'status');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function errorText(data) {
+  if (!data) return '';
+  const d = data.detail ?? data.message;
+  if (Array.isArray(d)) return d.map((e) => e.msg).join('. ');
+  return typeof d === 'string' ? d : '';
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  let data = null;
+  try { data = await res.json(); } catch { /* non-JSON response */ }
+  if (!res.ok) throw new Error(errorText(data) || `Request failed (${res.status})`);
+  return data;
+}
+
+// --- Navigation ---
 
 function showPage(page) {
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.getElementById(`page-${page}`).classList.add("active");
-  
-  document.querySelectorAll(".bottom-nav button").forEach(b => b.classList.remove("active"));
-  const navButtons = document.querySelectorAll(".bottom-nav button");
-  const pageIndex = { 'home': 0, 'anime': 1, 'tv': 2, 'movies': 3, 'profile': 4 };
-  if (pageIndex[page] !== undefined) {
-    navButtons[pageIndex[page]].classList.add("active");
-  }
-  
-  if(page === 'profile') loadProfile();
-  if(page === 'anime') {
-    currentPage.anime = 1;
-    loadAnime(1);
-  }
-  if(page === 'tv') loadTvShows();
-  if(page === 'movies') {
-    currentPage.movies = 1;
-    loadMovies(1);
-  }
-  
+  if (page === 'admin' && state.user?.role !== 'admin') page = 'home';
+  const target = $(`page-${page}`);
+  if (!target) return;
+
+  document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
+  document.querySelectorAll('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
+
+  const type = PAGE_TYPES[page];
+  if (type && !LISTS[type].page) loadList(type, true);
+  if (page === 'profile') loadProfile();
+  if (page === 'admin') loadAdminRequests();
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// Smooth Nav Hide/Show
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-page]');
+  if (el) {
+    e.preventDefault();
+    showPage(el.dataset.page);
+  }
+});
+
+// Hide the bottom nav while scrolling down
+let lastScrollY = window.scrollY;
 window.addEventListener('scroll', () => {
-  const nav = document.getElementById('bottomNav');
-  const currentScrollY = window.scrollY;
-  
-  if (currentScrollY > lastScrollY && currentScrollY > 100) {
-    nav.classList.add('hidden-nav');
-  } else {
-    nav.classList.remove('hidden-nav');
+  const y = window.scrollY;
+  if (Math.abs(y - lastScrollY) < 8) return;
+  $('bottomNav').classList.toggle('hidden-nav', y > lastScrollY && y > 100);
+  lastScrollY = y;
+}, { passive: true });
+
+// --- Rendering ---
+
+function renderGrid(grid, items, type, { append = false, empty = 'Nothing here yet.' } = {}) {
+  if (!append) grid.innerHTML = '';
+  if (!items.length) {
+    if (!append) grid.innerHTML = `<p class="muted empty">${esc(empty)}</p>`;
+    return;
   }
-  lastScrollY = currentScrollY;
-});
 
-// --- API Helper with Better Error Handling ---
+  const frag = document.createDocumentFragment();
+  items.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'media-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.innerHTML = '<div class="poster-wrap"><img loading="lazy" alt=""></div><div class="media-info"><h3></h3><p></p></div>';
 
-async function api(path, options = {}) {
-  try {
-    const res = await fetch(API + path, { 
-      ...options, 
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-      }
+    const img = card.querySelector('img');
+    img.src = safeUrl(item.poster) || PLACEHOLDER;
+    img.alt = item.title || '';
+    img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+
+    card.querySelector('h3').textContent = item.title || 'Untitled';
+    card.querySelector('p').textContent = item.views ? `${item.views} views` : (item.year || '');
+
+    const open = () => openDetail(item._type || type, item._id);
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
-    
-    const contentType = res.headers.get('content-type');
-    
-    // Check if response is JSON
-    if (contentType && contentType.includes('application/json')) {
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.detail || data.message || 'Request failed');
-      }
-      
-      return data;
-    } else {
-      // Handle non-JSON responses (HTML error pages)
-      const text = await res.text();
-      console.error('Non-JSON response:', text.substring(0, 200));
-      throw new Error('Server error. Please try again later.');
+    frag.appendChild(card);
+  });
+  grid.appendChild(frag);
+}
+
+async function loadHome() {
+  const jobs = [
+    ['anime', 'homeAnimeGrid', '/api/anime'],
+    ['tv_show', 'homeTvGrid', '/api/tvshows'],
+    ['movie', 'homeMovieGrid', '/api/movies'],
+  ];
+  await Promise.all(jobs.map(async ([type, gridId, endpoint]) => {
+    try {
+      const data = await api(`${endpoint}?page=1&limit=10`);
+      renderGrid($(gridId), data.items, type);
+    } catch {
+      $(gridId).innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
     }
-  } catch (error) {
-    console.error('API Error:', error);
-    throw error;
-  }
+  }));
 }
 
-// --- Auth Functions ---
+async function loadList(type, reset = false) {
+  const l = LISTS[type];
+  if (reset) l.page = 0;
+  const next = l.page + 1;
+  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE });
+  if (l.q) params.set('q', l.q);
 
-function openAuth(mode = 'login') {
-  authMode = mode;
-  const modal = document.getElementById('authModal');
-  const title = document.getElementById('authTitle');
-  const subtitle = document.getElementById('authSubtitle');
-  const btn = document.getElementById('authBtn');
-  const toggleText = document.getElementById('toggleText');
-  const toggleBtn = document.getElementById('toggleAuthBtn');
-  const passInput = document.getElementById('authPass');
-
-  // Clear previous errors
-  const existingError = modal.querySelector('.error-message');
-  if (existingError) existingError.remove();
-
-  if (mode === 'login') {
-    title.textContent = 'Welcome Back';
-    subtitle.textContent = 'Sign in to continue your journey.';
-    btn.textContent = 'Sign In';
-    toggleText.textContent = "Don't have an account?";
-    toggleBtn.textContent = 'Create Account';
-    passInput.autocomplete = 'current-password';
-  } else {
-    title.textContent = 'Join ANICORE';
-    subtitle.textContent = 'Create your free account and build your watchlist.';
-    btn.textContent = 'Create Account';
-    toggleText.textContent = 'Already have an account?';
-    toggleBtn.textContent = 'Sign In Instead';
-    passInput.autocomplete = 'new-password';
-  }
-
-  modal.classList.remove('hidden');
-}
-
-function closeAuth() {
-  document.getElementById('authModal').classList.add('hidden');
-  document.getElementById('authEmail').value = '';
-  document.getElementById('authPass').value = '';
-}
-
-function showError(message) {
-  const modal = document.getElementById('authModal');
-  const existingError = modal.querySelector('.error-message');
-  if (existingError) existingError.remove();
-  
-  const errorDiv = document.createElement('div');
-  errorDiv.className = 'error-message';
-  errorDiv.textContent = message;
-  
-  const form = modal.querySelector('form');
-  form.insertBefore(errorDiv, form.firstChild);
-  
-  setTimeout(() => errorDiv.remove(), 5000);
-}
-
-// Toggle Button Event Listener
-document.getElementById('toggleAuthBtn').addEventListener('click', () => {
-  openAuth(authMode === 'login' ? 'register' : 'login');
-});
-
-// Form Submission
-document.getElementById('authForm').onsubmit = async (e) => {
-  e.preventDefault();
-  
-  const email = document.getElementById('authEmail').value.trim();
-  const pass = document.getElementById('authPass').value;
-  const btn = document.getElementById('authBtn');
-  
-  if (!email || !pass) {
-    showError('Please fill in all fields');
-    return;
-  }
-  
-  if (pass.length < 6) {
-    showError('Password must be at least 6 characters');
-    return;
-  }
-  
+  const btn = $(l.more);
   btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = authMode === 'login' ? 'Signing in...' : 'Creating account...';
-  
   try {
-    const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
-    const res = await api(endpoint, { 
-      method: 'POST', 
-      body: JSON.stringify({ email, password: pass })
-    });
-    
-    if (res.message) {
-      closeAuth();
-      await checkUser();
-      
-      const toast = document.createElement('div');
-      toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(110deg,#ff3f82,#9a5cff);color:white;padding:15px 30px;border-radius:12px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.3);';
-      toast.textContent = authMode === 'login' ? 'Welcome back!' : 'Account created!';
-      document.body.appendChild(toast);
-      setTimeout(() => toast.remove(), 3000);
-    }
-  } catch (error) {
-    showError(error.message || 'Failed to authenticate. Please try again.');
+    const data = await api(`${l.endpoint}?${params}`);
+    l.page = next;
+    renderGrid($(l.grid), data.items, type, { append: next > 1, empty: l.empty });
+    btn.classList.toggle('hidden', next * PAGE_SIZE >= data.total);
+  } catch (err) {
+    toast(err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = originalText;
   }
-};
+}
+
+Object.entries(LISTS).forEach(([type, l]) => {
+  let timer;
+  $(l.search).addEventListener('input', (e) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { l.q = e.target.value.trim(); loadList(type, true); }, 300);
+  });
+  $(l.more).addEventListener('click', () => loadList(type));
+});
+
+// --- Auth ---
+
+function updateAuthUI() {
+  const u = state.user;
+  $('signInBtn').classList.toggle('hidden', !!u);
+  $('logoutBtn').classList.toggle('hidden', !u);
+  $('adminBtn').classList.toggle('hidden', u?.role !== 'admin');
+}
 
 async function checkUser() {
   try {
-    const user = await api('/api/auth/me');
-    const authBtn = document.getElementById('authBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const profileInfo = document.getElementById('profileInfo');
-    
-    if (user.authenticated) {
-      authBtn.classList.add('hidden');
-      logoutBtn.classList.remove('hidden');
-      
-      if (profileInfo) {
-        profileInfo.innerHTML = `
-          <div style="background:rgba(255,255,255,.05);padding:15px;border-radius:12px;margin-bottom:15px;">
-            <strong style="color:var(--pink)">${user.email}</strong><br>
-            <span class="muted">Role: ${user.role}</span>
-          </div>
-        `;
-      }
-      
-      if (user.role === 'admin') {
-        document.getElementById('page-admin').style.display = 'block';
-      }
-      
-      return user;
-    } else {
-      authBtn.classList.remove('hidden');
-      logoutBtn.classList.add('hidden');
-      if (profileInfo) {
-        profileInfo.innerHTML = 'Sign in to see details.';
-      }
-      return null;
-    }
-  } catch (error) {
-    console.error('Check user error:', error);
-    return null;
+    const res = await api('/api/auth/me');
+    state.user = res.authenticated ? { email: res.email, role: res.role || 'user' } : null;
+  } catch {
+    state.user = null;
   }
+  updateAuthUI();
+  return state.user;
 }
 
-async function logout() {
+function setAuthMode(mode) {
+  state.authMode = mode;
+  const login = mode === 'login';
+  $('authTitle').textContent = login ? 'Welcome Back' : 'Join ANICORE';
+  $('authSubtitle').textContent = login
+    ? 'Sign in to continue your journey.'
+    : 'Create your free account and build your watchlist.';
+  $('authSubmit').textContent = login ? 'Sign In' : 'Create Account';
+  $('toggleText').textContent = login ? "Don't have an account?" : 'Already have an account?';
+  $('toggleAuthBtn').textContent = login ? 'Create Account' : 'Sign In Instead';
+  $('authPass').autocomplete = login ? 'current-password' : 'new-password';
+}
+
+function showAuthError(message) {
+  const box = $('authError');
+  box.textContent = message;
+  box.classList.remove('hidden');
+}
+
+function openAuth(mode = 'login') {
+  setAuthMode(mode);
+  $('authError').classList.add('hidden');
+  $('authModal').classList.remove('hidden');
+  $('authEmail').focus();
+}
+
+function closeAuth() {
+  $('authModal').classList.add('hidden');
+  $('authForm').reset();
+  $('authError').classList.add('hidden');
+}
+
+$('signInBtn').addEventListener('click', () => openAuth('login'));
+$('authClose').addEventListener('click', closeAuth);
+$('toggleAuthBtn').addEventListener('click', () => openAuth(state.authMode === 'login' ? 'register' : 'login'));
+$('authModal').addEventListener('click', (e) => { if (e.target.id === 'authModal') closeAuth(); });
+
+$('authForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('authEmail').value.trim();
+  const password = $('authPass').value;
+
+  if (!email || !password) return showAuthError('Please fill in all fields.');
+  if (state.authMode === 'register' && password.length < 6) {
+    return showAuthError('Password must be at least 6 characters.');
+  }
+
+  const btn = $('authSubmit');
+  btn.disabled = true;
+  btn.textContent = state.authMode === 'login' ? 'Signing in...' : 'Creating account...';
+
+  try {
+    await api(`/api/auth/${state.authMode}`, { method: 'POST', body: JSON.stringify({ email, password }) });
+    const created = state.authMode === 'register';
+    closeAuth();
+    await checkUser();
+    toast(created ? 'Account created!' : 'Welcome back!');
+    if ($('page-profile').classList.contains('active')) loadProfile();
+  } catch (err) {
+    showAuthError(err.message || 'Failed to authenticate. Please try again.');
+  } finally {
+    btn.disabled = false;
+    setAuthMode(state.authMode);
+  }
+});
+
+$('logoutBtn').addEventListener('click', async () => {
   if (!confirm('Are you sure you want to sign out?')) return;
-  
   try {
     await api('/api/auth/logout', { method: 'POST' });
-    location.reload();
-  } catch (error) {
-    showError('Failed to logout');
+    state.user = null;
+    updateAuthUI();
+    showPage('home');
+    toast('Signed out');
+  } catch (err) {
+    toast(err.message || 'Failed to sign out', 'error');
   }
-}
+});
 
-// --- Data Loading ---
+// --- Profile ---
 
-async function loadAnime(page = 1) {
+async function loadProfile() {
+  const info = $('profileInfo');
+  const member = $('profileMember');
+
+  if (!state.user) {
+    info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
+    $('profileSignIn').addEventListener('click', () => openAuth('login'));
+    member.classList.add('hidden');
+    return;
+  }
+
+  info.innerHTML = `
+    <div class="panel profile-panel">
+      <div class="profile-avatar">${esc(state.user.email.charAt(0).toUpperCase())}</div>
+      <h3>${esc(state.user.email)}</h3>
+      <p class="muted">Role: ${esc(state.user.role)}</p>
+    </div>`;
+  member.classList.remove('hidden');
+
   try {
-    const data = await api(`/api/anime?page=${page}&limit=20`);
-    const gridId = page === 1 ? 'homeAnimeGrid' : 'animeGrid';
-    const grid = document.getElementById(gridId);
-    
-    if (!grid) return;
-    
-    if (page === 1) grid.innerHTML = '';
-    
-    if (data.items && data.items.length > 0) {
-      data.items.forEach(item => {
-        const card = document.createElement('div');
-        card.className = 'media-card';
-        card.onclick = () => openDetail('anime', item._id);
-        card.innerHTML = `
-          <div class="poster-wrap">
-            <img src="${item.poster || 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE'}" 
-                 loading="lazy" 
-                 onerror="this.src='https://placehold.co/400x600/17101e/ffffff?text=ANICORE'">
-          </div>
-          <div class="media-info">
-            <h3>${item.title}</h3>
-            <p>Views: ${item.views || 0}</p>
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-      
-      if (page > 1) {
-        const loadMoreBtn = document.getElementById('loadMoreAnime');
-        if (loadMoreBtn) {
-          loadMoreBtn.onclick = () => loadAnime(page + 1);
-        }
-      }
-    } else if (page === 1) {
-      grid.innerHTML = '<p class="muted" style="text-align:center;padding:40px;">No anime available yet.</p>';
-    }
-  } catch (error) {
-    console.error('Load anime error:', error);
-    const grid = document.getElementById(page === 1 ? 'homeAnimeGrid' : 'animeGrid');
-    if (grid && page === 1) {
-      grid.innerHTML = '<p class="muted" style="text-align:center;padding:40px;">Failed to load anime. Please refresh.</p>';
-    }
+    const list = await api('/api/watchlist');
+    const items = list.map((w) => ({ _id: w.content_id, _type: w.content_type, title: w.title, poster: w.poster }));
+    renderGrid($('watchlistGrid'), items, 'anime', { empty: 'Your watchlist is empty.' });
+  } catch (err) {
+    toast(err.message, 'error');
   }
 }
 
-async function loadTvShows() {
+$('requestForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
   try {
-    const data = await api(`/api/tvshows?page=1&limit=20`);
-    const grid = document.getElementById('homeTvGrid') || document.getElementById('tvGrid');
-    
-    if (!grid) return;
-    
-    if (data.items && data.items.length > 0) {
-      grid.innerHTML = data.items.map(item => `
-        <div class="media-card" onclick="openDetail('tv_show', '${item._id}')">
-          <div class="poster-wrap">
-            <img src="${item.poster || 'https://placehold.co/400x600/17101e/ffffff?text=TV+Show'}" 
-                 loading="lazy"
-                 onerror="this.src='https://placehold.co/400x600/17101e/ffffff?text=TV+Show'">
-          </div>
-          <div class="media-info">
-            <h3>${item.title}</h3>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      grid.innerHTML = '<p class="muted" style="text-align:center;padding:40px;">No TV shows available yet.</p>';
-    }
-  } catch (error) {
-    console.error('Load TV shows error:', error);
+    await api('/api/requests', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: $('reqTitle').value.trim(),
+        language: $('reqLanguage').value,
+        notes: $('reqNotes').value.trim(),
+      }),
+    });
+    e.target.reset();
+    toast('Request sent!');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
+});
+
+// --- Detail modal ---
+
+function linkList(links) {
+  const entries = Object.entries(links || {}).filter(([, url]) => safeUrl(url));
+  if (!entries.length) return '';
+  return `<div class="links">${entries.map(([quality, url]) =>
+    `<a class="chip" href="${esc(safeUrl(url))}" target="_blank" rel="noopener noreferrer">${esc(quality)}</a>`
+  ).join('')}</div>`;
 }
 
-async function loadMovies(page = 1) {
-  try {
-    const data = await api(`/api/movies?page=${page}&limit=20`);
-    const grid = document.getElementById('movieGrid');
-    
-    if (!grid) return;
-    
-    if (data.items && data.items.length > 0) {
-      grid.innerHTML = data.items.map(item => `
-        <div class="media-card" onclick="openDetail('movie', '${item._id}')">
-          <div class="poster-wrap">
-            <img src="${item.poster || 'https://placehold.co/400x600/17101e/ffffff?text=Movie'}" 
-                 loading="lazy"
-                 onerror="this.src='https://placehold.co/400x600/17101e/ffffff?text=Movie'">
-          </div>
-          <div class="media-info">
-            <h3>${item.title}</h3>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      grid.innerHTML = '<p class="muted" style="text-align:center;padding:40px;">No movies available yet.</p>';
-    }
-  } catch (error) {
-    console.error('Load movies error:', error);
-  }
+function episodesHtml(episodes) {
+  if (!episodes?.length) return '';
+  const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+  return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => `
+    <div class="episode">
+      <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+      ${linkList(ep.quality_links)}
+    </div>`).join('')}</div>`;
 }
 
-// --- Details & Features ---
+function commentsHtml(comments) {
+  if (!comments.length) return '<p class="muted">No comments yet.</p>';
+  return comments.map((c) => `
+    <div class="comment">
+      <strong>${esc(c.username)}</strong> <small>${esc(fmtDate(c.created_at))}</small>
+      <p>${esc(c.text)}</p>
+    </div>`).join('');
+}
 
 async function openDetail(type, id) {
+  const modal = $('detailModal');
+  const content = $('detailContent');
+  content.innerHTML = '<p class="muted empty">Loading…</p>';
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
   try {
-    const item = await api(`/api/content/${type}/${id}`);
-    const modal = document.getElementById('detailModal');
-    const content = document.getElementById('detailContent');
-    
-    content.innerHTML = `
-      <img src="${item.banner || item.poster}" 
-           style="width:100%;max-height:300px;object-fit:cover;border-radius:12px;margin-bottom:20px;"
-           onerror="this.style.display='none'">
-      <h2>${item.title}</h2>
-      <p style="line-height:1.6;margin:15px 0;">${item.description || 'No description available.'}</p>
-      <p class="muted">
-        👁️ ${item.views || 0} views | 
-        ⭐ ${item.rating || 'N/A'} | 
-        📅 ${item.year || 'N/A'}
-      </p>
-      ${item.genres && item.genres.length ? `<p><span class="muted">Genres:</span> ${item.genres.join(', ')}</p>` : ''}
-      ${item.ai_recap ? `
-        <div style="background:linear-gradient(145deg,rgba(154,92,255,.15),rgba(255,63,130,.15));padding:15px;border-radius:12px;margin:15px 0;border:1px solid rgba(154,92,255,.3);">
-          <strong style="color:var(--purple);display:block;margin-bottom:8px;">🤖 AI Recap:</strong>
-          <span style="font-size:14px;line-height:1.5;">${item.ai_recap}</span>
-        </div>
-      ` : ''}
-      <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
-        <button class="primary" onclick="addToWatchlist('${type}', '${id}')" style="flex:1;min-width:120px;">
-          ♡ Add to Watchlist
-        </button>
-        <button class="outline" onclick="alert('AR Viewer coming soon!')" style="flex:1;min-width:120px;">
-          📷 View in AR
-        </button>
-      </div>
-    `;
-    
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-  } catch (error) {
-    console.error('Open detail error:', error);
-    alert('Failed to load details. Please try again.');
+    const [item, comments] = await Promise.all([
+      api(`/api/content/${type}/${id}`),
+      api(`/api/comments/${type}/${id}`),
+    ]);
+    renderDetail(type, item, comments);
+  } catch (err) {
+    closeDetail();
+    toast(err.message || 'Failed to load details.', 'error');
   }
+}
+
+function renderDetail(type, item, comments) {
+  const banner = safeUrl(item.banner) || safeUrl(item.poster);
+  const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
+
+  $('detailContent').innerHTML = `
+    ${banner ? `<img class="detail-banner" src="${esc(banner)}" alt="">` : ''}
+    <h2>${esc(item.title)}</h2>
+    <p class="muted meta">👁 ${esc(item.views || 0)} · ⭐ ${esc(item.rating || 'N/A')} · 📅 ${esc(item.year || 'N/A')}${item.status ? ` · ${esc(item.status)}` : ''}</p>
+    <p class="desc">${esc(item.description || 'No description available.')}</p>
+    ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
+    ${item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : ''}
+    ${type === 'movie' ? linkList(item.quality_links) : ''}
+    ${episodesHtml(item.episodes)}
+    <div class="detail-actions">
+      <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
+      <button class="outline" id="arBtn" type="button">📷 View in AR</button>
+      <button class="outline" id="widgetBtn" type="button">🔗 Get Widget</button>
+    </div>
+    <h3>Comments</h3>
+    ${state.user
+      ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
+      : '<p class="muted">Sign in to comment.</p>'}
+    <div id="commentList">${commentsHtml(comments)}</div>`;
+
+  $('detailContent').querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
+
+  $('wlBtn').addEventListener('click', async (e) => {
+    if (!state.user) return openAuth('login');
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const res = await api(`/api/watchlist/${type}/${item._id}`, { method: 'POST' });
+      btn.textContent = res.saved ? '♥ In Watchlist' : '♡ Add to Watchlist';
+      btn.classList.toggle('saved', res.saved);
+      toast(res.saved ? 'Added to watchlist' : 'Removed from watchlist');
+      if ($('page-profile').classList.contains('active')) loadProfile();
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('arBtn').addEventListener('click', () => toast('AR viewer coming soon!'));
+  $('widgetBtn').addEventListener('click', () => toast('Widget coming soon!'));
+
+  $('commentForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = $('commentText').value.trim();
+    if (!text) return;
+    try {
+      await api('/api/comments', {
+        method: 'POST',
+        body: JSON.stringify({ content_type: type, content_id: item._id, text }),
+      });
+      $('commentText').value = '';
+      $('commentList').innerHTML = commentsHtml(await api(`/api/comments/${type}/${item._id}`));
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
 }
 
 function closeDetail() {
-  const modal = document.getElementById('detailModal');
-  modal.classList.add('hidden');
+  $('detailModal').classList.add('hidden');
   document.body.style.overflow = '';
 }
 
-async function addToWatchlist(type, id) {
-  try {
-    const user = await checkUser();
-    if (!user) {
-      openAuth('login');
-      return;
-    }
-    
-    const result = await api(`/api/watchlist/${type}/${id}`, { method: 'POST' });
-    
-    const msg = document.createElement('div');
-    msg.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(110deg,#ff3f82,#9a5cff);color:white;padding:15px 30px;border-radius:12px;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.3);';
-    msg.textContent = result.saved ? 'Added to watchlist!' : 'Removed from watchlist';
-    document.body.appendChild(msg);
-    setTimeout(() => msg.remove(), 3000);
-  } catch (error) {
-    alert('Failed to update watchlist');
-  }
-}
-
-async function loadProfile() {
-  const user = await checkUser();
-  if (!user) return;
-  
-  try {
-    const watchlist = await api('/api/watchlist');
-    const grid = document.getElementById('watchlistGrid');
-    
-    if (watchlist && watchlist.length > 0) {
-      grid.innerHTML = watchlist.map(item => `
-        <div class="media-card">
-          <div class="media-info">
-            <h3>${item.content_type}</h3>
-            <p class="muted">Added: ${new Date(item.created_at).toLocaleDateString()}</p>
-          </div>
-        </div>
-      `).join('');
-    } else {
-      grid.innerHTML = '<p class="muted" style="text-align:center;padding:20px;">Your watchlist is empty.</p>';
-    }
-  } catch (error) {
-    console.error('Load profile error:', error);
-  }
-}
-
-// Close modals on outside click
-document.getElementById('authModal').addEventListener('click', (e) => {
-  if (e.target.id === 'authModal') closeAuth();
-});
-
-document.getElementById('detailModal').addEventListener('click', (e) => {
-  if (e.target.id === 'detailModal') closeDetail();
-});
+$('detailClose').addEventListener('click', closeDetail);
+$('detailModal').addEventListener('click', (e) => { if (e.target.id === 'detailModal') closeDetail(); });
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeAuth();
-    closeDetail();
+  if (e.key !== 'Escape') return;
+  if (!$('authModal').classList.contains('hidden')) closeAuth();
+  else closeDetail();
+});
+
+// --- Admin ---
+
+const ADMIN_ENDPOINTS = { anime: '/api/admin/anime', tv_show: '/api/admin/tvshows', movie: '/api/admin/movies' };
+const REQUEST_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'];
+
+$('adminForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const type = $('aType').value;
+  const year = $('aYear').value;
+  const body = {
+    title: $('aTitle').value.trim(),
+    description: $('aDesc').value.trim(),
+    genres: $('aGenres').value.split(',').map((s) => s.trim()).filter(Boolean),
+    year: year ? Number(year) : null,
+    rating: $('aRating').value.trim(),
+    status: $('aStatus').value,
+    poster: $('aPoster').value.trim(),
+    banner: $('aBanner').value.trim(),
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  try {
+    await api(ADMIN_ENDPOINTS[type], { method: 'POST', body: JSON.stringify(body) });
+    e.target.reset();
+    toast('Saved!');
+    LISTS[type].page = 0; // force a refresh next time that list is opened
+    loadHome();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
   }
 });
 
+async function loadAdminRequests() {
+  const box = $('adminRequests');
+  try {
+    const rows = await api('/api/admin/requests');
+    if (!rows.length) {
+      box.innerHTML = '<p class="muted">No requests yet.</p>';
+      return;
+    }
+    box.innerHTML = '';
+    rows.forEach((r) => {
+      const row = document.createElement('div');
+      row.className = 'request-row';
+      row.innerHTML = `
+        <div>
+          <strong>${esc(r.title)}</strong>
+          <p class="muted">${esc(r.email)} · ${esc(r.language)} · ${esc(fmtDate(r.created_at))}</p>
+          ${r.notes ? `<p>${esc(r.notes)}</p>` : ''}
+        </div>
+        <select aria-label="Request status">
+          ${REQUEST_STATUSES.map((s) => `<option${s === r.status ? ' selected' : ''}>${s}</option>`).join('')}
+        </select>`;
+      row.querySelector('select').addEventListener('change', async (e) => {
+        try {
+          await api(`/api/admin/requests/${r._id}`, { method: 'PATCH', body: JSON.stringify({ status: e.target.value }) });
+          toast('Request updated');
+        } catch (err) {
+          toast(err.message, 'error');
+          loadAdminRequests();
+        }
+      });
+      box.appendChild(row);
+    });
+  } catch (err) {
+    box.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
+}
+
 // --- Init ---
-document.addEventListener('DOMContentLoaded', () => {
-  checkUser();
-  loadAnime(1);
-  loadTvShows();
-  
-  const yearEl = document.getElementById('yearNow');
-  if (yearEl) yearEl.textContent = new Date().getFullYear();
-});
+
+(async () => {
+  $('yearNow').textContent = new Date().getFullYear();
+  await checkUser();
+  loadHome();
+})();
