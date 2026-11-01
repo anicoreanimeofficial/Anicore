@@ -98,8 +98,9 @@
       <div class="section">
         <h2>Admin Studio</h2>
         <div class="panel">
-          <h3>Add Content</h3>
+          <h3 id="adminFormTitle">Add Content</h3>
           <form id="adminForm">
+            <input type="hidden" id="aId">
             <select id="aType" aria-label="Content type">
               <option value="anime">Anime</option>
               <option value="tv_show">TV Show</option>
@@ -119,8 +120,23 @@
             </select>
             <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
             <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
-            <button type="submit" class="primary block">Save</button>
+            <button type="submit" id="aSubmit" class="primary block">Save</button>
+            <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
           </form>
+        </div>
+
+        <div class="panel">
+          <h3>Manage Library</h3>
+          <div class="lib-tools">
+            <select id="libType" aria-label="Library type">
+              <option value="anime">Anime</option>
+              <option value="tv_show">TV Shows</option>
+              <option value="movie">Movies</option>
+            </select>
+            <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
+          </div>
+          <div id="libList"></div>
+          <button id="libMore" class="outline block hidden" type="button">Load More</button>
         </div>
 
         <div class="panel">
@@ -134,8 +150,9 @@
   <footer>© <span id="yearNow"></span> ANICORE</footer>
 
   <!-- DETAIL MODAL (before auth modal so sign-in can appear on top) -->
-  <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Details">
-    <div class="modal-card wide">
+  <div id="detailModal" class="modal sheet-modal hidden" role="dialog" aria-modal="true" aria-label="Details">
+    <div class="modal-card wide sheet" id="detailSheet">
+      <div class="sheet-grip" aria-hidden="true"><span></span></div>
       <button class="close" type="button" id="detailClose" aria-label="Close">×</button>
       <div id="detailContent"></div>
     </div>
@@ -162,6 +179,7 @@
 
   <!-- BOTTOM NAV -->
   <nav class="bottom-nav" id="bottomNav" aria-label="Main">
+    <span class="nav-pill" id="navPill" aria-hidden="true"></span>
     <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span>Home</button>
     <button type="button" data-page="anime"><span class="nav-icon">▣</span>Anime</button>
     <button type="button" data-page="tv"><span class="nav-icon">📺</span>TV</button>
