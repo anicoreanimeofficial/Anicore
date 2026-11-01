@@ -3,81 +3,126 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#09090f">
   <title>ANICORE</title>
   <link rel="stylesheet" href="/assets/style.css">
 </head>
 <body>
 
   <header class="app-header">
-    <a class="brand" href="#" onclick="showPage('home')">ANICORE<span>™</span></a>
-    <div>
-      <button id="authBtn" class="outline" onclick="openAuth()">Sign In</button>
-      <button id="logoutBtn" class="outline hidden" onclick="logout()">Logout</button>
+    <a class="brand" href="#" data-page="home">ANICORE<span>™</span></a>
+    <div class="header-actions">
+      <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
+      <button id="signInBtn" class="outline small" type="button">Sign In</button>
+      <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
     </div>
   </header>
 
   <main id="appMain">
     <!-- HOME -->
     <section class="page active" id="page-home">
-      <div style="padding: 40px 5%; text-align: center;">
+      <div class="intro">
         <h1>Discover Your Next Story</h1>
         <p class="muted">Anime, TV Shows, and Movies.</p>
       </div>
-      <h3 style="padding-left: 5%;">Trending Anime</h3>
+      <h3 class="section-title">Trending Anime</h3>
       <div id="homeAnimeGrid" class="media-grid"></div>
-      
-      <h3 style="padding-left: 5%;">Popular TV Shows</h3>
+
+      <h3 class="section-title">Popular TV Shows</h3>
       <div id="homeTvGrid" class="media-grid"></div>
+
+      <h3 class="section-title">Latest Movies</h3>
+      <div id="homeMovieGrid" class="media-grid"></div>
     </section>
 
     <!-- ANIME -->
     <section class="page" id="page-anime">
-      <div style="padding: 20px 5%;">
+      <div class="section">
         <h2>Anime Catalogue</h2>
-        <input type="search" id="animeSearch" placeholder="Search anime...">
-        <div id="animeGrid" class="media-grid"></div>
-        <button id="loadMoreAnime" class="outline" style="width:100%; margin-top:20px;">Load More</button>
+        <input type="search" id="animeSearch" placeholder="Search anime..." aria-label="Search anime">
+        <div id="animeGrid" class="media-grid flush"></div>
+        <button id="loadMoreAnime" class="outline block hidden" type="button">Load More</button>
       </div>
     </section>
 
     <!-- TV SHOWS -->
     <section class="page" id="page-tv">
-      <div style="padding: 20px 5%;">
+      <div class="section">
         <h2>TV Shows</h2>
-        <div id="tvGrid" class="media-grid"></div>
+        <input type="search" id="tvSearch" placeholder="Search TV shows..." aria-label="Search TV shows">
+        <div id="tvGrid" class="media-grid flush"></div>
+        <button id="loadMoreTv" class="outline block hidden" type="button">Load More</button>
       </div>
     </section>
 
     <!-- MOVIES -->
     <section class="page" id="page-movies">
-      <div style="padding: 20px 5%;">
+      <div class="section">
         <h2>Movies</h2>
-        <div id="movieGrid" class="media-grid"></div>
+        <input type="search" id="movieSearch" placeholder="Search movies..." aria-label="Search movies">
+        <div id="movieGrid" class="media-grid flush"></div>
+        <button id="loadMoreMovies" class="outline block hidden" type="button">Load More</button>
       </div>
     </section>
 
     <!-- PROFILE -->
     <section class="page" id="page-profile">
-      <div style="padding: 20px 5%;">
+      <div class="section">
         <h2>My Profile</h2>
-        <div id="profileInfo" class="muted">Sign in to see details.</div>
-        <h3>My Watchlist</h3>
-        <div id="watchlistGrid" class="media-grid"></div>
+        <div id="profileInfo"></div>
+
+        <div id="profileMember" class="hidden">
+          <div class="panel">
+            <h3>Request a Title</h3>
+            <form id="requestForm">
+              <input id="reqTitle" placeholder="Title" maxlength="180" required>
+              <select id="reqLanguage" aria-label="Language">
+                <option>Hindi Dub</option>
+                <option>English Dub</option>
+                <option>Subbed</option>
+                <option>Other</option>
+              </select>
+              <textarea id="reqNotes" rows="2" maxlength="500" placeholder="Notes (optional)"></textarea>
+              <button type="submit" class="primary block">Send Request</button>
+            </form>
+          </div>
+
+          <h3>My Watchlist</h3>
+          <div id="watchlistGrid" class="media-grid flush"></div>
+        </div>
       </div>
     </section>
 
     <!-- ADMIN -->
     <section class="page" id="page-admin">
-      <div style="padding: 20px 5%;">
+      <div class="section">
         <h2>Admin Studio</h2>
         <div class="panel">
-          <h3>Add Anime</h3>
-          <form id="adminAnimeForm">
-            <input id="aTitle" placeholder="Title" required>
-            <input id="aPoster" placeholder="Poster URL">
-            <button type="submit" class="primary">Save Anime</button>
+          <h3>Add Content</h3>
+          <form id="adminForm">
+            <select id="aType" aria-label="Content type">
+              <option value="anime">Anime</option>
+              <option value="tv_show">TV Show</option>
+              <option value="movie">Movie</option>
+            </select>
+            <input id="aTitle" placeholder="Title" maxlength="180" required>
+            <textarea id="aDesc" rows="3" maxlength="5000" placeholder="Description"></textarea>
+            <input id="aGenres" placeholder="Genres (comma separated)">
+            <div class="row">
+              <input id="aYear" type="number" min="1900" max="2100" placeholder="Year">
+              <input id="aRating" placeholder="Rating (e.g. 8.5)">
+            </div>
+            <select id="aStatus" aria-label="Status">
+              <option>Ongoing</option>
+              <option>Completed</option>
+              <option>Upcoming</option>
+            </select>
+            <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
+            <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
+            <button type="submit" class="primary block">Save</button>
           </form>
         </div>
+
         <div class="panel">
           <h3>Requests</h3>
           <div id="adminRequests"></div>
@@ -86,38 +131,42 @@
     </section>
   </main>
 
-  <!-- AUTH MODAL -->
-  <div id="authModal" class="modal hidden">
-    <div class="modal-card">
-      <button class="close" onclick="closeAuth()">×</button>
-      <h2>Welcome</h2>
-      <form id="authForm">
-        <input type="email" id="authEmail" placeholder="Email" required>
-        <input type="password" id="authPass" placeholder="Password" required>
-        <button type="submit" class="primary" style="width:100%">Sign In / Register</button>
-      </form>
+  <footer>© <span id="yearNow"></span> ANICORE</footer>
+
+  <!-- DETAIL MODAL (before auth modal so sign-in can appear on top) -->
+  <div id="detailModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Details">
+    <div class="modal-card wide">
+      <button class="close" type="button" id="detailClose" aria-label="Close">×</button>
+      <div id="detailContent"></div>
     </div>
   </div>
 
-  <!-- DETAIL MODAL (With AR & Widget Support) -->
-  <div id="detailModal" class="modal hidden">
+  <!-- AUTH MODAL -->
+  <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
     <div class="modal-card">
-      <button class="close" onclick="closeDetail()">×</button>
-      <div id="detailContent"></div>
-      <div style="margin-top: 20px; display: flex; gap: 10px;">
-        <button class="outline" onclick="alert('AR Viewer Opening...')">📷 View in AR</button>
-        <button class="outline" onclick="alert('Widget Code Copied!')">🔗 Get Widget</button>
-      </div>
+      <button class="close" type="button" id="authClose" aria-label="Close">×</button>
+      <h2 id="authTitle">Welcome Back</h2>
+      <p id="authSubtitle" class="muted"></p>
+      <form id="authForm" novalidate>
+        <div id="authError" class="error-message hidden" role="alert"></div>
+        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required>
+        <input type="password" id="authPass" placeholder="Password" required>
+        <button type="submit" id="authSubmit" class="primary block">Sign In</button>
+      </form>
+      <p class="auth-toggle muted">
+        <span id="toggleText"></span>
+        <button type="button" id="toggleAuthBtn" class="link"></button>
+      </p>
     </div>
   </div>
 
   <!-- BOTTOM NAV -->
-  <nav class="bottom-nav" id="bottomNav">
-    <button onclick="showPage('home')" class="active"><span class="nav-icon">⌂</span>Home</button>
-    <button onclick="showPage('anime')"><span class="nav-icon">▣</span>Anime</button>
-    <button onclick="showPage('tv')"><span class="nav-icon">📺</span>TV</button>
-    <button onclick="showPage('movies')"><span class="nav-icon">▶</span>Movies</button>
-    <button onclick="showPage('profile')"><span class="nav-icon">◉</span>Profile</button>
+  <nav class="bottom-nav" id="bottomNav" aria-label="Main">
+    <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span>Home</button>
+    <button type="button" data-page="anime"><span class="nav-icon">▣</span>Anime</button>
+    <button type="button" data-page="tv"><span class="nav-icon">📺</span>TV</button>
+    <button type="button" data-page="movies"><span class="nav-icon">▶</span>Movies</button>
+    <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
   <script src="/assets/app.js"></script>
