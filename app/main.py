@@ -1,15 +1,9 @@
-# ============================================================
-# ANICORE - FASTAPI BACKEND
-# Anime, Movies, Accounts, Watchlist, Comments and Requests
-# ============================================================
-
 import os
 import re
-import secrets
-import hashlib
+import aiohttp
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -17,867 +11,316 @@ from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
-from pydantic import BaseModel, Field, EmailStr, field_validator
-from pymongo import MongoClient, DESCENDING
-from pymongo.errors import DuplicateKeyError
+from pydantic import BaseModel, Field, EmailStr
 
+from .config import APP_NAME, SECRET_KEY, ENABLE_AI_RECAPS, WEBHOOK_URL
+from .database import connect_database, close_database, db
+from .security import hash_password, verify_password, create_session_token, decode_session_token, get_cookie_options
 
-# ============================================================
-# CONFIGURATION
-# Set these values in Render Environment Variables.
-# Never publish your SECRET_KEY, MongoDB URI or admin password.
-# ============================================================
+# --- Models ---
 
-APP_NAME = "ANICORE"
-
-MONGODB_URI = os.getenv("MONGODB_URI", "")
-DATABASE_NAME = os.getenv("DATABASE_NAME", "anicore")
-SECRET_KEY = os.getenv("SECRET_KEY", "")
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
-
-COOKIE_NAME = "anicore_session"
-SESSION_MAX_AGE = 60 * 60 * 24 * 30
-
-if not MONGODB_URI:
-    raise RuntimeError("MONGODB_URI is missing.")
-
-if len(SECRET_KEY) < 32:
-    raise RuntimeError("SECRET_KEY must contain at least 32 characters.")
-
-serializer = URLSafeTimedSerializer(SECRET_KEY)
-
-mongo_client = MongoClient(
-    MONGODB_URI,
-    serverSelectionTimeoutMS=10000
-)
-
-db = mongo_client[DATABASE_NAME]
-
-users = db["users"]
-anime_collection = db["anime"]
-movies_collection = db["movies"]
-watchlists = db["watchlists"]
-comments = db["comments"]
-requests_collection = db["anime_requests"]
-
-
-# ============================================================
-# DATABASE STARTUP
-# ============================================================
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Confirm that MongoDB is reachable before starting.
-    mongo_client.admin.command("ping")
-
-    # Create indexes to keep lookups fast.
-    users.create_index("email", unique=True)
-    comments.create_index([
-        ("content_type", 1),
-        ("content_id", 1),
-        ("created_at", DESCENDING)
-    ])
-    requests_collection.create_index([
-        ("user_id", 1),
-        ("normalized_title", 1),
-        ("language", 1)
-    ])
-
-    # Create the first admin account if credentials are configured.
-    if ADMIN_EMAIL and ADMIN_PASSWORD:
-        if not users.find_one({"email": ADMIN_EMAIL}):
-            users.insert_one({
-                "email": ADMIN_EMAIL,
-                "password": hash_password(ADMIN_PASSWORD),
-                "role": "admin",
-                "created_at": utc_now()
-            })
-
-    yield
-
-    mongo_client.close()
-
-
-app = FastAPI(title=APP_NAME, lifespan=lifespan)
-
-
-# ============================================================
-# CORS
-# If your frontend is served from this same Render app,
-# same-origin requests work without adding another origin.
-# ============================================================
-
-frontend_url = os.getenv("FRONTEND_URL", "").strip()
-
-allowed_origins = [
-    "https://anicore-f6f4.onrender.com"
-]
-
-if frontend_url:
-    allowed_origins.append(frontend_url.rstrip("/"))
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=list(set(allowed_origins)),
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"]
-)
-
-
-# ============================================================
-# COMMON HELPERS
-# ============================================================
-
-def utc_now():
-    return datetime.now(timezone.utc)
-
-
-def object_id(value):
-    """Convert a MongoDB ID safely."""
-    try:
-        return ObjectId(str(value))
-    except (InvalidId, TypeError):
-        raise HTTPException(status_code=400, detail="Invalid ID.")
-
-
-def serialize_document(document):
-    """Convert MongoDB IDs and dates into JSON-friendly values."""
-    if not document:
-        return None
-
-    result = dict(document)
-    result["_id"] = str(result["_id"])
-
-    for key, value in result.items():
-        if isinstance(value, datetime):
-            result[key] = value.isoformat()
-
-    return result
-
-
-def valid_external_url(value):
-    """
-    Allow external HTTPS links from any normal host.
-    This rejects javascript:, data:, file: and other unsafe schemes.
-    """
-    from urllib.parse import urlparse
-
-    if not value:
-        return ""
-
-    value = str(value).strip()
-    parsed = urlparse(value)
-
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise ValueError("Links must be valid HTTPS URLs.")
-
-    if len(value) > 2000:
-        raise ValueError("URL is too long.")
-
-    return value
-
-
-def clean_quality_links(links):
-    """Keep only the four supported video qualities."""
-    links = links or {}
-    result = {}
-
-    for quality in ("480p", "720p", "1080p", "4k"):
-        url = str(links.get(quality, "") or "").strip()
-        result[quality] = valid_external_url(url) if url else ""
-
-    return result
-
-
-# ============================================================
-# PASSWORD AND SESSION HELPERS
-# ============================================================
-
-def hash_password(password):
-    """Hash passwords instead of storing plain-text passwords."""
-    salt = secrets.token_hex(16)
-    hashed = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode(),
-        salt.encode(),
-        310000
-    ).hex()
-
-    return f"{salt}${hashed}"
-
-
-def verify_password(password, stored):
-    """Check a password against its stored hash."""
-    try:
-        salt, expected = stored.split("$", 1)
-
-        actual = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode(),
-            salt.encode(),
-            310000
-        ).hex()
-
-        return secrets.compare_digest(actual, expected)
-
-    except Exception:
-        return False
-
-
-def set_session(response, user_id):
-    """Create a signed login cookie."""
-    token = serializer.dumps({"user_id": str(user_id)})
-
-    response.set_cookie(
-        COOKIE_NAME,
-        token,
-        max_age=SESSION_MAX_AGE,
-        httponly=True,
-        secure=True,
-        samesite="lax",
-        path="/"
-    )
-
-
-def get_current_user(request: Request):
-    """Read the signed session cookie and find its user."""
-    token = request.cookies.get(COOKIE_NAME)
-
-    if not token:
-        return None
-
-    try:
-        data = serializer.loads(token, max_age=SESSION_MAX_AGE)
-        user = users.find_one({"_id": object_id(data["user_id"])})
-        return user
-
-    except (BadSignature, SignatureExpired, HTTPException, KeyError):
-        return None
-
-
-def require_user(request: Request):
-    user = get_current_user(request)
-
-    if not user:
-        raise HTTPException(status_code=401, detail="Please sign in first.")
-
-    return user
-
-
-def require_admin(user=Depends(require_user)):
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required.")
-
-    return user
-
-
-def public_user(user):
-    """Never return password hashes to the browser."""
-    return {
-        "authenticated": True,
-        "_id": str(user["_id"]),
-        "email": user["email"],
-        "role": user.get("role", "user")
-    }
-
-
-# ============================================================
-# REQUEST MODELS
-# ============================================================
-
-class RegisterData(BaseModel):
+class AuthData(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=6, max_length=100)
+    password: str
 
-
-class LoginData(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=1, max_length=100)
-
-
-class AnimeData(BaseModel):
+class ContentBase(BaseModel):
     title: str = Field(min_length=1, max_length=180)
-    description: str = Field(default="", max_length=10000)
-    genres: list[str] = Field(default_factory=list)
+    description: str = ""
+    genres: List[str] = []
     year: Optional[int] = None
     rating: str = ""
     poster: str = ""
     banner: str = ""
     status: str = "Ongoing"
     poster_tag: str = "NEW"
-    dubbed_on: list[str] = Field(default_factory=list)
+    dubbed_on: List[str] = []
 
+class AnimeData(ContentBase):
+    pass
+
+class TvShowData(ContentBase):
+    pass
+
+class MovieData(ContentBase):
+    quality_links: dict = {}
 
 class EpisodeData(BaseModel):
-    season: int = Field(default=1, ge=1)
-    episode: int = Field(ge=1)
+    season: int = 1
+    episode: int
     title: str = ""
     description: str = ""
     thumbnail: str = ""
     duration: str = ""
-    quality_links: dict[str, str] = Field(default_factory=dict)
-
-
-class MovieData(BaseModel):
-    title: str = Field(min_length=1, max_length=180)
-    description: str = Field(default="", max_length=10000)
-    genres: list[str] = Field(default_factory=list)
-    year: Optional[int] = None
-    rating: str = ""
-    poster: str = ""
-    banner: str = ""
-    poster_tag: str = "NEW"
-    dubbed_on: list[str] = Field(default_factory=list)
-    quality_links: dict[str, str] = Field(default_factory=dict)
-
+    quality_links: dict = {}
 
 class CommentData(BaseModel):
-    content_type: str
+    content_type: str # anime, tv_show, movie
     content_id: str
     text: str = Field(min_length=1, max_length=1000)
 
+class RequestData(BaseModel):
+    title: str
+    language: str = "Hindi Dub"
+    notes: str = ""
 
-class AnimeRequestData(BaseModel):
-    title: str = Field(min_length=1, max_length=180)
-    language: str = Field(default="Hindi Dub", max_length=80)
-    notes: str = Field(default="", max_length=1000)
+# --- Helpers ---
 
+def utc_now():
+    return datetime.now(timezone.utc)
 
-class RequestStatusData(BaseModel):
-    status: str
+def object_id(value):
+    try:
+        return ObjectId(str(value))
+    except (InvalidId, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid ID.")
 
+def serialize_doc(doc):
+    if not doc: return None
+    res = dict(doc)
+    res["_id"] = str(res["_id"])
+    for k, v in res.items():
+        if isinstance(v, datetime):
+            res[k] = v.isoformat()
+    return res
 
-# ============================================================
-# HEALTH CHECK
-# ============================================================
+def valid_url(url):
+    if not url: return ""
+    if not url.startswith("https://"): raise ValueError("Must be HTTPS")
+    return url
 
-@app.get("/api/health")
-def health():
-    return {"status": "ok", "app": APP_NAME}
+def get_current_user(request: Request):
+    token = request.cookies.get("anicore_session")
+    if not token: return None
+    try:
+        data = decode_session_token(token)
+        user = db.users.find_one({"_id": object_id(data["sub"])})
+        return user
+    except:
+        return None
 
+def require_user(request: Request):
+    user = get_current_user(request)
+    if not user: raise HTTPException(status_code=401, detail="Sign in required")
+    return user
 
-# ============================================================
-# AUTHENTICATION ROUTES
-# ============================================================
+def require_admin(user=Depends(require_user)):
+    if user.get("role") != "admin": raise HTTPException(status_code=403, detail="Admin only")
+    return user
+
+async def send_webhook(message: str):
+    if WEBHOOK_URL:
+        try:
+            async with aiohttp.ClientSession() as session:
+                await session.post(WEBHOOK_URL, json={"content": message})
+        except:
+            pass
+
+async def generate_ai_recap(description: str):
+    if not ENABLE_AI_RECAPS: return "AI recaps disabled."
+    # Placeholder for real AI API call
+    return f"AI Recap: This story involves {description[:50]}... (Generated by AI)"
+
+# --- Lifespan ---
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    connect_database()
+    yield
+    close_database()
+
+app = FastAPI(title=APP_NAME, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Adjust for production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Auth Routes ---
 
 @app.post("/api/auth/register")
-def register(data: RegisterData, response: Response):
-    email = str(data.email).lower().strip()
-
-    if users.find_one({"email": email}):
-        raise HTTPException(status_code=409, detail="Email already registered.")
-
-    result = users.insert_one({
+def register(data: AuthData, response: Response):
+    email = data.email.lower().strip()
+    if db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="Email exists")
+    
+    uid = db.users.insert_one({
         "email": email,
-        "password": hash_password(data.password),
+        "password_hash": hash_password(data.password),
         "role": "user",
         "created_at": utc_now()
-    })
-
-    set_session(response, result.inserted_id)
-
-    return {"message": "Account created successfully."}
-
+    }).inserted_id
+    
+    token = create_session_token(str(uid), email, "user")
+    response.set_cookie(**get_cookie_options(), value=token)
+    return {"message": "Registered"}
 
 @app.post("/api/auth/login")
-def login(data: LoginData, response: Response):
-    email = str(data.email).lower().strip()
-    user = users.find_one({"email": email})
-
-    if not user or not verify_password(data.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Incorrect email or password.")
-
-    set_session(response, user["_id"])
-
-    return {"message": "Signed in successfully."}
-
+def login(data: AuthData, response: Response):
+    email = data.email.lower().strip()
+    user = db.users.find_one({"email": email})
+    if not user or not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
+    response.set_cookie(**get_cookie_options(), value=token)
+    return {"message": "Logged in", "role": user.get("role")}
 
 @app.get("/api/auth/me")
 def me(request: Request):
     user = get_current_user(request)
-
-    if not user:
-        return {"authenticated": False}
-
-    return public_user(user)
-
+    if not user: return {"authenticated": False}
+    return {"authenticated": True, "email": user["email"], "role": user.get("role")}
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
-    response.delete_cookie(
-        COOKIE_NAME,
-        path="/",
-        secure=True,
-        httponly=True,
-        samesite="lax"
-    )
+    response.delete_cookie("anicore_session", path="/")
+    return {"message": "Logged out"}
 
-    return {"message": "Signed out."}
+# --- Content Routes (With Pagination & Views) ---
 
-
-# ============================================================
-# PUBLIC ANIME ROUTES
-# ============================================================
+def get_paginated(collection, page: int = 1, limit: int = 20):
+    skip = (page - 1) * limit
+    total = collection.count_documents({})
+    items = list(collection.find().sort("created_at", DESCENDING).skip(skip).limit(limit))
+    return [serialize_doc(i) for i in items], total
 
 @app.get("/api/anime")
-def get_anime():
-    items = anime_collection.find().sort("created_at", DESCENDING)
-    return [serialize_document(item) for item in items]
+def get_anime(page: int = 1, limit: int = 20):
+    items, total = get_paginated(db.anime, page, limit)
+    return {"items": items, "total": total}
 
-
-@app.get("/api/anime/{anime_id}")
-def get_one_anime(anime_id: str):
-    item = anime_collection.find_one({"_id": object_id(anime_id)})
-
-    if not item:
-        raise HTTPException(status_code=404, detail="Anime not found.")
-
-    return serialize_document(item)
-
-
-# ============================================================
-# ADMIN ANIME ROUTES
-# ============================================================
-
-@app.post("/api/admin/anime")
-def create_anime(data: AnimeData, admin=Depends(require_admin)):
-    item = data.model_dump()
-
-    # Clean user-provided poster and banner URLs.
-    item["poster"] = valid_external_url(item["poster"]) if item["poster"] else ""
-    item["banner"] = valid_external_url(item["banner"]) if item["banner"] else ""
-
-    item["created_at"] = utc_now()
-    item["episodes"] = []
-
-    result = anime_collection.insert_one(item)
-
-    return {"message": "Anime added.", "id": str(result.inserted_id)}
-
-
-@app.put("/api/admin/anime/{anime_id}")
-def update_anime(anime_id: str, data: AnimeData, admin=Depends(require_admin)):
-    item = data.model_dump()
-
-    item["poster"] = valid_external_url(item["poster"]) if item["poster"] else ""
-    item["banner"] = valid_external_url(item["banner"]) if item["banner"] else ""
-
-    result = anime_collection.update_one(
-        {"_id": object_id(anime_id)},
-        {"$set": item}
-    )
-
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Anime not found.")
-
-    return {"message": "Anime updated."}
-
-
-@app.delete("/api/admin/anime/{anime_id}")
-def delete_anime(anime_id: str, admin=Depends(require_admin)):
-    anime_id = object_id(anime_id)
-
-    anime_collection.delete_one({"_id": anime_id})
-    watchlists.delete_many({"anime_id": anime_id})
-    comments.delete_many({
-        "content_type": "anime",
-        "content_id": str(anime_id)
-    })
-
-    return {"message": "Anime deleted."}
-
-
-# ============================================================
-# ADMIN EPISODE ROUTES
-# ============================================================
-
-@app.post("/api/admin/anime/{anime_id}/episodes")
-def add_episode(anime_id: str, data: EpisodeData, admin=Depends(require_admin)):
-    anime = anime_collection.find_one({"_id": object_id(anime_id)})
-
-    if not anime:
-        raise HTTPException(status_code=404, detail="Anime not found.")
-
-    episode = data.model_dump()
-    episode["quality_links"] = clean_quality_links(episode["quality_links"])
-
-    anime_collection.update_one(
-        {"_id": anime["_id"]},
-        {"$push": {"episodes": episode}}
-    )
-
-    return {"message": "Episode added."}
-
-
-@app.put("/api/admin/anime/{anime_id}/episodes/{index}")
-def update_episode(
-    anime_id: str,
-    index: int,
-    data: EpisodeData,
-    admin=Depends(require_admin)
-):
-    anime = anime_collection.find_one({"_id": object_id(anime_id)})
-
-    if not anime or index < 0 or index >= len(anime.get("episodes", [])):
-        raise HTTPException(status_code=404, detail="Episode not found.")
-
-    episode = data.model_dump()
-    episode["quality_links"] = clean_quality_links(episode["quality_links"])
-
-    anime_collection.update_one(
-        {"_id": anime["_id"]},
-        {"$set": {f"episodes.{index}": episode}}
-    )
-
-    return {"message": "Episode updated."}
-
-
-@app.delete("/api/admin/anime/{anime_id}/episodes/{index}")
-def delete_episode(anime_id: str, index: int, admin=Depends(require_admin)):
-    anime = anime_collection.find_one({"_id": object_id(anime_id)})
-
-    if not anime or index < 0 or index >= len(anime.get("episodes", [])):
-        raise HTTPException(status_code=404, detail="Episode not found.")
-
-    episodes = anime.get("episodes", [])
-    episodes.pop(index)
-
-    anime_collection.update_one(
-        {"_id": anime["_id"]},
-        {"$set": {"episodes": episodes}}
-    )
-
-    return {"message": "Episode deleted."}
-
-
-# ============================================================
-# MOVIE ROUTES
-# ============================================================
+@app.get("/api/tvshows")
+def get_tvshows(page: int = 1, limit: int = 20):
+    items, total = get_paginated(db.tv_shows, page, limit)
+    return {"items": items, "total": total}
 
 @app.get("/api/movies")
-def get_movies():
-    items = movies_collection.find().sort("created_at", DESCENDING)
-    return [serialize_document(item) for item in items]
+def get_movies(page: int = 1, limit: int = 20):
+    items, total = get_paginated(db.movies, page, limit)
+    return {"items": items, "total": total}
 
+@app.get("/api/content/{type}/{id}")
+def get_content(type: str, id: str, request: Request):
+    coll = db.anime if type == "anime" else db.tv_shows if type == "tv_show" else db.movies
+    item = coll.find_one({"_id": object_id(id)})
+    if not item: raise HTTPException(status_code=404, detail="Not found")
+    
+    # Increment Views
+    coll.update_one({"_id": item["_id"]}, {"$inc": {"views": 1}})
+    
+    # AI Recap Generation (if enabled and not present)
+    if type != "movie" and ENABLE_AI_RECAPS and not item.get("ai_recap"):
+        recap = await generate_ai_recap(item.get("description", ""))
+        coll.update_one({"_id": item["_id"]}, {"$set": {"ai_recap": recap}})
+        item["ai_recap"] = recap
+        
+    return serialize_doc(item)
+
+# --- Admin Routes ---
+
+@app.post("/api/admin/anime")
+def add_anime(data: AnimeData, admin=Depends(require_admin)):
+    item = data.model_dump()
+    item["poster"] = valid_url(item["poster"])
+    item["banner"] = valid_url(item["banner"])
+    item["created_at"] = utc_now()
+    item["views"] = 0
+    item["episodes"] = []
+    db.anime.insert_one(item)
+    send_webhook(f"New Anime Added: {item['title']}")
+    return {"message": "Added"}
+
+@app.post("/api/admin/tvshows")
+def add_tvshow(data: TvShowData, admin=Depends(require_admin)):
+    item = data.model_dump()
+    item["poster"] = valid_url(item["poster"])
+    item["banner"] = valid_url(item["banner"])
+    item["created_at"] = utc_now()
+    item["views"] = 0
+    item["episodes"] = []
+    db.tv_shows.insert_one(item)
+    send_webhook(f"New TV Show Added: {item['title']}")
+    return {"message": "Added"}
 
 @app.post("/api/admin/movies")
-def create_movie(data: MovieData, admin=Depends(require_admin)):
+def add_movie(data: MovieData, admin=Depends(require_admin)):
     item = data.model_dump()
-
-    item["poster"] = valid_external_url(item["poster"]) if item["poster"] else ""
-    item["banner"] = valid_external_url(item["banner"]) if item["banner"] else ""
-    item["quality_links"] = clean_quality_links(item["quality_links"])
+    item["poster"] = valid_url(item["poster"])
+    item["banner"] = valid_url(item["banner"])
     item["created_at"] = utc_now()
+    item["views"] = 0
+    db.movies.insert_one(item)
+    return {"message": "Added"}
 
-    result = movies_collection.insert_one(item)
+@app.post("/api/admin/anime/{id}/episodes")
+def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
+    ep = data.model_dump()
+    db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
+    return {"message": "Episode added"}
 
-    return {"message": "Movie added.", "id": str(result.inserted_id)}
+@app.post("/api/admin/tvshows/{id}/episodes")
+def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
+    ep = data.model_dump()
+    db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
+    return {"message": "Episode added"}
 
+# --- Watchlist & Comments ---
 
-@app.put("/api/admin/movies/{movie_id}")
-def update_movie(movie_id: str, data: MovieData, admin=Depends(require_admin)):
-    item = data.model_dump()
-
-    item["poster"] = valid_external_url(item["poster"]) if item["poster"] else ""
-    item["banner"] = valid_external_url(item["banner"]) if item["banner"] else ""
-    item["quality_links"] = clean_quality_links(item["quality_links"])
-
-    result = movies_collection.update_one(
-        {"_id": object_id(movie_id)},
-        {"$set": item}
-    )
-
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Movie not found.")
-
-    return {"message": "Movie updated."}
-
-
-@app.delete("/api/admin/movies/{movie_id}")
-def delete_movie(movie_id: str, admin=Depends(require_admin)):
-    movie_id = object_id(movie_id)
-
-    movies_collection.delete_one({"_id": movie_id})
-    comments.delete_many({
-        "content_type": "movie",
-        "content_id": str(movie_id)
-    })
-
-    return {"message": "Movie deleted."}
-
-
-# ============================================================
-# WATCHLIST
-# Anime and movies are stored with a type to avoid ID clashes.
-# ============================================================
+@app.post("/api/watchlist/{type}/{id}")
+def toggle_watchlist(type: str, id: str, user=Depends(require_user)):
+    if type not in ["anime", "tv_show", "movie"]: raise HTTPException(400, "Invalid type")
+    query = {"user_id": user["_id"], "content_type": type, "content_id": id}
+    if db.watchlist.find_one(query):
+        db.watchlist.delete_one(query)
+        return {"saved": False}
+    else:
+        db.watchlist.insert_one({**query, "created_at": utc_now()})
+        return {"saved": True}
 
 @app.get("/api/watchlist")
 def get_watchlist(user=Depends(require_user)):
-    saved = watchlists.find({"user_id": user["_id"]})
-    return [
-        {
-            "content_type": item["content_type"],
-            "content_id": item["content_id"]
-        }
-        for item in saved
-    ]
-
-
-@app.post("/api/watchlist/{content_type}/{content_id}")
-def toggle_watchlist(
-    content_type: str,
-    content_id: str,
-    user=Depends(require_user)
-):
-    if content_type not in ("anime", "movie"):
-        raise HTTPException(status_code=400, detail="Invalid content type.")
-
-    collection = anime_collection if content_type == "anime" else movies_collection
-    item_id = object_id(content_id)
-
-    if not collection.find_one({"_id": item_id}):
-        raise HTTPException(status_code=404, detail="Content not found.")
-
-    existing = watchlists.find_one({
-        "user_id": user["_id"],
-        "content_type": content_type,
-        "content_id": str(item_id)
-    })
-
-    if existing:
-        watchlists.delete_one({"_id": existing["_id"]})
-        return {"saved": False}
-
-    watchlists.insert_one({
-        "user_id": user["_id"],
-        "content_type": content_type,
-        "content_id": str(item_id),
-        "created_at": utc_now()
-    })
-
-    return {"saved": True}
-
-
-# Compatibility route for the older frontend's anime-only watchlist.
-@app.post("/api/watchlist/{anime_id}")
-def toggle_anime_watchlist(anime_id: str, user=Depends(require_user)):
-    item_id = object_id(anime_id)
-
-    if not anime_collection.find_one({"_id": item_id}):
-        raise HTTPException(status_code=404, detail="Anime not found.")
-
-    existing = watchlists.find_one({
-        "user_id": user["_id"],
-        "content_type": "anime",
-        "content_id": str(item_id)
-    })
-
-    if existing:
-        watchlists.delete_one({"_id": existing["_id"]})
-        return {"saved": False}
-
-    watchlists.insert_one({
-        "user_id": user["_id"],
-        "content_type": "anime",
-        "content_id": str(item_id),
-        "created_at": utc_now()
-    })
-
-    return {"saved": True}
-
-
-# ============================================================
-# COMMENTS
-# Anyone can read comments. Only signed-in users can post.
-# Authors can delete their own comments; admins can delete any.
-# ============================================================
-
-@app.get("/api/comments/{content_type}/{content_id}")
-def get_comments(content_type: str, content_id: str):
-    if content_type not in ("anime", "movie"):
-        raise HTTPException(status_code=400, detail="Invalid content type.")
-
-    results = comments.find({
-        "content_type": content_type,
-        "content_id": content_id
-    }).sort("created_at", DESCENDING)
-
-    output = []
-
-    for item in results:
-        output.append({
-            "_id": str(item["_id"]),
-            "username": item.get("username", "User"),
-            "text": item.get("text", ""),
-            "created_at": item.get("created_at").isoformat()
-            if item.get("created_at") else ""
-        })
-
-    return output
-
+    return list(db.watchlist.find({"user_id": user["_id"]}))
 
 @app.post("/api/comments")
-def create_comment(data: CommentData, user=Depends(require_user)):
-    if data.content_type not in ("anime", "movie"):
-        raise HTTPException(status_code=400, detail="Invalid content type.")
-
-    text = data.text.strip()
-
-    if not text:
-        raise HTTPException(status_code=400, detail="Comment cannot be empty.")
-
-    collection = anime_collection if data.content_type == "anime" else movies_collection
-
-    if not collection.find_one({"_id": object_id(data.content_id)}):
-        raise HTTPException(status_code=404, detail="Content not found.")
-
-    result = comments.insert_one({
+def add_comment(data: CommentData, user=Depends(require_user)):
+    db.comments.insert_one({
         "content_type": data.content_type,
         "content_id": data.content_id,
         "user_id": user["_id"],
         "username": user["email"].split("@")[0],
-        "text": text,
+        "text": data.text,
         "created_at": utc_now()
     })
+    return {"message": "Posted"}
 
-    return {"message": "Comment posted.", "id": str(result.inserted_id)}
+@app.get("/api/comments/{type}/{id}")
+def get_comments(type: str, id: str):
+    return list(db.comments.find({"content_type": type, "content_id": id}).sort("created_at", -1))
 
-
-@app.delete("/api/comments/{comment_id}")
-def delete_comment(comment_id: str, user=Depends(require_user)):
-    item = comments.find_one({"_id": object_id(comment_id)})
-
-    if not item:
-        raise HTTPException(status_code=404, detail="Comment not found.")
-
-    is_owner = item["user_id"] == user["_id"]
-    is_admin = user.get("role") == "admin"
-
-    if not is_owner and not is_admin:
-        raise HTTPException(status_code=403, detail="You cannot delete this comment.")
-
-    comments.delete_one({"_id": item["_id"]})
-
-    return {"message": "Comment deleted."}
-
-
-# ============================================================
-# ANIME REQUESTS
-# Users can submit and view their own requests.
-# Admins can view, update and delete all requests.
-# ============================================================
+# --- Requests ---
 
 @app.post("/api/requests")
-def create_request(data: AnimeRequestData, user=Depends(require_user)):
-    title = data.title.strip()
-    normalized_title = re.sub(r"\s+", " ", title).lower()
-    language = data.language.strip() or "Hindi Dub"
-
-    # Avoid duplicate requests by the same user while one is active.
-    duplicate = requests_collection.find_one({
-        "user_id": user["_id"],
-        "normalized_title": normalized_title,
-        "language": language,
-        "status": {"$in": ["Pending", "Approved"]}
-    })
-
-    if duplicate:
-        raise HTTPException(
-            status_code=409,
-            detail="You already have an active request for this anime."
-        )
-
-    result = requests_collection.insert_one({
+def create_request(data: RequestData, user=Depends(require_user)):
+    db.requests.insert_one({
         "user_id": user["_id"],
         "email": user["email"],
-        "title": title,
-        "normalized_title": normalized_title,
-        "language": language,
-        "notes": data.notes.strip(),
+        **data.model_dump(),
         "status": "Pending",
         "created_at": utc_now()
     })
-
-    return {"message": "Request submitted.", "id": str(result.inserted_id)}
-
-
-@app.get("/api/requests/mine")
-def my_requests(user=Depends(require_user)):
-    items = requests_collection.find({
-        "user_id": user["_id"]
-    }).sort("created_at", DESCENDING)
-
-    return [serialize_document(item) for item in items]
-
+    return {"message": "Requested"}
 
 @app.get("/api/admin/requests")
-def all_requests(admin=Depends(require_admin)):
-    items = requests_collection.find().sort("created_at", DESCENDING)
-    return [serialize_document(item) for item in items]
+def get_requests(admin=Depends(require_admin)):
+    return list(db.requests.find().sort("created_at", -1))
 
-
-@app.put("/api/admin/requests/{request_id}")
-def update_request_status(
-    request_id: str,
-    data: RequestStatusData,
-    admin=Depends(require_admin)
-):
-    allowed = ("Pending", "Approved", "Rejected", "Completed")
-
-    if data.status not in allowed:
-        raise HTTPException(status_code=400, detail="Invalid request status.")
-
-    result = requests_collection.update_one(
-        {"_id": object_id(request_id)},
-        {"$set": {"status": data.status}}
-    )
-
-    if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Request not found.")
-
-    return {"message": "Request status updated."}
-
-
-@app.delete("/api/admin/requests/{request_id}")
-def delete_request(request_id: str, admin=Depends(require_admin)):
-    result = requests_collection.delete_one({
-        "_id": object_id(request_id)
-    })
-
-    if not result.deleted_count:
-        raise HTTPException(status_code=404, detail="Request not found.")
-
-    return {"message": "Request deleted."}
-
-
-# ============================================================
-# PROFILE
-# ============================================================
-
-@app.get("/api/profile")
-def profile(user=Depends(require_user)):
-    return {
-        "email": user["email"],
-        "role": user.get("role", "user"),
-        "created_at": user.get("created_at").isoformat()
-        if user.get("created_at") else ""
-    }
-
-
-# ============================================================
-# FRONTEND ROUTES
-# IMPORTANT: Mount static files LAST, after every API route.
-# Otherwise "/" can shadow API routes in Starlette.
-# ============================================================
+# --- Frontend Serving ---
 
 @app.get("/")
-def homepage():
+def home():
     return FileResponse("public/index.html")
 
-
-# Serve CSS, JavaScript and other public assets.
-# Mounting /assets avoids catching API requests.
 app.mount("/assets", StaticFiles(directory="public"), name="assets")
