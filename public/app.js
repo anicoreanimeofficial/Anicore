@@ -615,7 +615,6 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
-// UPDATED: adds ▶ Watch button per episode
 function episodesHtml(episodes, type, contentId) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
@@ -716,7 +715,6 @@ function buildDetailHtml(type, item, comments, reviews) {
 function bindDetailEvents(type, item, container) {
   container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
-  // NEW: wire up ▶ Watch buttons
   container.querySelectorAll('.ep-play').forEach((btn) => {
     btn.addEventListener('click', () => openPlayer(btn.dataset.video, btn.dataset.title));
   });
@@ -924,7 +922,7 @@ function initSheet() {
   });
 }
 
-// --- NEW: Video Player ---
+// --- Video Player ---
 function openPlayer(url, title = 'Now Playing') {
   const modal = $('playerModal');
   if (!modal || !url) return;
@@ -1037,7 +1035,6 @@ async function loadLibrary(reset = false) {
     data.items.forEach((item) => {
       const row = document.createElement('div');
       row.className = 'lib-row';
-      // UPDATED: adds Eps button for non-movies
       row.innerHTML = `
         <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
         <div>
@@ -1144,7 +1141,7 @@ $('aCancel')?.addEventListener('click', () => {
   $('aCancel').classList.add('hidden');
 });
 
-// --- NEW: Admin Episode Manager ---
+// --- Admin Episode Manager ---
 let currentEpisodeTarget = null;
 
 async function openEpisodesModal(type, id, title) {
@@ -1183,7 +1180,9 @@ async function refreshEpisodeList() {
 
     el.querySelectorAll('.ep-edit').forEach((b) => b.addEventListener('click', () => {
       const s = Number(b.dataset.s), e = Number(b.dataset.e);
-      const ep = eps.find((x) => x.season === s && x.episode === e);
+      // CHANGED: use Number() comparison to tolerate string-typed legacy data
+      const ep = eps.find((x) => Number(x.season) === s && Number(x.episode) === e);
+      if (!ep) { toast('Episode not found in list — refresh and try again', 'error'); return; }
       $('epSeason').value = ep.season;
       $('epNumber').value = ep.episode;
       $('epTitle').value = ep.title || '';
@@ -1211,6 +1210,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!currentEpisodeTarget) return;
   const { type, id } = currentEpisodeTarget;
+  // CHANGED: quality_links removed from payload — backend preserves existing on update
   const payload = {
     season: Number($('epSeason').value) || 1,
     episode: Number($('epNumber').value),
@@ -1218,7 +1218,6 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     duration: $('epDuration').value.trim(),
     description: $('epDesc').value.trim(),
     video_url: $('epVideo').value.trim(),
-    quality_links: {},
   };
   if (!payload.episode) return toast('Episode number required', 'error');
   if (!payload.video_url) return toast('Video URL required', 'error');
