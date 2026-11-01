@@ -1,317 +1,512 @@
-from contextlib import asynccontextmanager
-from datetime import datetime
-from bson import ObjectId
-from bson.errors import InvalidId
-from fastapi import FastAPI, Request, HTTPException, Depends, Response
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, EmailStr, Field
-from pymongo.errors import DuplicateKeyError
-import jwt
+import os
+import re
+import hashlib
+import secrets
+from datetime import datetime, timezone
+from urllib.parse import urlparse
 
-from . import database
-from .config import APP_NAME, IS_PRODUCTION
-from .security import (
-    COOKIE_NAME, cookie_options, hash_password, make_token,
-    read_token, validate_secret, verify_password
+from fastapi import FastAPI, HTTPException, Request, Response, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pymongo import MongoClient
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from pydantic import BaseModel, Field
+
+
+# ---------------- CONFIGURATION ----------------
+
+APP_NAME = "Anicore"
+
+MONGODB_URI = os.getenv("MONGODB_URI", "")
+DATABASE_NAME = os.getenv("DATABASE_NAME", "anicore")
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "").rstrip("/")
+
+if not MONGODB_URI:
+    raise RuntimeError("MONGODB_URI is missing")
+
+if len(SECRET_KEY) < 32:
+    raise RuntimeError("SECRET_KEY must be at least 32 characters")
+
+client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
+db = client[DATABASE_NAME]
+
+users = db["users"]
+anime_collection = db["anime"]
+
+serializer = URLSafeTimedSerializer(SECRET_KEY, salt="anicore-session")
+
+app = FastAPI(title=APP_NAME)
+
+allowed_origins = [
+    FRONTEND_URL,
+    "https://anicore-f6f4.onrender.com",
+]
+
+allowed_origins = [origin for origin in allowed_origins if origin]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    validate_secret()
-    database.connect_database()
-    yield
-    database.close_database()
 
-app = FastAPI(title=f"{APP_NAME} API", version="1.0.0", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+# ---------------- DATABASE ----------------
 
+@app.on_event("startup")
+def startup():
+    client.admin.command("ping")
 
-def get_db():
-    if database.db is None:
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    return database.db
+    users.create_index("email", unique=True)
+    anime_collection.create_index("title")
 
-
-def serialize(doc):
-    if not doc:
-        return None
-    result = dict(doc)
-    result["id"] = str(result.pop("_id"))
-    for key, value in list(result.items()):
-        if isinstance(value, ObjectId):
-            result[key] = str(value)
-        elif isinstance(value, datetime):
-            result[key] = value.isoformat()
-    result.pop("password_hash", None)
-    return result
+    if ADMIN_EMAIL and ADMIN_PASSWORD:
+        if not users.find_one({"email": ADMIN_EMAIL}):
+            users.insert_one({
+                "email": ADMIN_EMAIL,
+                "password": hash_password(ADMIN_PASSWORD),
+                "role": "admin",
+                "created_at": datetime.now(timezone.utc),
+                "watchlist": [],
+                "progress": {}
+            })
 
 
-def current_user(request: Request, db=Depends(get_db)):
+# ---------------- SECURITY ----------------
+
+COOKIE_NAME = "anicore_session"
+
+
+def hash_password(password):
+    salt = secrets.token_hex(16)
+    hashed = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode(),
+        salt.encode(),
+        310000
+    ).hex()
+    return f"{salt}${hashed}"
+
+
+def verify_password(password, stored):
+    try:
+        salt, old_hash = stored.split("$", 1)
+        new_hash = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode(),
+            salt.encode(),
+            310000
+        ).hex()
+        return secrets.compare_digest(new_hash, old_hash)
+    except Exception:
+        return False
+
+
+def set_session(response, user):
+    token = serializer.dumps({
+        "email": user["email"]
+    })
+
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=60 * 60 * 24 * 7
+    )
+
+
+def get_current_user(request: Request):
     token = request.cookies.get(COOKIE_NAME)
+
     if not token:
         return None
+
     try:
-        payload = read_token(token)
-        user = db.users.find_one({"_id": ObjectId(payload["sub"])})
-        return user
-    except (jwt.InvalidTokenError, InvalidId, KeyError, TypeError):
+        data = serializer.loads(token, max_age=60 * 60 * 24 * 7)
+        user = users.find_one({"email": data["email"]})
+
+        if user:
+            return user
+
+    except (BadSignature, SignatureExpired, Exception):
         return None
 
+    return None
 
-def require_user(user=Depends(current_user)):
+
+def require_user(request: Request):
+    user = get_current_user(request)
+
     if not user:
-        raise HTTPException(status_code=401, detail="Please sign in")
+        raise HTTPException(401, "Please sign in")
+
     return user
 
 
 def require_admin(user=Depends(require_user)):
     if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
+        raise HTTPException(403, "Admin access required")
+
     return user
 
 
-class RegisterBody(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+# ---------------- INPUT MODELS ----------------
+
+class RegisterData(BaseModel):
+    email: str
+    password: str = Field(min_length=6, max_length=128)
 
 
-class LoginBody(BaseModel):
-    email: EmailStr
-    password: str = Field(min_length=1, max_length=128)
+class LoginData(BaseModel):
+    email: str
+    password: str
 
 
-class AnimeBody(BaseModel):
-    title: str = Field(min_length=1, max_length=160)
-    description: str = Field(default="", max_length=5000)
-    genres: list[str] = Field(default_factory=list, max_length=15)
-    year: int | None = Field(default=None, ge=1900, le=2100)
-    rating: float = Field(default=0, ge=0, le=10)
-    poster_url: str = Field(default="", max_length=1000)
-    banner_url: str = Field(default="", max_length=1000)
-    status: str = Field(default="Ongoing", max_length=40)
+class AnimeData(BaseModel):
+    title: str
+    description: str = ""
+    genres: list[str] = []
+    year: int | None = None
+    rating: str = ""
+    poster: str = ""
+    banner: str = ""
+    status: str = "Ongoing"
 
 
-class EpisodeBody(BaseModel):
+class EpisodeData(BaseModel):
+    season: int = 1
+    episode: int
+    title: str = ""
+    description: str = ""
+    telegram_url: str
+    thumbnail: str = ""
+    duration: str = ""
+
+
+class ProgressData(BaseModel):
     anime_id: str
-    season: int = Field(default=1, ge=1, le=100)
-    episode_number: int = Field(ge=1, le=10000)
-    title: str = Field(default="", max_length=160)
-    description: str = Field(default="", max_length=3000)
-    video_url: str = Field(default="", max_length=2000)
-    thumbnail_url: str = Field(default="", max_length=1000)
-    duration: str = Field(default="", max_length=30)
+    episode: int
 
 
-class ProgressBody(BaseModel):
-    episode_id: str
-    position_seconds: int = Field(ge=0)
-    duration_seconds: int = Field(default=0, ge=0)
+# ---------------- HELPERS ----------------
+
+def clean_anime(anime):
+    anime["_id"] = str(anime["_id"])
+    return anime
 
 
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "app_name": APP_NAME})
+def valid_telegram_url(url):
+    try:
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower()
+
+        return (
+            parsed.scheme == "https"
+            and host in ("t.me", "www.t.me", "telegram.me")
+            and len(parsed.path.strip("/").split("/")) >= 2
+        )
+    except Exception:
+        return False
 
 
-@app.get("/login", response_class=HTMLResponse)
-@app.get("/signup", response_class=HTMLResponse)
-def auth_page(request: Request):
-    return templates.TemplateResponse("auth.html", {"request": request, "app_name": APP_NAME})
-
-
-@app.get("/admin", response_class=HTMLResponse)
-def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request, "app_name": APP_NAME})
-
+# ---------------- BASIC ROUTES ----------------
 
 @app.get("/api/health")
-def health(db=Depends(get_db)):
-    db.command("ping")
-    return {"status": "ok", "app": APP_NAME}
+def health():
+    return {"status": "online", "app": APP_NAME}
+
+
+@app.get("/api/auth/me")
+def me(request: Request):
+    user = get_current_user(request)
+
+    if not user:
+        return {"authenticated": False}
+
+    return {
+        "authenticated": True,
+        "email": user["email"],
+        "role": user.get("role", "user"),
+        "watchlist": user.get("watchlist", []),
+        "progress": user.get("progress", {})
+    }
 
 
 @app.post("/api/auth/register")
-def register(body: RegisterBody, response: Response, db=Depends(get_db)):
-    email = body.email.lower()
-    if db.users.find_one({"email": email}):
-        raise HTTPException(status_code=409, detail="Email already registered")
+def register(data: RegisterData, response: Response):
+    email = data.email.strip().lower()
+
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(400, "Enter a valid email address")
+
+    if users.find_one({"email": email}):
+        raise HTTPException(409, "Account already exists")
+
     user = {
         "email": email,
-        "password_hash": hash_password(body.password),
+        "password": hash_password(data.password),
         "role": "user",
-        "created_at": datetime.utcnow(),
+        "created_at": datetime.now(timezone.utc),
+        "watchlist": [],
+        "progress": {}
     }
-    try:
-        result = db.users.insert_one(user)
-    except DuplicateKeyError:
-        raise HTTPException(status_code=409, detail="Email already registered")
-    user["_id"] = result.inserted_id
-    response.set_cookie(value=make_token(user), **cookie_options())
-    return {"user": {"id": str(user["_id"]), "email": email, "role": "user"}}
+
+    users.insert_one(user)
+    set_session(response, user)
+
+    return {"success": True, "message": "Account created"}
 
 
 @app.post("/api/auth/login")
-def login(body: LoginBody, response: Response, db=Depends(get_db)):
-    user = db.users.find_one({"email": body.email.lower()})
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Incorrect email or password")
-    response.set_cookie(value=make_token(user), **cookie_options())
-    return {"user": {"id": str(user["_id"]), "email": user["email"], "role": user["role"]}}
+def login(data: LoginData, response: Response):
+    email = data.email.strip().lower()
+    user = users.find_one({"email": email})
+
+    if not user or not verify_password(data.password, user["password"]):
+        raise HTTPException(401, "Incorrect email or password")
+
+    set_session(response, user)
+
+    return {
+        "success": True,
+        "role": user.get("role", "user")
+    }
 
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
-    response.delete_cookie(COOKIE_NAME, path="/", secure=IS_PRODUCTION, httponly=True, samesite="lax")
-    return {"message": "Signed out"}
+    response.delete_cookie(
+        COOKIE_NAME,
+        secure=True,
+        samesite="none"
+    )
+    return {"success": True}
 
 
-@app.get("/api/auth/me")
-def me(user=Depends(current_user)):
-    if not user:
-        return {"user": None}
-    return {"user": {"id": str(user["_id"]), "email": user["email"], "role": user["role"]}}
-
+# ---------------- ANIME API ----------------
 
 @app.get("/api/anime")
-def list_anime(search: str = "", genre: str = "", limit: int = 60, db=Depends(get_db)):
-    limit = max(1, min(limit, 100))
-    query = {}
-    if search.strip():
-        query["title"] = {"$regex": search.strip(), "$options": "i"}
-    if genre.strip():
-        query["genres"] = {"$regex": f"^{genre.strip()}$", "$options": "i"}
-    items = [serialize(x) for x in db.anime.find(query).sort("created_at", -1).limit(limit)]
-    return items
+def list_anime():
+    result = []
 
+    for anime in anime_collection.find().sort("created_at", -1):
+        result.append(clean_anime(anime))
 
-@app.get("/api/anime/{anime_id}")
-def anime_details(anime_id: str, db=Depends(get_db)):
-    try:
-        anime = db.anime.find_one({"_id": ObjectId(anime_id)})
-    except InvalidId:
-        anime = None
-    if not anime:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    result = serialize(anime)
-    episodes = [serialize(x) for x in db.episodes.find({"anime_id": anime_id}).sort([("season", 1), ("episode_number", 1)])]
-    result["episodes"] = episodes
     return result
 
 
-@app.get("/api/me/watchlist")
-def get_watchlist(user=Depends(require_user), db=Depends(get_db)):
-    rows = list(db.watchlist.find({"user_id": str(user["_id"])}).sort("created_at", -1))
-    ids = [ObjectId(x["anime_id"]) for x in rows if ObjectId.is_valid(x["anime_id"])]
-    return [serialize(x) for x in db.anime.find({"_id": {"$in": ids}})]
+@app.get("/api/anime/{anime_id}")
+def anime_detail(anime_id: str):
+    from bson import ObjectId
 
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
 
-@app.post("/api/me/watchlist/{anime_id}")
-def add_watchlist(anime_id: str, user=Depends(require_user), db=Depends(get_db)):
-    if not ObjectId.is_valid(anime_id) or not db.anime.find_one({"_id": ObjectId(anime_id)}):
-        raise HTTPException(status_code=404, detail="Anime not found")
-    db.watchlist.update_one(
-        {"user_id": str(user["_id"]), "anime_id": anime_id},
-        {"$setOnInsert": {"created_at": datetime.utcnow()}},
-        upsert=True,
-    )
-    return {"message": "Added to watchlist"}
+    anime = anime_collection.find_one({"_id": ObjectId(anime_id)})
 
+    if not anime:
+        raise HTTPException(404, "Anime not found")
 
-@app.delete("/api/me/watchlist/{anime_id}")
-def remove_watchlist(anime_id: str, user=Depends(require_user), db=Depends(get_db)):
-    db.watchlist.delete_one({"user_id": str(user["_id"]), "anime_id": anime_id})
-    return {"message": "Removed from watchlist"}
-
-
-@app.get("/api/me/progress")
-def get_progress(user=Depends(require_user), db=Depends(get_db)):
-    rows = list(db.progress.find({"user_id": str(user["_id"])}).sort("updated_at", -1).limit(50))
-    output = []
-    for row in rows:
-        ep = db.episodes.find_one({"_id": ObjectId(row["episode_id"])}) if ObjectId.is_valid(row["episode_id"]) else None
-        anime = db.anime.find_one({"_id": ObjectId(ep["anime_id"])}) if ep and ObjectId.is_valid(ep["anime_id"]) else None
-        if ep and anime:
-            output.append({"anime": serialize(anime), "episode": serialize(ep), "position_seconds": row["position_seconds"], "duration_seconds": row["duration_seconds"]})
-    return output
-
-
-@app.post("/api/me/progress")
-def save_progress(body: ProgressBody, user=Depends(require_user), db=Depends(get_db)):
-    if not ObjectId.is_valid(body.episode_id) or not db.episodes.find_one({"_id": ObjectId(body.episode_id)}):
-        raise HTTPException(status_code=404, detail="Episode not found")
-    db.progress.update_one(
-        {"user_id": str(user["_id"]), "episode_id": body.episode_id},
-        {"$set": {"position_seconds": body.position_seconds, "duration_seconds": body.duration_seconds, "updated_at": datetime.utcnow()}},
-        upsert=True,
-    )
-    return {"message": "Progress saved"}
+    return clean_anime(anime)
 
 
 @app.post("/api/admin/anime")
-def create_anime(body: AnimeBody, user=Depends(require_admin), db=Depends(get_db)):
-    doc = body.model_dump()
-    doc["created_at"] = datetime.utcnow()
-    result = db.anime.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    return serialize(doc)
+def create_anime(data: AnimeData, admin=Depends(require_admin)):
+    anime = data.model_dump()
+    anime["title"] = anime["title"].strip()
+
+    if not anime["title"]:
+        raise HTTPException(400, "Anime title is required")
+
+    anime["episodes"] = []
+    anime["created_at"] = datetime.now(timezone.utc)
+
+    result = anime_collection.insert_one(anime)
+
+    return {
+        "success": True,
+        "id": str(result.inserted_id)
+    }
 
 
 @app.put("/api/admin/anime/{anime_id}")
-def update_anime(anime_id: str, body: AnimeBody, user=Depends(require_admin), db=Depends(get_db)):
+def update_anime(
+    anime_id: str,
+    data: AnimeData,
+    admin=Depends(require_admin)
+):
+    from bson import ObjectId
+
     if not ObjectId.is_valid(anime_id):
-        raise HTTPException(status_code=404, detail="Anime not found")
-    result = db.anime.update_one({"_id": ObjectId(anime_id)}, {"$set": body.model_dump()})
+        raise HTTPException(400, "Invalid anime ID")
+
+    result = anime_collection.update_one(
+        {"_id": ObjectId(anime_id)},
+        {"$set": data.model_dump()}
+    )
+
     if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    return serialize(db.anime.find_one({"_id": ObjectId(anime_id)}))
+        raise HTTPException(404, "Anime not found")
+
+    return {"success": True}
 
 
 @app.delete("/api/admin/anime/{anime_id}")
-def delete_anime(anime_id: str, user=Depends(require_admin), db=Depends(get_db)):
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(status_code=404, detail="Anime not found")
-    result = db.anime.delete_one({"_id": ObjectId(anime_id)})
-    if not result.deleted_count:
-        raise HTTPException(status_code=404, detail="Anime not found")
-    db.episodes.delete_many({"anime_id": anime_id})
-    db.watchlist.delete_many({"anime_id": anime_id})
-    return {"message": "Anime deleted"}
+def delete_anime(anime_id: str, admin=Depends(require_admin)):
+    from bson import ObjectId
 
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    result = anime_collection.delete_one({"_id": ObjectId(anime_id)})
+
+    if not result.deleted_count:
+        raise HTTPException(404, "Anime not found")
+
+    users.update_many(
+        {},
+        {"$pull": {"watchlist": anime_id}}
+    )
+
+    return {"success": True}
+
+
+# ---------------- EPISODE API ----------------
 
 @app.post("/api/admin/anime/{anime_id}/episodes")
-def create_episode(anime_id: str, body: EpisodeBody, user=Depends(require_admin), db=Depends(get_db)):
-    if not ObjectId.is_valid(anime_id) or not db.anime.find_one({"_id": ObjectId(anime_id)}):
-        raise HTTPException(status_code=404, detail="Anime not found")
-    if body.anime_id != anime_id:
-        raise HTTPException(status_code=400, detail="Anime ID mismatch")
-    doc = body.model_dump()
-    doc["created_at"] = datetime.utcnow()
-    result = db.episodes.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    return serialize(doc)
+def add_episode(
+    anime_id: str,
+    data: EpisodeData,
+    admin=Depends(require_admin)
+):
+    from bson import ObjectId
 
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
 
-@app.put("/api/admin/episodes/{episode_id}")
-def update_episode(episode_id: str, body: EpisodeBody, user=Depends(require_admin), db=Depends(get_db)):
-    if not ObjectId.is_valid(episode_id):
-        raise HTTPException(status_code=404, detail="Episode not found")
-    if not ObjectId.is_valid(body.anime_id) or not db.anime.find_one({"_id": ObjectId(body.anime_id)}):
-        raise HTTPException(status_code=404, detail="Anime not found")
-    result = db.episodes.update_one({"_id": ObjectId(episode_id)}, {"$set": body.model_dump()})
+    if not valid_telegram_url(data.telegram_url):
+        raise HTTPException(400, "Enter a valid Telegram post link")
+
+    episode = data.model_dump()
+    episode["telegram_url"] = episode["telegram_url"].strip()
+
+    result = anime_collection.update_one(
+        {"_id": ObjectId(anime_id)},
+        {"$push": {"episodes": episode}}
+    )
+
     if not result.matched_count:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    return serialize(db.episodes.find_one({"_id": ObjectId(episode_id)}))
+        raise HTTPException(404, "Anime not found")
+
+    return {"success": True}
 
 
-@app.delete("/api/admin/episodes/{episode_id}")
-def delete_episode(episode_id: str, user=Depends(require_admin), db=Depends(get_db)):
-    if not ObjectId.is_valid(episode_id):
-        raise HTTPException(status_code=404, detail="Episode not found")
-    result = db.episodes.delete_one({"_id": ObjectId(episode_id)})
-    if not result.deleted_count:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    db.progress.delete_many({"episode_id": episode_id})
-    return {"message": "Episode deleted"}
+@app.put("/api/admin/anime/{anime_id}/episodes/{episode_index}")
+def update_episode(
+    anime_id: str,
+    episode_index: int,
+    data: EpisodeData,
+    admin=Depends(require_admin)
+):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    if not valid_telegram_url(data.telegram_url):
+        raise HTTPException(400, "Enter a valid Telegram post link")
+
+    anime = anime_collection.find_one({"_id": ObjectId(anime_id)})
+
+    if not anime or episode_index < 0 or episode_index >= len(anime.get("episodes", [])):
+        raise HTTPException(404, "Episode not found")
+
+    anime_collection.update_one(
+        {"_id": ObjectId(anime_id)},
+        {"$set": {f"episodes.{episode_index}": data.model_dump()}}
+    )
+
+    return {"success": True}
+
+
+@app.delete("/api/admin/anime/{anime_id}/episodes/{episode_index}")
+def delete_episode(
+    anime_id: str,
+    episode_index: int,
+    admin=Depends(require_admin)
+):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    anime = anime_collection.find_one({"_id": ObjectId(anime_id)})
+
+    if not anime or episode_index < 0 or episode_index >= len(anime.get("episodes", [])):
+        raise HTTPException(404, "Episode not found")
+
+    episodes = anime["episodes"]
+    episodes.pop(episode_index)
+
+    anime_collection.update_one(
+        {"_id": ObjectId(anime_id)},
+        {"$set": {"episodes": episodes}}
+    )
+
+    return {"success": True}
+
+
+# ---------------- USER FEATURES ----------------
+
+@app.post("/api/watchlist/{anime_id}")
+def toggle_watchlist(anime_id: str, user=Depends(require_user)):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    if not anime_collection.find_one({"_id": ObjectId(anime_id)}):
+        raise HTTPException(404, "Anime not found")
+
+    email = user["email"]
+
+    if anime_id in user.get("watchlist", []):
+        users.update_one(
+            {"email": email},
+            {"$pull": {"watchlist": anime_id}}
+        )
+        return {"saved": False}
+
+    users.update_one(
+        {"email": email},
+        {"$addToSet": {"watchlist": anime_id}}
+    )
+
+    return {"saved": True}
+
+
+@app.post("/api/progress")
+def save_progress(data: ProgressData, user=Depends(require_user)):
+    from bson import ObjectId
+
+    if not ObjectId.is_valid(data.anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    if not anime_collection.find_one({"_id": ObjectId(data.anime_id)}):
+        raise HTTPException(404, "Anime not found")
+
+    users.update_one(
+        {"email": user["email"]},
+        {"$set": {f"progress.{data.anime_id}": data.episode}}
+    )
+
+    return {"success": True}
