@@ -379,6 +379,37 @@ def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
     return {"message": "Episode added"}
 
 
+# --- Admin: edit / delete existing content ---
+
+
+@app.put("/api/admin/content/{type}/{id}")
+def update_content(type: str, id: str, data: MovieData, admin=Depends(require_admin)):
+    coll = get_collection(type)
+    fields = data.model_dump(exclude_unset=True)
+    for key in ("poster", "banner"):
+        if key in fields:
+            fields[key] = valid_url(fields[key])
+    if type != "movie":
+        fields.pop("quality_links", None)
+    fields["updated_at"] = utc_now()
+    result = coll.update_one({"_id": object_id(id)}, {"$set": fields})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {"message": "Updated"}
+
+
+@app.delete("/api/admin/content/{type}/{id}")
+def delete_content(type: str, id: str, admin=Depends(require_admin)):
+    coll = get_collection(type)
+    oid = object_id(id)
+    result = coll.delete_one({"_id": oid})
+    if not result.deleted_count:
+        raise HTTPException(status_code=404, detail="Not found")
+    db.watchlist.delete_many({"content_type": type, "content_id": str(oid)})
+    db.comments.delete_many({"content_type": type, "content_id": str(oid)})
+    return {"message": "Deleted"}
+
+
 # --- Watchlist & Comments ---
 
 
