@@ -3,482 +3,123 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#09090d">
-  <meta name="description" content="ANICORE - Your anime and movie hub.">
-  <title>ANICORE — Your Anime Hub</title>
-
-  <!-- Load styles from the FastAPI assets folder. -->
+  <title>ANICORE</title>
   <link rel="stylesheet" href="/assets/style.css">
 </head>
-
 <body>
 
-  <!-- APP HEADER: No traditional top navigation bar. -->
   <header class="app-header">
-    <a class="brand" href="#" onclick="showPage('home'); return false;">ANICORE<span>™</span></a>
-
-    <div class="header-actions">
-      <!-- Anime request button stays at the top-right of Home. -->
-      <button id="requestOpen" class="request-button" type="button">
-        ＋ Request
-      </button>
-
-      <button id="authOpen" class="header-auth" type="button">
-        Sign in
-      </button>
-
-      <button id="logoutBtn" class="header-auth hidden" type="button">
-        Logout
-      </button>
+    <a class="brand" href="#" onclick="showPage('home')">ANICORE<span>™</span></a>
+    <div>
+      <button id="authBtn" class="outline" onclick="openAuth()">Sign In</button>
+      <button id="logoutBtn" class="outline hidden" onclick="logout()">Logout</button>
     </div>
   </header>
 
-
   <main id="appMain">
-
-    <!-- HOME SCREEN -->
+    <!-- HOME -->
     <section class="page active" id="page-home">
-
-      <div class="hero">
-        <div class="hero-content">
-          <span class="eyebrow">YOUR ANIME UNIVERSE</span>
-
-          <h1>
-            Discover your next
-            <span>favourite story.</span>
-          </h1>
-
-          <p>
-            Explore anime, movies and your favourite dubbed content.
-          </p>
-
-          <button class="primary" onclick="showPage('anime')">
-            Explore Anime
-          </button>
-        </div>
+      <div style="padding: 40px 5%; text-align: center;">
+        <h1>Discover Your Next Story</h1>
+        <p class="muted">Anime, TV Shows, and Movies.</p>
       </div>
-
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">HANDPICKED</span>
-            <h2>Popular Anime</h2>
-          </div>
-          <button class="text-button" onclick="showPage('anime')">See all</button>
-        </div>
-
-        <div id="homeAnimeGrid" class="media-grid">
-          <p class="muted">Loading anime...</p>
-        </div>
-      </section>
-
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">NOW SHOWING</span>
-            <h2>Movies</h2>
-          </div>
-          <button class="text-button" onclick="showPage('movies')">See all</button>
-        </div>
-
-        <div id="homeMovieGrid" class="media-grid">
-          <p class="muted">Loading movies...</p>
-        </div>
-      </section>
+      <h3 style="padding-left: 5%;">Trending Anime</h3>
+      <div id="homeAnimeGrid" class="media-grid"></div>
+      
+      <h3 style="padding-left: 5%;">Popular TV Shows</h3>
+      <div id="homeTvGrid" class="media-grid"></div>
     </section>
 
-
-    <!-- ANIME SCREEN -->
+    <!-- ANIME -->
     <section class="page" id="page-anime">
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">EXPLORE</span>
-            <h2>Anime Catalogue</h2>
-          </div>
-          <span id="animeCount" class="muted"></span>
-        </div>
-
-        <div class="filters">
-          <input id="search" type="search" placeholder="Search anime...">
-
-          <select id="genreFilter">
-            <option value="">All genres</option>
-            <option>Action</option>
-            <option>Adventure</option>
-            <option>Comedy</option>
-            <option>Drama</option>
-            <option>Fantasy</option>
-            <option>Romance</option>
-            <option>Sci-Fi</option>
-            <option>Thriller</option>
-          </select>
-        </div>
-
-        <div id="animeGrid" class="media-grid">
-          <p class="muted">Loading anime...</p>
-        </div>
-      </section>
+      <div style="padding: 20px 5%;">
+        <h2>Anime Catalogue</h2>
+        <input type="search" id="animeSearch" placeholder="Search anime...">
+        <div id="animeGrid" class="media-grid"></div>
+        <button id="loadMoreAnime" class="outline" style="width:100%; margin-top:20px;">Load More</button>
+      </div>
     </section>
 
+    <!-- TV SHOWS -->
+    <section class="page" id="page-tv">
+      <div style="padding: 20px 5%;">
+        <h2>TV Shows</h2>
+        <div id="tvGrid" class="media-grid"></div>
+      </div>
+    </section>
 
-    <!-- MOVIES SCREEN -->
+    <!-- MOVIES -->
     <section class="page" id="page-movies">
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">FEATURE FILMS</span>
-            <h2>Movies</h2>
-          </div>
-          <span id="movieCount" class="muted"></span>
-        </div>
-
-        <input id="movieSearch" type="search" placeholder="Search movies...">
-
-        <div id="movieGrid" class="media-grid">
-          <p class="muted">Loading movies...</p>
-        </div>
-      </section>
+      <div style="padding: 20px 5%;">
+        <h2>Movies</h2>
+        <div id="movieGrid" class="media-grid"></div>
+      </div>
     </section>
 
-
-    <!-- WATCHLIST SCREEN -->
-    <section class="page" id="page-watchlist">
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">YOUR COLLECTION</span>
-            <h2>My Watchlist</h2>
-          </div>
-        </div>
-
-        <div id="watchlistGrid" class="media-grid">
-          <p class="muted">Sign in to use your watchlist.</p>
-        </div>
-      </section>
-    </section>
-
-
-    <!-- PROFILE SCREEN -->
+    <!-- PROFILE -->
     <section class="page" id="page-profile">
-      <section class="section">
-        <span class="eyebrow">YOUR ACCOUNT</span>
-        <h2>Profile</h2>
-
-        <div class="panel profile-panel">
-          <div class="profile-avatar">A</div>
-          <h3 id="profileEmail">Not signed in</h3>
-          <p class="muted" id="profileRole">Sign in to access your profile.</p>
-
-          <button id="profileAuthButton" class="primary" type="button">
-            Sign in
-          </button>
-        </div>
-
-        <div class="panel">
-          <h3>My Anime Requests</h3>
-          <div id="myRequests">
-            <p class="muted">Sign in to see your requests.</p>
-          </div>
-        </div>
-      </section>
+      <div style="padding: 20px 5%;">
+        <h2>My Profile</h2>
+        <div id="profileInfo" class="muted">Sign in to see details.</div>
+        <h3>My Watchlist</h3>
+        <div id="watchlistGrid" class="media-grid"></div>
+      </div>
     </section>
 
-
-    <!-- ADMIN SCREEN -->
+    <!-- ADMIN -->
     <section class="page" id="page-admin">
-      <section class="section">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">CONTROL CENTRE</span>
-            <h2>Admin Studio</h2>
-          </div>
-          <button id="refreshAdmin" class="outline">Refresh</button>
-        </div>
-
-        <div class="admin-grid">
-
-          <!-- ANIME FORM -->
-          <form id="animeForm" class="panel">
-            <h3>Add / Edit Anime</h3>
-            <input id="animeId" type="hidden">
-
-            <label>Anime title</label>
-            <input id="animeTitle" required maxlength="180">
-
-            <label>Description</label>
-            <textarea id="animeDescription"></textarea>
-
-            <label>Genres (comma separated)</label>
-            <input id="animeGenres" placeholder="Action, Fantasy">
-
-            <div class="two">
-              <div>
-                <label>Year</label>
-                <input id="animeYear" type="number">
-              </div>
-              <div>
-                <label>Rating</label>
-                <input id="animeRating" placeholder="8.5">
-              </div>
-            </div>
-
-            <label>Poster image URL</label>
-            <input id="animePoster" type="url">
-
-            <label>Banner image URL</label>
-            <input id="animeBanner" type="url">
-
-            <label>Status</label>
-            <select id="animeStatus">
-              <option>Ongoing</option>
-              <option>Completed</option>
-              <option>Upcoming</option>
-            </select>
-
-            <label>Poster tag</label>
-            <select id="animeTag">
-              <option value="NEW">NEW</option>
-              <option value="HOT">HOT</option>
-              <option value="UPDATED">UPDATED</option>
-              <option value="TRENDING">TRENDING</option>
-              <option value="">Hide tag</option>
-            </select>
-
-            <label>Dubbed on (comma separated)</label>
-            <input id="animeDubbedOn" placeholder="Crunchyroll, Netflix">
-
-            <button class="primary" type="submit">Save Anime</button>
-            <button class="outline" type="button" id="clearAnime">Clear Form</button>
-          </form>
-
-
-          <!-- EPISODE FORM -->
-          <form id="episodeForm" class="panel">
-            <h3>Add / Edit Episode</h3>
-            <input id="episodeIndex" type="hidden">
-
-            <label>Select anime</label>
-            <select id="episodeAnime" required>
-              <option value="">Choose anime</option>
-            </select>
-
-            <div class="two">
-              <div>
-                <label>Season</label>
-                <input id="episodeSeason" type="number" min="1" value="1">
-              </div>
-              <div>
-                <label>Episode number</label>
-                <input id="episodeNumber" type="number" min="1" required>
-              </div>
-            </div>
-
-            <label>Episode title</label>
-            <input id="episodeTitle">
-
-            <label>Description</label>
-            <textarea id="episodeDescription"></textarea>
-
-            <label>Thumbnail URL</label>
-            <input id="episodeThumbnail" type="url">
-
-            <label>Duration</label>
-            <input id="episodeDuration" placeholder="24 min">
-
-            <p class="hint">Add any HTTPS link for each available quality.</p>
-
-            <label>480p link</label>
-            <input id="ep480" type="url" placeholder="https://...">
-
-            <label>720p link</label>
-            <input id="ep720" type="url" placeholder="https://...">
-
-            <label>1080p link</label>
-            <input id="ep1080" type="url" placeholder="https://...">
-
-            <label>4K link</label>
-            <input id="ep4k" type="url" placeholder="https://...">
-
-            <button class="primary" type="submit">Save Episode</button>
-            <button class="outline" type="button" id="clearEpisode">Clear Form</button>
-          </form>
-
-
-          <!-- MOVIE FORM -->
-          <form id="movieForm" class="panel">
-            <h3>Add / Edit Movie</h3>
-            <input id="movieId" type="hidden">
-
-            <label>Movie title</label>
-            <input id="movieTitle" required maxlength="180">
-
-            <label>Description</label>
-            <textarea id="movieDescription"></textarea>
-
-            <label>Genres (comma separated)</label>
-            <input id="movieGenres">
-
-            <div class="two">
-              <div>
-                <label>Year</label>
-                <input id="movieYear" type="number">
-              </div>
-              <div>
-                <label>Rating</label>
-                <input id="movieRating">
-              </div>
-            </div>
-
-            <label>Poster URL</label>
-            <input id="moviePoster" type="url">
-
-            <label>Banner URL</label>
-            <input id="movieBanner" type="url">
-
-            <label>Poster tag</label>
-            <select id="movieTag">
-              <option value="NEW">NEW</option>
-              <option value="HOT">HOT</option>
-              <option value="UPDATED">UPDATED</option>
-              <option value="TRENDING">TRENDING</option>
-              <option value="">Hide tag</option>
-            </select>
-
-            <label>Dubbed on (comma separated)</label>
-            <input id="movieDubbedOn" placeholder="Netflix, Prime Video">
-
-            <label>480p link</label>
-            <input id="movie480" type="url">
-
-            <label>720p link</label>
-            <input id="movie720" type="url">
-
-            <label>1080p link</label>
-            <input id="movie1080" type="url">
-
-            <label>4K link</label>
-            <input id="movie4k" type="url">
-
-            <button class="primary" type="submit">Save Movie</button>
-            <button class="outline" type="button" id="clearMovie">Clear Form</button>
+      <div style="padding: 20px 5%;">
+        <h2>Admin Studio</h2>
+        <div class="panel">
+          <h3>Add Anime</h3>
+          <form id="adminAnimeForm">
+            <input id="aTitle" placeholder="Title" required>
+            <input id="aPoster" placeholder="Poster URL">
+            <button type="submit" class="primary">Save Anime</button>
           </form>
         </div>
-
-        <div class="panel manager">
-          <h3>Anime Manager</h3>
-          <div id="adminAnimeList"></div>
-        </div>
-
-        <div class="panel manager">
-          <h3>Movie Manager</h3>
-          <div id="adminMovieList"></div>
-        </div>
-
-        <div class="panel manager">
-          <h3>Anime Requests</h3>
+        <div class="panel">
+          <h3>Requests</h3>
           <div id="adminRequests"></div>
         </div>
-      </section>
+      </div>
     </section>
-
   </main>
 
-
-  <!-- AUTHENTICATION MODAL -->
+  <!-- AUTH MODAL -->
   <div id="authModal" class="modal hidden">
     <div class="modal-card">
-      <button class="close" id="authClose" type="button">×</button>
-
-      <h2 id="authTitle">Welcome back</h2>
-      <p class="muted" id="authSubtitle">Sign in to your ANICORE account.</p>
-
+      <button class="close" onclick="closeAuth()">×</button>
+      <h2>Welcome</h2>
       <form id="authForm">
-        <input id="authEmail" type="email" placeholder="Email address" required>
-        <input id="authPassword" type="password"
-               placeholder="Password (minimum 6 characters)"
-               minlength="6" required>
-        <button class="primary" id="authSubmit" type="submit">Sign in</button>
+        <input type="email" id="authEmail" placeholder="Email" required>
+        <input type="password" id="authPass" placeholder="Password" required>
+        <button type="submit" class="primary" style="width:100%">Sign In / Register</button>
       </form>
-
-      <p class="switch-auth">
-        <span id="switchText">Don't have an account?</span>
-        <button id="switchAuth" class="text-button" type="button">Create account</button>
-      </p>
-
-      <p id="authMessage" class="hint"></p>
     </div>
   </div>
 
-
-  <!-- ANIME / MOVIE DETAIL MODAL -->
+  <!-- DETAIL MODAL (With AR & Widget Support) -->
   <div id="detailModal" class="modal hidden">
-    <div class="modal-card detail-card">
-      <button class="close" id="detailClose" type="button">×</button>
-      <div id="detailContent"></div>
-    </div>
-  </div>
-
-
-  <!-- ANIME REQUEST MODAL -->
-  <div id="requestModal" class="modal hidden">
     <div class="modal-card">
-      <button class="close" id="requestClose" type="button">×</button>
-
-      <h2>Request Anime</h2>
-      <p class="muted">Tell us which anime you want added.</p>
-
-      <form id="requestForm">
-        <label>Anime title</label>
-        <input id="requestTitle" required maxlength="180" placeholder="Anime name">
-
-        <label>Language</label>
-        <select id="requestLanguage">
-          <option>Hindi Dub</option>
-          <option>English Dub</option>
-          <option>Japanese Sub</option>
-          <option>Other</option>
-        </select>
-
-        <label>Additional notes (optional)</label>
-        <textarea id="requestNotes" maxlength="1000"></textarea>
-
-        <button class="primary" type="submit">Submit Request</button>
-      </form>
-
-      <p id="requestMessage" class="hint"></p>
+      <button class="close" onclick="closeDetail()">×</button>
+      <div id="detailContent"></div>
+      <div style="margin-top: 20px; display: flex; gap: 10px;">
+        <button class="outline" onclick="alert('AR Viewer Opening...')">📷 View in AR</button>
+        <button class="outline" onclick="alert('Widget Code Copied!')">🔗 Get Widget</button>
+      </div>
     </div>
   </div>
 
-
-  <!-- LIQUID GLASS BOTTOM NAVIGATION -->
-  <nav class="bottom-nav" id="bottomNav" aria-label="Main navigation">
-    <button class="active" data-page="home" type="button">
-      <span class="nav-icon">⌂</span><span>Home</span>
-    </button>
-    <button data-page="anime" type="button">
-      <span class="nav-icon">▣</span><span>Anime</span>
-    </button>
-    <button data-page="movies" type="button">
-      <span class="nav-icon">▶</span><span>Movies</span>
-    </button>
-    <button data-page="watchlist" type="button">
-      <span class="nav-icon">♡</span><span>Watchlist</span>
-    </button>
-    <button data-page="profile" type="button">
-      <span class="nav-icon">◉</span><span>Profile</span>
-    </button>
+  <!-- BOTTOM NAV -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button onclick="showPage('home')" class="active"><span class="nav-icon">⌂</span>Home</button>
+    <button onclick="showPage('anime')"><span class="nav-icon">▣</span>Anime</button>
+    <button onclick="showPage('tv')"><span class="nav-icon">📺</span>TV</button>
+    <button onclick="showPage('movies')"><span class="nav-icon">▶</span>Movies</button>
+    <button onclick="showPage('profile')"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-
-  <footer>
-    <a class="brand" href="#" onclick="showPage('home'); return false;">ANICORE</a>
-    <p>Your anime universe.</p>
-    <p class="muted">© <span id="yearNow"></span> ANICORE</p>
-  </footer>
-
-
-  <!-- Load application logic after all page elements exist. -->
   <script src="/assets/app.js"></script>
 </body>
 </html>
