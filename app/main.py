@@ -50,7 +50,7 @@ class ContentBase(BaseModel):
     description: str = Field(default="", max_length=5000)
     genres: List[str] = []
     year: Optional[int] = None
-    rating: str = ""  # legacy display rating
+    rating: str = ""
     poster: str = ""
     banner: str = ""
     status: str = "Ongoing"
@@ -77,6 +77,7 @@ class EpisodeData(BaseModel):
     description: str = ""
     thumbnail: str = ""
     duration: str = ""
+    video_url: str = ""          # NEW
     quality_links: dict = {}
 
 
@@ -87,6 +88,7 @@ class EpisodeUpdate(BaseModel):
     description: Optional[str] = None
     thumbnail: Optional[str] = None
     duration: Optional[str] = None
+    video_url: Optional[str] = None   # NEW
     quality_links: Optional[dict] = None
 
 
@@ -178,6 +180,15 @@ def valid_url(url: str) -> str:
         return ""
     if not url.startswith("https://"):
         raise HTTPException(status_code=400, detail="Poster and banner URLs must start with https://")
+    return url
+
+
+def valid_video_url(url: str) -> str:  # NEW
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Video URL must start with https://")
     return url
 
 
@@ -445,7 +456,6 @@ def get_movies(
 
 @app.get("/api/genres")
 def get_genres():
-    """Return unique genres across all content for chips/filters."""
     genres = set()
     for coll_name in ("anime", "tv_shows", "movies"):
         for doc in db[coll_name].find({}, {"genres": 1}):
@@ -478,14 +488,12 @@ async def get_content(type: str, id: str, request: Request):
         )
     )
 
-    # User's own rating if logged in
     if user:
         my_rating = db.ratings.find_one(
             {"user_id": user["_id"], "content_type": type, "content_id": id}
         )
         item["my_rating"] = serialize_doc(my_rating) if my_rating else None
 
-        # Progress
         prog = db.progress.find_one(
             {"user_id": user["_id"], "content_type": type, "content_id": id}
         )
@@ -518,7 +526,13 @@ def add_movie(data: MovieData, admin=Depends(require_admin)):
 
 @app.post("/api/admin/anime/{id}/episodes")
 def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
-    result = db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": data.model_dump()}})
+    ep = data.model_dump()
+    ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    cleaned_links = {}
+    for k, v in (ep.get("quality_links") or {}).items():
+        cleaned_links[k] = valid_video_url(v)
+    ep["quality_links"] = cleaned_links
+    result = db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Anime not found")
     return {"message": "Episode added"}
@@ -526,9 +540,13 @@ def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
 
 @app.post("/api/admin/tvshows/{id}/episodes")
 def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
-    result = db.tv_shows.update_one(
-        {"_id": object_id(id)}, {"$push": {"episodes": data.model_dump()}}
-    )
+    ep = data.model_dump()
+    ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    cleaned_links = {}
+    for k, v in (ep.get("quality_links") or {}).items():
+        cleaned_links[k] = valid_video_url(v)
+    ep["quality_links"] = cleaned_links
+    result = db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="TV show not found")
     return {"message": "Episode added"}
@@ -556,6 +574,12 @@ def update_episode(
     for ep in episodes:
         if ep.get("season") == season and ep.get("episode") == episode:
             updates = data.model_dump(exclude_unset=True)
+            if "video_url" in updates:
+                updates["video_url"] = valid_video_url(updates["video_url"])
+            if "quality_links" in updates and updates["quality_links"]:
+                updates["quality_links"] = {
+                    k: valid_video_url(v) for k, v in updates["quality_links"].items()
+                }
             ep.update(updates)
             found = True
             break
@@ -614,7 +638,7 @@ def delete_content(type: str, id: str, admin=Depends(require_admin)):
 @app.post("/api/admin/bulk-import")
 def bulk_import(items: List[BulkImportItem], admin=Depends(require_admin)):
     added = 0
-    for item in items[:100]:  # safety limit
+    for item in items[:100]:
         coll = get_collection(item.content_type)
         data = ContentBase(
             title=item.title,
@@ -863,6 +887,14 @@ def update_request(id: str, data: RequestStatus, admin=Depends(require_admin)):
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Request not found")
     return {"message": "Request updated"}
+
+
+# --- Health Check ---
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 # --- Frontend Serving ---
