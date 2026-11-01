@@ -4,15 +4,75 @@ const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 
-const state = { user: null, authMode: 'login', page: 'home', detailId: null };
-const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin'];
-
-// One config per browsable list (anime / tv_show / movie)
-const LISTS = {
-  anime:   { endpoint: '/api/anime',   grid: 'animeGrid', more: 'loadMoreAnime',  search: 'animeSearch', empty: 'No anime found.',    page: 0, q: '' },
-  tv_show: { endpoint: '/api/tvshows', grid: 'tvGrid',    more: 'loadMoreTv',     search: 'tvSearch',    empty: 'No TV shows found.', page: 0, q: '' },
-  movie:   { endpoint: '/api/movies',  grid: 'movieGrid', more: 'loadMoreMovies', search: 'movieSearch', empty: 'No movies found.',   page: 0, q: '' },
+const state = {
+  user: null,
+  authMode: 'login',
+  page: 'home',
+  detailId: null,
+  detailType: null,
+  genres: [],
+  theme: localStorage.getItem('anicore-theme') || 'dark',
 };
+
+const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin', 'detail'];
+
+const LISTS = {
+  anime: {
+    endpoint: '/api/anime',
+    grid: 'animeGrid',
+    sentinel: 'animeSentinel',
+    empty: 'animeEmpty',
+    search: 'animeSearch',
+    genre: 'animeGenre',
+    status: 'animeStatus',
+    sort: 'animeSort',
+    chips: 'animeChips',
+    page: 0,
+    total: 0,
+    loading: false,
+    q: '',
+    genreVal: '',
+    statusVal: '',
+    sortVal: 'newest',
+  },
+  tv_show: {
+    endpoint: '/api/tvshows',
+    grid: 'tvGrid',
+    sentinel: 'tvSentinel',
+    empty: 'tvEmpty',
+    search: 'tvSearch',
+    genre: 'tvGenre',
+    status: 'tvStatus',
+    sort: 'tvSort',
+    chips: 'tvChips',
+    page: 0,
+    total: 0,
+    loading: false,
+    q: '',
+    genreVal: '',
+    statusVal: '',
+    sortVal: 'newest',
+  },
+  movie: {
+    endpoint: '/api/movies',
+    grid: 'movieGrid',
+    sentinel: 'movieSentinel',
+    empty: 'movieEmpty',
+    search: 'movieSearch',
+    genre: 'movieGenre',
+    status: 'movieStatus',
+    sort: 'movieSort',
+    chips: 'movieChips',
+    page: 0,
+    total: 0,
+    loading: false,
+    q: '',
+    genreVal: '',
+    statusVal: '',
+    sortVal: 'newest',
+  },
+};
+
 const PAGE_TYPES = { anime: 'anime', tv: 'tv_show', movies: 'movie' };
 
 // --- Helpers ---
@@ -55,14 +115,27 @@ async function api(path, options = {}) {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
   });
   let data = null;
-  try { data = await res.json(); } catch { /* non-JSON response */ }
+  try { data = await res.json(); } catch { /* non-JSON */ }
   if (!res.ok) throw new Error(errorText(data) || `Request failed (${res.status})`);
   return data;
 }
 
+// --- Theme ---
+
+function applyTheme(theme) {
+  state.theme = theme;
+  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
+  localStorage.setItem('anicore-theme', theme);
+  const meta = $('themeColorMeta');
+  if (meta) meta.content = theme === 'light' ? '#f4f2f8' : '#09090f';
+}
+
+function toggleTheme() {
+  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+}
+
 // --- Navigation ---
 
-// Slide the highlight behind the active tab
 function movePill(animate = true) {
   const pill = $('navPill');
   if (!pill) return;
@@ -84,17 +157,30 @@ function showPage(page) {
   const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
   target.classList.remove('from-left', 'from-right');
-  void target.offsetWidth; // restart the animation
+  void target.offsetWidth;
   if (page !== state.page) target.classList.add(dir);
   state.page = page;
 
-  document.querySelectorAll('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
+  document.querySelectorAll('.bottom-nav button, .side-nav button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.page === page);
+  });
   movePill();
+
+  // Close mobile sidebar
+  $('sidebar')?.classList.remove('open');
 
   const type = PAGE_TYPES[page];
   if (type && !LISTS[type].page) loadList(type, true);
+  if (page === 'home') {
+    loadHome();
+    loadContinueWatching();
+  }
   if (page === 'profile') loadProfile();
-  if (page === 'admin') { loadAdminRequests(); loadLibrary(true); }
+  if (page === 'admin') {
+    loadAdminRequests();
+    loadLibrary(true);
+    loadAdminStats();
+  }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -107,14 +193,37 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Hide the bottom nav while scrolling down
+$('menuBtn')?.addEventListener('click', () => {
+  $('sidebar')?.classList.toggle('open');
+});
+
 let lastScrollY = window.scrollY;
 window.addEventListener('scroll', () => {
   const y = window.scrollY;
   if (Math.abs(y - lastScrollY) < 8) return;
-  $('bottomNav').classList.toggle('hidden-nav', y > lastScrollY && y > 100);
+  $('bottomNav')?.classList.toggle('hidden-nav', y > lastScrollY && y > 100);
   lastScrollY = y;
 }, { passive: true });
+
+// --- Skeleton ---
+
+function showSkeleton(gridId, count = 8) {
+  const grid = $(gridId);
+  if (!grid) return;
+  grid.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'skeleton-grid';
+  wrap.style.padding = '0';
+  for (let i = 0; i < count; i++) {
+    wrap.innerHTML += `
+      <div class="skeleton-card">
+        <div class="skeleton-poster"></div>
+        <div class="skeleton-text"></div>
+        <div class="skeleton-text short"></div>
+      </div>`;
+  }
+  grid.appendChild(wrap);
+}
 
 // --- Rendering ---
 
@@ -131,7 +240,22 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     card.className = 'media-card';
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
-    card.innerHTML = '<div class="poster-wrap"><img loading="lazy" alt=""></div><div class="media-info"><h3></h3><p></p></div>';
+    card.setAttribute('aria-label', item.title || 'Untitled');
+
+    const rating = item.avg_rating ? `<span class="rating-badge">★ ${item.avg_rating}</span>` : '';
+    const progress = item.progress_percent
+      ? `<div class="progress-bar"><span style="width:${Math.min(100, item.progress_percent)}%"></span></div>`
+      : '';
+
+    card.innerHTML = `
+      <div class="poster-wrap">
+        <img loading="lazy" alt="">
+        ${progress}
+      </div>
+      <div class="media-info">
+        <h3></h3>
+        <p>${rating || (item.views ? `${item.views} views` : (item.year || ''))}</p>
+      </div>`;
 
     const img = card.querySelector('img');
     img.src = safeUrl(item.poster) || PLACEHOLDER;
@@ -139,9 +263,8 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
 
     card.querySelector('h3').textContent = item.title || 'Untitled';
-    card.querySelector('p').textContent = item.views ? `${item.views} views` : (item.year || '');
 
-    const open = () => openDetail(item._type || type, item._id, item);
+    const open = () => openDetail(item._type || type, item._id || item.content_id, item);
     card.addEventListener('click', open);
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -152,6 +275,10 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 }
 
 async function loadHome() {
+  showSkeleton('homeAnimeGrid', 6);
+  showSkeleton('homeTvGrid', 6);
+  showSkeleton('homeMovieGrid', 6);
+
   const jobs = [
     ['anime', 'homeAnimeGrid', '/api/anime'],
     ['tv_show', 'homeTvGrid', '/api/tvshows'],
@@ -159,7 +286,7 @@ async function loadHome() {
   ];
   await Promise.all(jobs.map(async ([type, gridId, endpoint]) => {
     try {
-      const data = await api(`${endpoint}?page=1&limit=10`);
+      const data = await api(`${endpoint}?page=1&limit=10&sort=views`);
       renderGrid($(gridId), data.items, type);
     } catch {
       $(gridId).innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
@@ -167,43 +294,168 @@ async function loadHome() {
   }));
 }
 
-async function loadList(type, reset = false) {
-  const l = LISTS[type];
-  if (reset) l.page = 0;
-  const next = l.page + 1;
-  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE });
-  if (l.q) params.set('q', l.q);
-
-  const btn = $(l.more);
-  btn.disabled = true;
+async function loadContinueWatching() {
+  const section = $('continueSection');
+  if (!state.user) {
+    section?.classList.add('hidden');
+    return;
+  }
   try {
-    const data = await api(`${l.endpoint}?${params}`);
-    l.page = next;
-    renderGrid($(l.grid), data.items, type, { append: next > 1, empty: l.empty });
-    btn.classList.toggle('hidden', next * PAGE_SIZE >= data.total);
-  } catch (err) {
-    toast(err.message, 'error');
-  } finally {
-    btn.disabled = false;
+    const items = await api('/api/continue-watching');
+    if (!items.length) {
+      section?.classList.add('hidden');
+      return;
+    }
+    section?.classList.remove('hidden');
+    const mapped = items.map((i) => ({
+      ...i,
+      _id: i.content_id,
+      _type: i.content_type,
+      progress_percent: i.progress_percent,
+    }));
+    renderGrid($('continueGrid'), mapped, 'anime');
+  } catch {
+    section?.classList.add('hidden');
   }
 }
 
+async function loadList(type, reset = false) {
+  const l = LISTS[type];
+  if (l.loading) return;
+  if (reset) {
+    l.page = 0;
+    l.total = 0;
+  }
+  if (l.page > 0 && l.page * PAGE_SIZE >= l.total) return;
+
+  l.loading = true;
+  const next = l.page + 1;
+  const params = new URLSearchParams({
+    page: next,
+    limit: PAGE_SIZE,
+    sort: l.sortVal || 'newest',
+  });
+  if (l.q) params.set('q', l.q);
+  if (l.genreVal) params.set('genre', l.genreVal);
+  if (l.statusVal) params.set('status', l.statusVal);
+
+  if (reset) showSkeleton(l.grid, 8);
+
+  try {
+    const data = await api(`${l.endpoint}?${params}`);
+    l.page = next;
+    l.total = data.total;
+    renderGrid($(l.grid), data.items, type, {
+      append: next > 1,
+      empty: 'No results found.',
+    });
+    const emptyEl = $(l.empty);
+    if (emptyEl) emptyEl.classList.toggle('hidden', data.items.length > 0 || next > 1);
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    l.loading = false;
+  }
+}
+
+// Infinite scroll observers
+const observers = {};
+Object.entries(LISTS).forEach(([type, l]) => {
+  const sentinel = $(l.sentinel);
+  if (!sentinel) return;
+  observers[type] = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && state.page === Object.keys(PAGE_TYPES).find((k) => PAGE_TYPES[k] === type)) {
+      loadList(type);
+    }
+  }, { rootMargin: '200px' });
+  observers[type].observe(sentinel);
+});
+
+// Search + filters
 Object.entries(LISTS).forEach(([type, l]) => {
   let timer;
-  $(l.search).addEventListener('input', (e) => {
+  $(l.search)?.addEventListener('input', (e) => {
     clearTimeout(timer);
-    timer = setTimeout(() => { l.q = e.target.value.trim(); loadList(type, true); }, 300);
+    timer = setTimeout(() => {
+      l.q = e.target.value.trim();
+      loadList(type, true);
+    }, 300);
   });
-  $(l.more).addEventListener('click', () => loadList(type));
+  $(l.genre)?.addEventListener('change', (e) => {
+    l.genreVal = e.target.value;
+    // Sync chips
+    document.querySelectorAll(`#${l.chips} .genre-chip`).forEach((c) => {
+      c.classList.toggle('active', c.dataset.genre === l.genreVal);
+    });
+    loadList(type, true);
+  });
+  $(l.status)?.addEventListener('change', (e) => {
+    l.statusVal = e.target.value;
+    loadList(type, true);
+  });
+  $(l.sort)?.addEventListener('change', (e) => {
+    l.sortVal = e.target.value;
+    loadList(type, true);
+  });
 });
+
+async function loadGenres() {
+  try {
+    state.genres = await api('/api/genres');
+    Object.values(LISTS).forEach((l) => {
+      const sel = $(l.genre);
+      if (!sel) return;
+      const current = sel.value;
+      sel.innerHTML = '<option value="">All Genres</option>';
+      state.genres.forEach((g) => {
+        const opt = document.createElement('option');
+        opt.value = g;
+        opt.textContent = g;
+        sel.appendChild(opt);
+      });
+      sel.value = current;
+
+      // Chips (top 12)
+      const chips = $(l.chips);
+      if (chips) {
+        chips.innerHTML = '';
+        state.genres.slice(0, 12).forEach((g) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'genre-chip';
+          btn.dataset.genre = g;
+          btn.textContent = g;
+          btn.setAttribute('role', 'option');
+          btn.addEventListener('click', () => {
+            const active = btn.classList.contains('active');
+            chips.querySelectorAll('.genre-chip').forEach((c) => c.classList.remove('active'));
+            if (!active) {
+              btn.classList.add('active');
+              l.genreVal = g;
+              if (sel) sel.value = g;
+            } else {
+              l.genreVal = '';
+              if (sel) sel.value = '';
+            }
+            loadList(Object.keys(LISTS).find((k) => LISTS[k] === l), true);
+          });
+          chips.appendChild(btn);
+        });
+      }
+    });
+  } catch { /* ignore */ }
+}
 
 // --- Auth ---
 
 function updateAuthUI() {
   const u = state.user;
-  $('signInBtn').classList.toggle('hidden', !!u);
-  $('logoutBtn').classList.toggle('hidden', !u);
-  $('adminBtn').classList.toggle('hidden', u?.role !== 'admin');
+  $('signInBtn')?.classList.toggle('hidden', !!u);
+  $('logoutBtn')?.classList.toggle('hidden', !u);
+  $('adminBtn')?.classList.toggle('hidden', u?.role !== 'admin');
+  $('sideSignIn')?.classList.toggle('hidden', !!u);
+  $('sideLogout')?.classList.toggle('hidden', !u);
+  $('sideAdminBtn')?.classList.toggle('hidden', u?.role !== 'admin');
 }
 
 async function checkUser() {
@@ -249,12 +501,13 @@ function closeAuth() {
   $('authError').classList.add('hidden');
 }
 
-$('signInBtn').addEventListener('click', () => openAuth('login'));
-$('authClose').addEventListener('click', closeAuth);
-$('toggleAuthBtn').addEventListener('click', () => openAuth(state.authMode === 'login' ? 'register' : 'login'));
-$('authModal').addEventListener('click', (e) => { if (e.target.id === 'authModal') closeAuth(); });
+$('signInBtn')?.addEventListener('click', () => openAuth('login'));
+$('sideSignIn')?.addEventListener('click', () => openAuth('login'));
+$('authClose')?.addEventListener('click', closeAuth);
+$('toggleAuthBtn')?.addEventListener('click', () => openAuth(state.authMode === 'login' ? 'register' : 'login'));
+$('authModal')?.addEventListener('click', (e) => { if (e.target.id === 'authModal') closeAuth(); });
 
-$('authForm').addEventListener('submit', async (e) => {
+$('authForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const email = $('authEmail').value.trim();
   const password = $('authPass').value;
@@ -274,7 +527,8 @@ $('authForm').addEventListener('submit', async (e) => {
     closeAuth();
     await checkUser();
     toast(created ? 'Account created!' : 'Welcome back!');
-    if ($('page-profile').classList.contains('active')) loadProfile();
+    if ($('page-profile')?.classList.contains('active')) loadProfile();
+    loadContinueWatching();
   } catch (err) {
     showAuthError(err.message || 'Failed to authenticate. Please try again.');
   } finally {
@@ -283,7 +537,7 @@ $('authForm').addEventListener('submit', async (e) => {
   }
 });
 
-$('logoutBtn').addEventListener('click', async () => {
+async function doLogout() {
   if (!confirm('Are you sure you want to sign out?')) return;
   try {
     await api('/api/auth/logout', { method: 'POST' });
@@ -294,7 +548,9 @@ $('logoutBtn').addEventListener('click', async () => {
   } catch (err) {
     toast(err.message || 'Failed to sign out', 'error');
   }
-});
+}
+$('logoutBtn')?.addEventListener('click', doLogout);
+$('sideLogout')?.addEventListener('click', doLogout);
 
 // --- Profile ---
 
@@ -304,8 +560,8 @@ async function loadProfile() {
 
   if (!state.user) {
     info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
-    $('profileSignIn').addEventListener('click', () => openAuth('login'));
-    member.classList.add('hidden');
+    $('profileSignIn')?.addEventListener('click', () => openAuth('login'));
+    member?.classList.add('hidden');
     return;
   }
 
@@ -315,18 +571,24 @@ async function loadProfile() {
       <h3>${esc(state.user.email)}</h3>
       <p class="muted">Role: ${esc(state.user.role)}</p>
     </div>`;
-  member.classList.remove('hidden');
+  member?.classList.remove('hidden');
 
   try {
     const list = await api('/api/watchlist');
-    const items = list.map((w) => ({ _id: w.content_id, _type: w.content_type, title: w.title, poster: w.poster }));
+    const items = list.map((w) => ({
+      _id: w.content_id,
+      _type: w.content_type,
+      title: w.title,
+      poster: w.poster,
+      avg_rating: w.avg_rating,
+    }));
     renderGrid($('watchlistGrid'), items, 'anime', { empty: 'Your watchlist is empty.' });
   } catch (err) {
     toast(err.message, 'error');
   }
 }
 
-$('requestForm').addEventListener('submit', async (e) => {
+$('requestForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
@@ -348,7 +610,7 @@ $('requestForm').addEventListener('submit', async (e) => {
   }
 });
 
-// --- Detail modal ---
+// --- Detail ---
 
 function linkList(links) {
   const entries = Object.entries(links || {}).filter(([, url]) => safeUrl(url));
@@ -358,13 +620,14 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
-function episodesHtml(episodes) {
+function episodesHtml(episodes, type, contentId) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => `
-    <div class="episode">
+    <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
       <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
       ${linkList(ep.quality_links)}
+      ${state.user ? `<button type="button" class="outline small mark-progress" data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
     </div>`).join('')}</div>`;
 }
 
@@ -377,68 +640,54 @@ function commentsHtml(comments) {
     </div>`).join('');
 }
 
+function reviewsHtml(reviews) {
+  if (!reviews?.length) return '<p class="muted">No reviews yet.</p>';
+  return reviews.map((r) => `
+    <div class="review-card">
+      <strong>${esc(r.username)}</strong>
+      <span class="stars-display">${'★'.repeat(Math.round(r.rating))}${'☆'.repeat(10 - Math.round(r.rating))} ${r.rating}/10</span>
+      <small class="muted"> · ${esc(fmtDate(r.updated_at || r.created_at))}</small>
+      ${r.review ? `<p>${esc(r.review)}</p>` : ''}
+    </div>`).join('');
+}
+
 function metaText(item) {
   if (!('description' in item)) return '';
-  return `👁 ${item.views || 0} · ⭐ ${item.rating || 'N/A'} · 📅 ${item.year || 'N/A'}${item.status ? ` · ${item.status}` : ''}`;
+  const parts = [
+    `👁 ${item.views || 0}`,
+    item.avg_rating ? `★ ${item.avg_rating} (${item.rating_count || 0})` : null,
+    item.rating ? `⭐ ${item.rating}` : null,
+    item.year ? `📅 ${item.year}` : null,
+    item.status || null,
+  ].filter(Boolean);
+  return parts.join(' · ');
 }
 
 function recapHtml(item) {
   return item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : '';
 }
 
-// Fills in the live details (views, watchlist state, recap, comments)
-// without redrawing the sheet, so nothing flickers.
-function updateDetail(item, comments) {
-  $('dMeta').textContent = metaText(item);
-  $('dRecapSlot').innerHTML = recapHtml(item);
-  const wl = $('wlBtn');
-  wl.textContent = item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist';
-  wl.classList.toggle('saved', !!item.in_watchlist);
-  $('commentList').innerHTML = commentsHtml(comments);
+function ratingWidget(item, type) {
+  if (!state.user) return '<p class="muted">Sign in to rate this title.</p>';
+  const current = item.my_rating?.rating || 0;
+  let stars = '';
+  for (let i = 1; i <= 10; i++) {
+    stars += `<button type="button" data-val="${i}" class="${i <= current ? 'active' : ''}" aria-label="Rate ${i}">★</button>`;
+  }
+  return `
+    <div class="panel" style="margin-top:16px">
+      <h3>Your Rating</h3>
+      <div class="stars" id="ratingStars">${stars}</div>
+      <textarea id="reviewText" rows="2" maxlength="2000" placeholder="Optional review...">${esc(item.my_rating?.review || '')}</textarea>
+      <button type="button" class="outline" id="saveRating">Save Rating</button>
+    </div>`;
 }
 
-async function openDetail(type, id, preview) {
-  const modal = $('detailModal');
-  clearTimeout(closeTimer);
-  resetSheet();
-  state.detailId = id;
-  const complete = !!preview && 'description' in preview;
-
-  const show = () => {
-    modal.classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-  };
-
-  if (preview) {
-    // Draw instantly from the card's own data: the sheet slides up with content, no loading state.
-    renderDetail(type, preview, null);
-    show();
-  }
-
-  try {
-    const [item, comments] = await Promise.all([
-      api(`/api/content/${type}/${id}`),
-      api(`/api/comments/${type}/${id}`),
-    ]);
-    if (state.detailId !== id) return; // closed or switched while loading
-    if (complete) {
-      updateDetail(item, comments);
-    } else {
-      renderDetail(type, item, comments);
-      if (!preview) show();
-    }
-  } catch (err) {
-    if (state.detailId !== id) return;
-    closeDetail();
-    toast(err.message || 'Failed to load details.', 'error');
-  }
-}
-
-function renderDetail(type, item, comments) {
+function buildDetailHtml(type, item, comments, reviews) {
   const banner = safeUrl(item.banner) || safeUrl(item.poster);
   const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
 
-  $('detailContent').innerHTML = `
+  return `
     ${banner ? `<img class="detail-banner" src="${esc(banner)}" alt="">` : ''}
     <h2>${esc(item.title)}</h2>
     <p class="muted meta" id="dMeta">${esc(metaText(item))}</p>
@@ -446,21 +695,24 @@ function renderDetail(type, item, comments) {
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
     <div id="dRecapSlot">${recapHtml(item)}</div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
-    ${episodesHtml(item.episodes)}
+    ${episodesHtml(item.episodes, type, item._id)}
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
-      <button class="outline" id="arBtn" type="button">📷 View in AR</button>
-      <button class="outline" id="widgetBtn" type="button">🔗 Get Widget</button>
     </div>
+    ${ratingWidget(item, type)}
+    <h3>Reviews</h3>
+    <div id="reviewList">${reviewsHtml(reviews)}</div>
     <h3>Comments</h3>
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
       : '<p class="muted">Sign in to comment.</p>'}
     <div id="commentList">${comments ? commentsHtml(comments) : ''}</div>`;
+}
 
-  $('detailContent').querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
+function bindDetailEvents(type, item, container) {
+  container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
-  $('wlBtn').addEventListener('click', async (e) => {
+  container.querySelector('#wlBtn')?.addEventListener('click', async (e) => {
     if (!state.user) return openAuth('login');
     const btn = e.currentTarget;
     btn.disabled = true;
@@ -469,7 +721,7 @@ function renderDetail(type, item, comments) {
       btn.textContent = res.saved ? '♥ In Watchlist' : '♡ Add to Watchlist';
       btn.classList.toggle('saved', res.saved);
       toast(res.saved ? 'Added to watchlist' : 'Removed from watchlist');
-      if ($('page-profile').classList.contains('active')) loadProfile();
+      if ($('page-profile')?.classList.contains('active')) loadProfile();
     } catch (err) {
       toast(err.message, 'error');
     } finally {
@@ -477,24 +729,126 @@ function renderDetail(type, item, comments) {
     }
   });
 
-  $('arBtn').addEventListener('click', () => toast('AR viewer coming soon!'));
-  $('widgetBtn').addEventListener('click', () => toast('Widget coming soon!'));
+  // Mark progress
+  container.querySelectorAll('.mark-progress').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!state.user) return openAuth('login');
+      try {
+        await api('/api/progress', {
+          method: 'POST',
+          body: JSON.stringify({
+            content_type: type,
+            content_id: item._id,
+            season: Number(btn.dataset.season),
+            episode: Number(btn.dataset.episode),
+            progress_percent: 100,
+          }),
+        });
+        toast('Progress saved');
+        loadContinueWatching();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    });
+  });
 
-  $('commentForm')?.addEventListener('submit', async (e) => {
+  // Rating stars
+  const stars = container.querySelector('#ratingStars');
+  let selected = item.my_rating?.rating || 0;
+  stars?.querySelectorAll('button').forEach((b) => {
+    b.addEventListener('click', () => {
+      selected = Number(b.dataset.val);
+      stars.querySelectorAll('button').forEach((s) => {
+        s.classList.toggle('active', Number(s.dataset.val) <= selected);
+      });
+    });
+  });
+
+  container.querySelector('#saveRating')?.addEventListener('click', async () => {
+    if (!selected) return toast('Select a rating first', 'error');
+    try {
+      const res = await api('/api/ratings', {
+        method: 'POST',
+        body: JSON.stringify({
+          content_type: type,
+          content_id: item._id,
+          rating: selected,
+          review: container.querySelector('#reviewText')?.value || '',
+        }),
+      });
+      toast('Rating saved!');
+      const meta = container.querySelector('#dMeta');
+      if (meta) meta.textContent = metaText({ ...item, avg_rating: res.avg_rating, rating_count: res.rating_count, views: item.views });
+      // Refresh reviews
+      const reviews = await api(`/api/ratings/${type}/${item._id}`);
+      const list = container.querySelector('#reviewList');
+      if (list) list.innerHTML = reviewsHtml(reviews.items);
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  });
+
+  container.querySelector('#commentForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const text = $('commentText').value.trim();
+    const text = container.querySelector('#commentText').value.trim();
     if (!text) return;
     try {
       await api('/api/comments', {
         method: 'POST',
         body: JSON.stringify({ content_type: type, content_id: item._id, text }),
       });
-      $('commentText').value = '';
-      $('commentList').innerHTML = commentsHtml(await api(`/api/comments/${type}/${item._id}`));
+      container.querySelector('#commentText').value = '';
+      container.querySelector('#commentList').innerHTML = commentsHtml(
+        await api(`/api/comments/${type}/${item._id}`)
+      );
     } catch (err) {
       toast(err.message, 'error');
     }
   });
+}
+
+function isDesktop() {
+  return window.matchMedia('(min-width: 900px)').matches;
+}
+
+async function openDetail(type, id, preview) {
+  state.detailId = id;
+  state.detailType = type;
+
+  const usePage = isDesktop();
+  const contentEl = usePage ? $('detailPageContent') : $('detailContent');
+
+  if (usePage) {
+    showPage('detail');
+  } else {
+    clearTimeout(closeTimer);
+    resetSheet();
+    $('detailModal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  }
+
+  // Quick preview if available
+  if (preview && contentEl) {
+    contentEl.innerHTML = buildDetailHtml(type, preview, null, null);
+  } else if (contentEl) {
+    contentEl.innerHTML = '<p class="muted">Loading…</p>';
+  }
+
+  try {
+    const [item, comments, reviews] = await Promise.all([
+      api(`/api/content/${type}/${id}`),
+      api(`/api/comments/${type}/${id}`),
+      api(`/api/ratings/${type}/${id}?limit=10`),
+    ]);
+    if (state.detailId !== id) return;
+
+    contentEl.innerHTML = buildDetailHtml(type, item, comments, reviews.items);
+    bindDetailEvents(type, item, contentEl);
+  } catch (err) {
+    if (state.detailId !== id) return;
+    closeDetail();
+    toast(err.message || 'Failed to load details.', 'error');
+  }
 }
 
 let closeTimer;
@@ -502,16 +856,21 @@ let closeTimer;
 function resetSheet() {
   const modal = $('detailModal');
   const sheet = $('detailSheet');
+  if (!sheet) return;
   sheet.style.transition = '';
   sheet.style.transform = '';
-  modal.style.transition = '';
-  modal.style.background = '';
+  if (modal) {
+    modal.style.transition = '';
+    modal.style.background = '';
+  }
 }
 
-// Slides the sheet down off the screen, then hides it
 function closeDetail() {
   const modal = $('detailModal');
-  if (modal.classList.contains('hidden')) return;
+  if (!modal || modal.classList.contains('hidden')) {
+    if (state.page === 'detail') showPage('home');
+    return;
+  }
   state.detailId = null;
   const sheet = $('detailSheet');
   sheet.style.transition = 'transform .3s cubic-bezier(.32, .72, 0, 1)';
@@ -526,90 +885,193 @@ function closeDetail() {
   }, 300);
 }
 
-// Swipe the sheet down to dismiss it (when scrolled to the top)
+$('detailClose')?.addEventListener('click', closeDetail);
+$('detailBack')?.addEventListener('click', () => showPage('home'));
+$('detailModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'detailModal') closeDetail();
+});
+
+// Swipe to dismiss (simplified)
 function initSheet() {
-  const modal = $('detailModal');
   const sheet = $('detailSheet');
+  if (!sheet) return;
   let startY = 0;
-  let dy = 0;
-  let dragging = false;
-
+  let currentY = 0;
   sheet.addEventListener('touchstart', (e) => {
-    if (sheet.scrollTop > 0 || e.touches.length !== 1) return;
+    if (sheet.scrollTop > 0) return;
     startY = e.touches[0].clientY;
-    dy = 0;
-    dragging = true;
   }, { passive: true });
-
   sheet.addEventListener('touchmove', (e) => {
-    if (!dragging || sheet.scrollTop > 0) return;
-    dy = e.touches[0].clientY - startY;
-    if (dy <= 0) { dy = 0; return; }
-    sheet.style.transition = 'none';
-    sheet.style.transform = `translateY(${dy}px)`;
-    modal.style.background = `rgba(0, 0, 0, ${0.85 * (1 - Math.min(dy / 400, 1))})`;
-    if (e.cancelable) e.preventDefault();
-  }, { passive: false });
-
-  sheet.addEventListener('touchend', () => {
-    if (!dragging) return;
-    dragging = false;
-    if (dy > 110) {
-      closeDetail();
-    } else {
-      sheet.style.transition = '';
-      sheet.style.transform = '';
-      modal.style.background = '';
+    if (!startY) return;
+    currentY = e.touches[0].clientY - startY;
+    if (currentY > 0) {
+      sheet.style.transform = `translateY(${currentY}px)`;
     }
-    dy = 0;
+  }, { passive: true });
+  sheet.addEventListener('touchend', () => {
+    if (currentY > 120) closeDetail();
+    else {
+      sheet.style.transition = 'transform .25s ease';
+      sheet.style.transform = '';
+    }
+    startY = 0;
+    currentY = 0;
   });
 }
 
-$('detailClose').addEventListener('click', closeDetail);
-$('detailModal').addEventListener('click', (e) => { if (e.target.id === 'detailModal') closeDetail(); });
-
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (!$('authModal').classList.contains('hidden')) closeAuth();
-  else closeDetail();
-});
-
 // --- Admin ---
 
-const ADMIN_ENDPOINTS = { anime: '/api/admin/anime', tv_show: '/api/admin/tvshows', movie: '/api/admin/movies' };
-const REQUEST_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed'];
+async function loadAdminStats() {
+  try {
+    const s = await api('/api/admin/stats');
+    $('adminStats').innerHTML = `
+      <div class="stat-card"><strong>${s.anime}</strong><span>Anime</span></div>
+      <div class="stat-card"><strong>${s.tv_shows}</strong><span>TV Shows</span></div>
+      <div class="stat-card"><strong>${s.movies}</strong><span>Movies</span></div>
+      <div class="stat-card"><strong>${s.users}</strong><span>Users</span></div>
+      <div class="stat-card"><strong>${s.requests_pending}</strong><span>Pending Requests</span></div>
+    `;
+  } catch { /* ignore */ }
+}
 
-$('adminForm').addEventListener('submit', async (e) => {
+async function loadAdminRequests() {
+  try {
+    const rows = await api('/api/admin/requests');
+    const el = $('adminRequests');
+    if (!rows.length) {
+      el.innerHTML = '<p class="muted">No requests yet.</p>';
+      return;
+    }
+    el.innerHTML = rows.map((r) => `
+      <div class="request-row">
+        <div>
+          <strong>${esc(r.title)}</strong>
+          <p class="muted">${esc(r.language)} · ${esc(r.email)} · ${esc(fmtDate(r.created_at))}</p>
+          ${r.notes ? `<p>${esc(r.notes)}</p>` : ''}
+        </div>
+        <select data-id="${esc(r._id)}" class="req-status">
+          ${['Pending', 'Approved', 'Rejected', 'Completed'].map((s) =>
+            `<option ${r.status === s ? 'selected' : ''}>${s}</option>`
+          ).join('')}
+        </select>
+      </div>`).join('');
+
+    el.querySelectorAll('.req-status').forEach((sel) => {
+      sel.addEventListener('change', async () => {
+        try {
+          await api(`/api/admin/requests/${sel.dataset.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: sel.value }),
+          });
+          toast('Request updated');
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      });
+    });
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+let libPage = 0;
+async function loadLibrary(reset = false) {
+  if (reset) libPage = 0;
+  const type = $('libType').value;
+  const q = $('libSearch').value.trim();
+  const endpoint = type === 'anime' ? '/api/anime' : type === 'tv_show' ? '/api/tvshows' : '/api/movies';
+  try {
+    const data = await api(`${endpoint}?page=${libPage + 1}&limit=20&q=${encodeURIComponent(q)}`);
+    libPage += 1;
+    const el = $('libList');
+    if (reset) el.innerHTML = '';
+    data.items.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'lib-row';
+      row.innerHTML = `
+        <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
+        <div>
+          <h4>${esc(item.title)}</h4>
+          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}</p>
+        </div>
+        <div class="lib-actions">
+          <button type="button" class="outline edit-btn">Edit</button>
+          <button type="button" class="outline danger del-btn">Del</button>
+        </div>`;
+      row.querySelector('.edit-btn').addEventListener('click', () => {
+        $('aId').value = item._id;
+        $('aType').value = type;
+        $('aTitle').value = item.title || '';
+        $('aDesc').value = item.description || '';
+        $('aGenres').value = (item.genres || []).join(', ');
+        $('aYear').value = item.year || '';
+        $('aRating').value = item.rating || '';
+        $('aStatus').value = item.status || 'Ongoing';
+        $('aPoster').value = item.poster || '';
+        $('aBanner').value = item.banner || '';
+        $('adminFormTitle').textContent = 'Edit Content';
+        $('aSubmit').textContent = 'Update';
+        $('aCancel').classList.remove('hidden');
+        $('adminForm').scrollIntoView({ behavior: 'smooth' });
+      });
+      row.querySelector('.del-btn').addEventListener('click', async () => {
+        if (!confirm(`Delete "${item.title}"?`)) return;
+        try {
+          await api(`/api/admin/content/${type}/${item._id}`, { method: 'DELETE' });
+          toast('Deleted');
+          loadLibrary(true);
+        } catch (err) {
+          toast(err.message, 'error');
+        }
+      });
+      el.appendChild(row);
+    });
+    $('libMore').classList.toggle('hidden', libPage * 20 >= data.total);
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+$('libType')?.addEventListener('change', () => loadLibrary(true));
+$('libSearch')?.addEventListener('input', (() => {
+  let t;
+  return () => { clearTimeout(t); t = setTimeout(() => loadLibrary(true), 300); };
+})());
+$('libMore')?.addEventListener('click', () => loadLibrary());
+
+$('adminForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const id = $('aId').value;
   const type = $('aType').value;
-  const year = $('aYear').value;
-  const body = {
+  const payload = {
     title: $('aTitle').value.trim(),
     description: $('aDesc').value.trim(),
-    genres: $('aGenres').value.split(',').map((s) => s.trim()).filter(Boolean),
-    year: year ? Number(year) : null,
+    genres: $('aGenres').value.split(',').map((g) => g.trim()).filter(Boolean),
+    year: $('aYear').value ? Number($('aYear').value) : null,
     rating: $('aRating').value.trim(),
     status: $('aStatus').value,
     poster: $('aPoster').value.trim(),
     banner: $('aBanner').value.trim(),
   };
 
-  const btn = e.target.querySelector('button[type="submit"]');
+  const btn = $('aSubmit');
   btn.disabled = true;
   try {
-    const id = $('aId').value;
     if (id) {
-      await api(`/api/admin/content/${type}/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-      exitEdit();
-      toast('Updated!');
+      await api(`/api/admin/content/${type}/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+      toast('Updated');
     } else {
-      await api(ADMIN_ENDPOINTS[type], { method: 'POST', body: JSON.stringify(body) });
-      e.target.reset();
-      toast('Saved!');
+      const path = type === 'anime' ? '/api/admin/anime' : type === 'tv_show' ? '/api/admin/tvshows' : '/api/admin/movies';
+      await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      toast('Added');
     }
-    LISTS[type].page = 0; // force a refresh next time that list is opened
-    loadHome();
+    e.target.reset();
+    $('aId').value = '';
+    $('adminFormTitle').textContent = 'Add Content';
+    $('aSubmit').textContent = 'Save';
+    $('aCancel').classList.add('hidden');
     loadLibrary(true);
+    loadAdminStats();
   } catch (err) {
     toast(err.message, 'error');
   } finally {
@@ -617,221 +1079,69 @@ $('adminForm').addEventListener('submit', async (e) => {
   }
 });
 
-async function loadAdminRequests() {
-  const box = $('adminRequests');
-  try {
-    const rows = await api('/api/admin/requests');
-    if (!rows.length) {
-      box.innerHTML = '<p class="muted">No requests yet.</p>';
-      return;
-    }
-    box.innerHTML = '';
-    rows.forEach((r) => {
-      const row = document.createElement('div');
-      row.className = 'request-row';
-      row.innerHTML = `
-        <div>
-          <strong>${esc(r.title)}</strong>
-          <p class="muted">${esc(r.email)} · ${esc(r.language)} · ${esc(fmtDate(r.created_at))}</p>
-          ${r.notes ? `<p>${esc(r.notes)}</p>` : ''}
-        </div>
-        <select aria-label="Request status">
-          ${REQUEST_STATUSES.map((s) => `<option${s === r.status ? ' selected' : ''}>${s}</option>`).join('')}
-        </select>`;
-      row.querySelector('select').addEventListener('change', async (e) => {
-        try {
-          await api(`/api/admin/requests/${r._id}`, { method: 'PATCH', body: JSON.stringify({ status: e.target.value }) });
-          toast('Request updated');
-        } catch (err) {
-          toast(err.message, 'error');
-          loadAdminRequests();
-        }
-      });
-      box.appendChild(row);
-    });
-  } catch (err) {
-    box.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
-  }
-}
-
-// --- Admin library: edit & delete posted content ---
-
-const lib = { page: 0 };
-
-function setAdminStatus(value) {
-  const sel = $('aStatus');
-  if (value && ![...sel.options].some((o) => o.value === value)) sel.add(new Option(value, value));
-  sel.value = value || 'Ongoing';
-}
-
-function startEdit(type, item) {
-  $('aId').value = item._id;
-  $('aType').value = type;
-  $('aType').disabled = true; // content type can't change once posted
-  $('aTitle').value = item.title || '';
-  $('aDesc').value = item.description || '';
-  $('aGenres').value = (item.genres || []).join(', ');
-  $('aYear').value = item.year ?? '';
-  $('aRating').value = item.rating || '';
-  setAdminStatus(item.status);
-  $('aPoster').value = item.poster || '';
-  $('aBanner').value = item.banner || '';
-  $('adminFormTitle').textContent = `Edit: ${item.title}`;
-  $('aSubmit').textContent = 'Update';
-  $('aCancel').classList.remove('hidden');
-  $('adminForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function exitEdit() {
+$('aCancel')?.addEventListener('click', () => {
   $('adminForm').reset();
   $('aId').value = '';
-  $('aType').disabled = false;
   $('adminFormTitle').textContent = 'Add Content';
   $('aSubmit').textContent = 'Save';
   $('aCancel').classList.add('hidden');
-}
-
-function libRow(type, item) {
-  const row = document.createElement('div');
-  row.className = 'lib-row';
-  row.innerHTML = `
-    <img alt="" loading="lazy">
-    <div><h4></h4><p></p></div>
-    <div class="lib-actions">
-      <button class="outline" type="button" data-act="edit">Edit</button>
-      <button class="outline danger" type="button" data-act="delete">Delete</button>
-    </div>`;
-
-  const img = row.querySelector('img');
-  img.src = safeUrl(item.poster) || PLACEHOLDER;
-  img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
-  row.querySelector('h4').textContent = item.title || 'Untitled';
-  row.querySelector('p').textContent = [item.year, item.status, `${item.views || 0} views`].filter(Boolean).join(' · ');
-
-  row.querySelector('[data-act="edit"]').addEventListener('click', () => startEdit(type, item));
-  row.querySelector('[data-act="delete"]').addEventListener('click', async (e) => {
-    if (!confirm(`Delete "${item.title}"? Its comments and watchlist entries are removed too.`)) return;
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      await api(`/api/admin/content/${type}/${item._id}`, { method: 'DELETE' });
-      row.remove();
-      if ($('aId').value === item._id) exitEdit();
-      LISTS[type].page = 0;
-      loadHome();
-      toast('Deleted');
-    } catch (err) {
-      toast(err.message, 'error');
-      btn.disabled = false;
-    }
-  });
-  return row;
-}
-
-async function loadLibrary(reset = false) {
-  const type = $('libType').value;
-  const q = $('libSearch').value.trim();
-  if (reset) lib.page = 0;
-  const next = lib.page + 1;
-  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE });
-  if (q) params.set('q', q);
-
-  const list = $('libList');
-  const more = $('libMore');
-  more.disabled = true;
-  try {
-    const data = await api(`${LISTS[type].endpoint}?${params}`);
-    lib.page = next;
-    if (next === 1) list.innerHTML = '';
-    if (next === 1 && !data.items.length) list.innerHTML = '<p class="muted">Nothing here yet.</p>';
-    data.items.forEach((item) => list.appendChild(libRow(type, item)));
-    more.classList.toggle('hidden', next * PAGE_SIZE >= data.total);
-  } catch (err) {
-    toast(err.message, 'error');
-  } finally {
-    more.disabled = false;
-  }
-}
-
-$('aCancel').addEventListener('click', exitEdit);
-$('libType').addEventListener('change', () => loadLibrary(true));
-$('libMore').addEventListener('click', () => loadLibrary());
-let libTimer;
-$('libSearch').addEventListener('input', () => {
-  clearTimeout(libTimer);
-  libTimer = setTimeout(() => loadLibrary(true), 300);
 });
 
-// --- Falling snow background ---
+// --- Theme buttons ---
+$('themeToggle')?.addEventListener('click', toggleTheme);
+$('themeToggleMobile')?.addEventListener('click', toggleTheme);
 
-function initSnow() {
+// --- Snow (lightweight) ---
+(function snow() {
   const canvas = $('snow');
-  if (!canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  let w = 0;
-  let h = 0;
-  let last = 0;
-  let raf = 0;
-  const flakes = [];
-
-  const makeFlake = (anywhere) => ({
-    x: Math.random() * w,
-    y: anywhere ? Math.random() * h : -10,
-    r: Math.random() * 2.2 + 0.8,   // size
-    s: Math.random() * 0.8 + 0.4,   // fall speed
-    a: Math.random() * Math.PI * 2, // sway phase
-    sway: Math.random() * 0.6 + 0.2,
-    o: Math.random() * 0.5 + 0.3,   // opacity
-  });
-
+  let w, h, flakes = [];
   function resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    w = window.innerWidth;
-    h = window.innerHeight;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.max(40, Math.min(110, Math.round((w * h) / 16000)));
-    while (flakes.length < count) flakes.push(makeFlake(true));
-    flakes.length = count;
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
   }
-
-  function frame(t) {
-    const dt = Math.min((t - last) / 16.67, 3) || 1;
-    last = t;
+  function create() {
+    flakes = Array.from({ length: Math.min(60, Math.floor(w / 20)) }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 2 + 0.5,
+      s: Math.random() * 1 + 0.3,
+    }));
+  }
+  function draw() {
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#f4eeff';
-    for (const f of flakes) {
-      f.y += f.s * dt * (0.6 + f.r * 0.35);
-      f.a += 0.01 * dt;
-      f.x += Math.sin(f.a) * f.sway * dt;
-      if (f.y > h + 10) Object.assign(f, makeFlake(false));
-      if (f.x > w + 10) f.x = -10;
-      if (f.x < -10) f.x = w + 10;
-      ctx.globalAlpha = f.o;
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    flakes.forEach((f) => {
       ctx.beginPath();
       ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
       ctx.fill();
-    }
-    raf = requestAnimationFrame(frame);
+      f.y += f.s;
+      f.x += Math.sin(f.y * 0.01) * 0.3;
+      if (f.y > h) { f.y = -5; f.x = Math.random() * w; }
+    });
+    requestAnimationFrame(draw);
   }
-
-  const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
-  const stop = () => { cancelAnimationFrame(raf); raf = 0; };
-
   resize();
-  window.addEventListener('resize', resize);
-  document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
-  start();
-}
+  create();
+  draw();
+  window.addEventListener('resize', () => { resize(); create(); });
+})();
 
 // --- Init ---
-
-(async () => {
+(async function init() {
+  applyTheme(state.theme);
   $('yearNow').textContent = new Date().getFullYear();
-  initSnow();
   initSheet();
-  movePill(false);
+
+  // PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  }
+
   await checkUser();
+  await loadGenres();
   loadHome();
+  loadContinueWatching();
+  movePill(false);
 })();
