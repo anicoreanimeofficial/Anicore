@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v3';
+const APP_JS_VERSION = 'v4';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -842,32 +842,125 @@ function initSheet() {
   });
 }
 
-// --- Video Player ---
-function openPlayer(url, title = 'Now Playing') {
+// --- Video Player (handles direct files, HLS, YouTube, Vimeo, Dailymotion, generic embeds) ---
+
+function isDirectVideo(url) {
+  return /\.(mp4|webm|ogg|m3u8|mkv|mov)(\?|#|$)/i.test(url);
+}
+
+function isHls(url) {
+  return /\.m3u8(\?|#|$)/i.test(url);
+}
+
+function youtubeId(url) {
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|v\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+function vimeoId(url) {
+  const m = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+  return m ? m[1] : null;
+}
+
+function dailyMotionId(url) {
+  const m = url.match(/dailymotion\.com\/(?:video|embed\/video)\/([A-Za-z0-9]+)/);
+  return m ? m[1] : null;
+}
+
+function normalizeEmbedUrl(url) {
+  const yt = youtubeId(url);
+  if (yt) return `https://www.youtube.com/embed/${yt}?autoplay=1&rel=0`;
+  const vm = vimeoId(url);
+  if (vm) return `https://player.vimeo.com/video/${vm}?autoplay=1`;
+  const dm = dailyMotionId(url);
+  if (dm) return `https://www.dailymotion.com/embed/video/${dm}?autoplay=1`;
+  return url;
+}
+
+async function ensureHls() {
+  if (window.Hls) return window.Hls;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+    script.onload = () => resolve(window.Hls);
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function openPlayer(url, title = 'Now Playing') {
   const modal = $('playerModal');
-  if (!modal || !url) return;
+  const wrap = $('playerWrap');
+  if (!modal || !wrap || !url) return;
+
   $('playerTitle').textContent = title;
   $('playerOpenLink').href = url;
-  $('playerFrame').src = url;
   $('playerFallback').classList.add('hidden');
+  wrap.innerHTML = '';
+
+  if (isDirectVideo(url)) {
+    const video = document.createElement('video');
+    video.controls = true;
+    video.autoplay = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.addEventListener('error', () => {
+      $('playerFallback').classList.remove('hidden');
+    }, { once: true });
+
+    if (isHls(url)) {
+      try {
+        const HlsLib = await ensureHls();
+        if (HlsLib && HlsLib.isSupported()) {
+          const hls = new HlsLib();
+          hls.loadSource(url);
+          hls.attachMedia(video);
+          hls.on(HlsLib.Events.ERROR, (e, data) => {
+            if (data?.fatal) $('playerFallback').classList.remove('hidden');
+          });
+        } else {
+          video.src = url;
+        }
+      } catch {
+        video.src = url;
+      }
+    } else {
+      video.src = url;
+    }
+
+    wrap.appendChild(video);
+  } else {
+    const iframe = document.createElement('iframe');
+    iframe.allowFullscreen = true;
+    iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    iframe.src = normalizeEmbedUrl(url);
+    wrap.appendChild(iframe);
+
+    let loaded = false;
+    iframe.addEventListener('load', () => { loaded = true; }, { once: true });
+    setTimeout(() => {
+      if (!loaded) $('playerFallback').classList.remove('hidden');
+    }, 5000);
+  }
+
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-
-  let loaded = false;
-  const onLoad = () => { loaded = true; };
-  $('playerFrame').addEventListener('load', onLoad, { once: true });
-  setTimeout(() => {
-    if (!loaded) {
-      $('playerFrame').removeEventListener('load', onLoad);
-      $('playerFallback').classList.remove('hidden');
-    }
-  }, 4000);
 }
 
 function closePlayer() {
   const modal = $('playerModal');
+  const wrap = $('playerWrap');
   if (!modal) return;
-  $('playerFrame').src = 'about:blank';
+  if (wrap) {
+    const video = wrap.querySelector('video');
+    if (video) {
+      try { video.pause(); } catch { /* noop */ }
+      video.removeAttribute('src');
+      try { video.load(); } catch { /* noop */ }
+    }
+    wrap.innerHTML = '';
+  }
   modal.classList.add('hidden');
   document.body.style.overflow = '';
 }
@@ -962,7 +1055,6 @@ async function loadLibrary(reset = false) {
           <button type="button" class="outline danger del-btn">Del</button>
         </div>`;
 
-      // Event delegation — attaches to libList, not each button
       row.querySelector('.edit-btn').addEventListener('click', () => {
         $('aId').value = item._id;
         $('aType').value = type;
@@ -1076,18 +1168,15 @@ function openEpisodesModal(type, id, title) {
   $('epSubmit').textContent = 'Add Episode';
   $('epCancel').classList.add('hidden');
   $('episodesModal').classList.remove('hidden');
-  console.log('[episodes] modal shown:', !$('episodesModal').classList.contains('hidden'));
   refreshEpisodeList();
 }
 
 async function refreshEpisodeList() {
-  if (!currentEpisodeTarget) { console.log('[episodes] no target'); return; }
+  if (!currentEpisodeTarget) return;
   const { type, id } = currentEpisodeTarget;
-  console.log('[episodes] fetching content:', type, id);
   try {
     const doc = await api(`/api/content/${type}/${id}`);
     const eps = (doc.episodes || []).sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
-    console.log('[episodes] fetched', eps.length, 'episodes');
     const el = $('episodeList');
     if (!eps.length) { el.innerHTML = '<p class="muted">No episodes yet. Add your first above.</p>'; return; }
     el.innerHTML = eps.map((ep) => `
@@ -1106,12 +1195,11 @@ async function refreshEpisodeList() {
         </div>
       </div>`).join('');
   } catch (err) {
-    console.error('[episodes] fetch failed:', err);
     toast(err.message, 'error');
   }
 }
 
-// Event delegation on episodeList container — survives re-renders
+// Event delegation on episodeList — survives re-renders
 $('episodeList')?.addEventListener('click', async (e) => {
   const editBtn = e.target.closest('.ep-edit');
   const delBtn = e.target.closest('.ep-del');
@@ -1120,7 +1208,6 @@ $('episodeList')?.addEventListener('click', async (e) => {
     e.preventDefault();
     const s = Number(editBtn.dataset.s);
     const en = Number(editBtn.dataset.e);
-    console.log('[episodes] edit clicked:', { s, en });
     if (!currentEpisodeTarget) return;
 
     try {
@@ -1129,7 +1216,6 @@ $('episodeList')?.addEventListener('click', async (e) => {
       const ep = eps.find((x) => Number(x.season) === s && Number(x.episode) === en);
       if (!ep) {
         toast('Episode not found — refresh and try again', 'error');
-        console.error('[episodes] find failed. Available:', eps.map(x => ({ s: x.season, e: x.episode })));
         return;
       }
       $('epSeason').value = ep.season;
@@ -1142,10 +1228,8 @@ $('episodeList')?.addEventListener('click', async (e) => {
       $('epSubmit').textContent = 'Update Episode';
       $('epCancel').classList.remove('hidden');
       $('episodeForm').scrollIntoView({ behavior: 'smooth' });
-      console.log('[episodes] form populated:', $('epVideo').value);
     } catch (err) {
       toast(err.message, 'error');
-      console.error('[episodes] edit failed:', err);
     }
     return;
   }
@@ -1181,7 +1265,6 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
   if (!payload.video_url.startsWith('https://')) return toast('Video URL must start with https://', 'error');
 
   const epId = $('epId').value;
-  console.log('[episodes] submit:', { epId, payload });
   try {
     if (epId) {
       const [s, eNum] = epId.split('_').map(Number);
@@ -1203,10 +1286,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     $('epCancel').classList.add('hidden');
     await refreshEpisodeList();
     loadLibrary(true);
-  } catch (err) {
-    toast(err.message, 'error');
-    console.error('[episodes] submit failed:', err);
-  }
+  } catch (err) { toast(err.message, 'error'); }
 });
 
 $('epCancel')?.addEventListener('click', () => {
