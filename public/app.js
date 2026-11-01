@@ -4,7 +4,8 @@ const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 
-const state = { user: null, authMode: 'login' };
+const state = { user: null, authMode: 'login', page: 'home' };
+const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin'];
 
 // One config per browsable list (anime / tv_show / movie)
 const LISTS = {
@@ -61,18 +62,39 @@ async function api(path, options = {}) {
 
 // --- Navigation ---
 
+// Slide the highlight behind the active tab
+function movePill(animate = true) {
+  const pill = $('navPill');
+  if (!pill) return;
+  const active = document.querySelector('.bottom-nav button.active');
+  if (!active) { pill.style.opacity = '0'; return; }
+  if (!animate) pill.style.transition = 'none';
+  pill.style.width = `${active.offsetWidth}px`;
+  pill.style.transform = `translateX(${active.offsetLeft}px)`;
+  pill.style.opacity = '1';
+  if (!animate) { void pill.offsetWidth; pill.style.transition = ''; }
+}
+window.addEventListener('resize', () => movePill(false));
+
 function showPage(page) {
   if (page === 'admin' && state.user?.role !== 'admin') page = 'home';
   const target = $(`page-${page}`);
   if (!target) return;
 
+  const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
+  target.classList.remove('from-left', 'from-right');
+  void target.offsetWidth; // restart the animation
+  if (page !== state.page) target.classList.add(dir);
+  state.page = page;
+
   document.querySelectorAll('.bottom-nav button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
+  movePill();
 
   const type = PAGE_TYPES[page];
   if (type && !LISTS[type].page) loadList(type, true);
   if (page === 'profile') loadProfile();
-  if (page === 'admin') loadAdminRequests();
+  if (page === 'admin') { loadAdminRequests(); loadLibrary(true); }
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -358,6 +380,8 @@ function commentsHtml(comments) {
 async function openDetail(type, id) {
   const modal = $('detailModal');
   const content = $('detailContent');
+  clearTimeout(closeTimer);
+  resetSheet();
   content.innerHTML = '<p class="muted empty">Loading…</p>';
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -437,9 +461,71 @@ function renderDetail(type, item, comments) {
   });
 }
 
+let closeTimer;
+
+function resetSheet() {
+  const modal = $('detailModal');
+  const sheet = $('detailSheet');
+  sheet.style.transition = '';
+  sheet.style.transform = '';
+  modal.style.transition = '';
+  modal.style.background = '';
+}
+
+// Slides the sheet down off the screen, then hides it
 function closeDetail() {
-  $('detailModal').classList.add('hidden');
-  document.body.style.overflow = '';
+  const modal = $('detailModal');
+  if (modal.classList.contains('hidden')) return;
+  const sheet = $('detailSheet');
+  sheet.style.transition = 'transform .3s cubic-bezier(.32, .72, 0, 1)';
+  sheet.style.transform = 'translateY(100%)';
+  modal.style.transition = 'background .3s ease';
+  modal.style.background = 'rgba(0, 0, 0, 0)';
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => {
+    modal.classList.add('hidden');
+    resetSheet();
+    document.body.style.overflow = '';
+  }, 300);
+}
+
+// Swipe the sheet down to dismiss it (when scrolled to the top)
+function initSheet() {
+  const modal = $('detailModal');
+  const sheet = $('detailSheet');
+  let startY = 0;
+  let dy = 0;
+  let dragging = false;
+
+  sheet.addEventListener('touchstart', (e) => {
+    if (sheet.scrollTop > 0 || e.touches.length !== 1) return;
+    startY = e.touches[0].clientY;
+    dy = 0;
+    dragging = true;
+  }, { passive: true });
+
+  sheet.addEventListener('touchmove', (e) => {
+    if (!dragging || sheet.scrollTop > 0) return;
+    dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { dy = 0; return; }
+    sheet.style.transition = 'none';
+    sheet.style.transform = `translateY(${dy}px)`;
+    modal.style.background = `rgba(0, 0, 0, ${0.85 * (1 - Math.min(dy / 400, 1))})`;
+    if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+
+  sheet.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    if (dy > 110) {
+      closeDetail();
+    } else {
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+      modal.style.background = '';
+    }
+    dy = 0;
+  });
 }
 
 $('detailClose').addEventListener('click', closeDetail);
@@ -474,11 +560,19 @@ $('adminForm').addEventListener('submit', async (e) => {
   const btn = e.target.querySelector('button[type="submit"]');
   btn.disabled = true;
   try {
-    await api(ADMIN_ENDPOINTS[type], { method: 'POST', body: JSON.stringify(body) });
-    e.target.reset();
-    toast('Saved!');
+    const id = $('aId').value;
+    if (id) {
+      await api(`/api/admin/content/${type}/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      exitEdit();
+      toast('Updated!');
+    } else {
+      await api(ADMIN_ENDPOINTS[type], { method: 'POST', body: JSON.stringify(body) });
+      e.target.reset();
+      toast('Saved!');
+    }
     LISTS[type].page = 0; // force a refresh next time that list is opened
     loadHome();
+    loadLibrary(true);
   } catch (err) {
     toast(err.message, 'error');
   } finally {
@@ -523,10 +617,120 @@ async function loadAdminRequests() {
   }
 }
 
+// --- Admin library: edit & delete posted content ---
+
+const lib = { page: 0 };
+
+function setAdminStatus(value) {
+  const sel = $('aStatus');
+  if (value && ![...sel.options].some((o) => o.value === value)) sel.add(new Option(value, value));
+  sel.value = value || 'Ongoing';
+}
+
+function startEdit(type, item) {
+  $('aId').value = item._id;
+  $('aType').value = type;
+  $('aType').disabled = true; // content type can't change once posted
+  $('aTitle').value = item.title || '';
+  $('aDesc').value = item.description || '';
+  $('aGenres').value = (item.genres || []).join(', ');
+  $('aYear').value = item.year ?? '';
+  $('aRating').value = item.rating || '';
+  setAdminStatus(item.status);
+  $('aPoster').value = item.poster || '';
+  $('aBanner').value = item.banner || '';
+  $('adminFormTitle').textContent = `Edit: ${item.title}`;
+  $('aSubmit').textContent = 'Update';
+  $('aCancel').classList.remove('hidden');
+  $('adminForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function exitEdit() {
+  $('adminForm').reset();
+  $('aId').value = '';
+  $('aType').disabled = false;
+  $('adminFormTitle').textContent = 'Add Content';
+  $('aSubmit').textContent = 'Save';
+  $('aCancel').classList.add('hidden');
+}
+
+function libRow(type, item) {
+  const row = document.createElement('div');
+  row.className = 'lib-row';
+  row.innerHTML = `
+    <img alt="" loading="lazy">
+    <div><h4></h4><p></p></div>
+    <div class="lib-actions">
+      <button class="outline" type="button" data-act="edit">Edit</button>
+      <button class="outline danger" type="button" data-act="delete">Delete</button>
+    </div>`;
+
+  const img = row.querySelector('img');
+  img.src = safeUrl(item.poster) || PLACEHOLDER;
+  img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+  row.querySelector('h4').textContent = item.title || 'Untitled';
+  row.querySelector('p').textContent = [item.year, item.status, `${item.views || 0} views`].filter(Boolean).join(' · ');
+
+  row.querySelector('[data-act="edit"]').addEventListener('click', () => startEdit(type, item));
+  row.querySelector('[data-act="delete"]').addEventListener('click', async (e) => {
+    if (!confirm(`Delete "${item.title}"? Its comments and watchlist entries are removed too.`)) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await api(`/api/admin/content/${type}/${item._id}`, { method: 'DELETE' });
+      row.remove();
+      if ($('aId').value === item._id) exitEdit();
+      LISTS[type].page = 0;
+      loadHome();
+      toast('Deleted');
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false;
+    }
+  });
+  return row;
+}
+
+async function loadLibrary(reset = false) {
+  const type = $('libType').value;
+  const q = $('libSearch').value.trim();
+  if (reset) lib.page = 0;
+  const next = lib.page + 1;
+  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE });
+  if (q) params.set('q', q);
+
+  const list = $('libList');
+  const more = $('libMore');
+  more.disabled = true;
+  try {
+    const data = await api(`${LISTS[type].endpoint}?${params}`);
+    lib.page = next;
+    if (next === 1) list.innerHTML = '';
+    if (next === 1 && !data.items.length) list.innerHTML = '<p class="muted">Nothing here yet.</p>';
+    data.items.forEach((item) => list.appendChild(libRow(type, item)));
+    more.classList.toggle('hidden', next * PAGE_SIZE >= data.total);
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    more.disabled = false;
+  }
+}
+
+$('aCancel').addEventListener('click', exitEdit);
+$('libType').addEventListener('change', () => loadLibrary(true));
+$('libMore').addEventListener('click', () => loadLibrary());
+let libTimer;
+$('libSearch').addEventListener('input', () => {
+  clearTimeout(libTimer);
+  libTimer = setTimeout(() => loadLibrary(true), 300);
+});
+
 // --- Init ---
 
 (async () => {
   $('yearNow').textContent = new Date().getFullYear();
+  initSheet();
+  movePill(false);
   await checkUser();
   loadHome();
 })();
