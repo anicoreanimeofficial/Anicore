@@ -534,8 +534,24 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
 .player-card { max-width: 960px; width: 100%; }
 .player-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .player-header h3 { margin: 0; }
-.player-wrap { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; margin-bottom: 10px; }
-.player-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.player-wrap {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.player-wrap iframe,
+.player-wrap video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+  display: block;
+}
 #playerFallback a { color: var(--pink); font-weight: 700; }
 
 /* --- Episode rows in detail --- */
