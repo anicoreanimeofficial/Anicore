@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css?v=3">
+  <link rel="stylesheet" href="/assets/style.css?v=4">
 </head>
 <body>
 
@@ -271,11 +271,7 @@
         <h3 id="playerTitle">Now Playing</h3>
         <button class="close" type="button" id="playerClose" aria-label="Close">×</button>
       </div>
-      <div class="player-wrap">
-        <iframe id="playerFrame" allowfullscreen
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                referrerpolicy="no-referrer"></iframe>
-      </div>
+      <div class="player-wrap" id="playerWrap"></div>
       <div id="playerFallback" class="hidden">
         <p class="muted">This source may block embedding.
           <a id="playerOpenLink" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a>
@@ -296,7 +292,7 @@
         </div>
         <input id="epTitle" placeholder="Episode title (optional)">
         <input id="epDuration" placeholder="Duration (e.g. 24m)">
-        <input id="epVideo" type="text" placeholder="Video URL (https://...)">
+        <input id="epVideo" type="text" placeholder="Video URL (https://... — mp4, m3u8, youtube, embed)">
         <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
         <button type="submit" class="primary block" id="epSubmit">Add Episode</button>
         <button type="button" class="outline block form-cancel hidden" id="epCancel">Cancel edit</button>
@@ -315,6 +311,6 @@
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=3"></script>
+  <script src="/assets/app.js?v=4"></script>
 </body>
 </html>
