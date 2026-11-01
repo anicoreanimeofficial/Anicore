@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v4';
+const APP_JS_VERSION = 'v6';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -558,7 +558,8 @@ function episodesHtml(episodes, type, contentId) {
       <div class="ep-actions">
         ${ep.video_url ? `<button type="button" class="outline small ep-play"
           data-video="${esc(ep.video_url)}"
-          data-title="S${esc(ep.season)}E${esc(ep.episode)}${ep.title ? ' — ' + esc(ep.title) : ''}">▶ Watch</button>` : ''}
+          data-title="S${esc(ep.season)}E${esc(ep.episode)}${ep.title ? ' — ' + esc(ep.title) : ''}">▶ Watch</button>
+          <a href="${esc(ep.video_url)}" target="_blank" rel="noopener noreferrer" class="outline small" style="text-decoration:none;display:inline-flex;align-items:center">↗ Open</a>` : ''}
         ${state.user ? `<button type="button" class="outline small mark-progress"
           data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
       </div>
@@ -648,7 +649,10 @@ function bindDetailEvents(type, item, container) {
   container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
   container.querySelectorAll('.ep-play').forEach((btn) => {
-    btn.addEventListener('click', () => openPlayer(btn.dataset.video, btn.dataset.title));
+    btn.addEventListener('click', () => {
+      console.log('[ep-play] clicked:', btn.dataset.video);
+      openPlayer(btn.dataset.video, btn.dataset.title);
+    });
   });
 
   container.querySelector('#wlBtn')?.addEventListener('click', async (e) => {
@@ -842,7 +846,7 @@ function initSheet() {
   });
 }
 
-// --- Video Player (handles direct files, HLS, YouTube, Vimeo, Dailymotion, generic embeds) ---
+// --- Video Player ---
 
 function isDirectVideo(url) {
   return /\.(mp4|webm|ogg|m3u8|mkv|mov)(\?|#|$)/i.test(url);
@@ -889,14 +893,23 @@ async function ensureHls() {
 }
 
 async function openPlayer(url, title = 'Now Playing') {
+  console.log('[openPlayer] called:', { url, title });
+
   const modal = $('playerModal');
   const wrap = $('playerWrap');
-  if (!modal || !wrap || !url) return;
+
+  if (!modal) { toast('Player modal missing from HTML', 'error'); return; }
+  if (!wrap) { toast('Player area missing (#playerWrap)', 'error'); return; }
+  if (!url) { toast('No video URL for this episode', 'error'); return; }
 
   $('playerTitle').textContent = title;
   $('playerOpenLink').href = url;
   $('playerFallback').classList.add('hidden');
   wrap.innerHTML = '';
+
+  // Show the modal FIRST so it always opens
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 
   if (isDirectVideo(url)) {
     const video = document.createElement('video');
@@ -929,23 +942,23 @@ async function openPlayer(url, title = 'Now Playing') {
     }
 
     wrap.appendChild(video);
+    console.log('[openPlayer] mounted <video>');
   } else {
     const iframe = document.createElement('iframe');
     iframe.allowFullscreen = true;
     iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write');
-    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    iframe.setAttribute('referrerpolicy', 'origin');
     iframe.src = normalizeEmbedUrl(url);
+    iframe.addEventListener('load', () => {
+      console.log('[openPlayer] iframe loaded');
+    }, { once: true });
     wrap.appendChild(iframe);
+    console.log('[openPlayer] mounted <iframe> with src:', iframe.src);
 
-    let loaded = false;
-    iframe.addEventListener('load', () => { loaded = true; }, { once: true });
     setTimeout(() => {
-      if (!loaded) $('playerFallback').classList.remove('hidden');
-    }, 5000);
+      console.log('[openPlayer] 6s check — fallback hidden?', $('playerFallback').classList.contains('hidden'));
+    }, 6000);
   }
-
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
 }
 
 function closePlayer() {
@@ -1087,7 +1100,7 @@ async function loadLibrary(reset = false) {
   }
 }
 
-// Event delegation for "Eps" button — survives library re-renders
+// Event delegation for "Eps" button
 $('libList')?.addEventListener('click', (e) => {
   const btn = e.target.closest('.ep-btn');
   if (!btn) return;
@@ -1199,7 +1212,6 @@ async function refreshEpisodeList() {
   }
 }
 
-// Event delegation on episodeList — survives re-renders
 $('episodeList')?.addEventListener('click', async (e) => {
   const editBtn = e.target.closest('.ep-edit');
   const delBtn = e.target.closest('.ep-del');
@@ -1246,10 +1258,26 @@ $('episodeList')?.addEventListener('click', async (e) => {
   }
 });
 
+// Auto-extract src URL from pasted <iframe ...> HTML
+$('epVideo')?.addEventListener('paste', (e) => {
+  const text = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+  const m = text.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i);
+  if (m) {
+    e.preventDefault();
+    $('epVideo').value = m[1];
+    toast('Extracted URL from iframe');
+  }
+});
+
 $('episodeForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!currentEpisodeTarget) return toast('No content selected', 'error');
   const { type, id } = currentEpisodeTarget;
+
+  let rawVideo = $('epVideo').value.trim();
+  // Also extract from pasted iframe HTML on submit (in case paste event didn't fire)
+  const iframeMatch = rawVideo.match(/<iframe[^>]*\ssrc=["']([^"']+)["']/i);
+  if (iframeMatch) rawVideo = iframeMatch[1];
 
   const payload = {
     season: Number($('epSeason').value) || 1,
@@ -1257,7 +1285,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     title: $('epTitle').value.trim(),
     duration: $('epDuration').value.trim(),
     description: $('epDesc').value.trim(),
-    video_url: $('epVideo').value.trim(),
+    video_url: rawVideo,
   };
 
   if (!payload.episode) return toast('Episode number required', 'error');
