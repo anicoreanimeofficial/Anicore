@@ -3,6 +3,9 @@
 const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
+const APP_JS_VERSION = 'v3';
+
+console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
 const state = {
   user: null,
@@ -18,58 +21,19 @@ const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin', 'detail
 
 const LISTS = {
   anime: {
-    endpoint: '/api/anime',
-    grid: 'animeGrid',
-    sentinel: 'animeSentinel',
-    empty: 'animeEmpty',
-    search: 'animeSearch',
-    genre: 'animeGenre',
-    status: 'animeStatus',
-    sort: 'animeSort',
-    chips: 'animeChips',
-    page: 0,
-    total: 0,
-    loading: false,
-    q: '',
-    genreVal: '',
-    statusVal: '',
-    sortVal: 'newest',
+    endpoint: '/api/anime', grid: 'animeGrid', sentinel: 'animeSentinel', empty: 'animeEmpty',
+    search: 'animeSearch', genre: 'animeGenre', status: 'animeStatus', sort: 'animeSort', chips: 'animeChips',
+    page: 0, total: 0, loading: false, q: '', genreVal: '', statusVal: '', sortVal: 'newest',
   },
   tv_show: {
-    endpoint: '/api/tvshows',
-    grid: 'tvGrid',
-    sentinel: 'tvSentinel',
-    empty: 'tvEmpty',
-    search: 'tvSearch',
-    genre: 'tvGenre',
-    status: 'tvStatus',
-    sort: 'tvSort',
-    chips: 'tvChips',
-    page: 0,
-    total: 0,
-    loading: false,
-    q: '',
-    genreVal: '',
-    statusVal: '',
-    sortVal: 'newest',
+    endpoint: '/api/tvshows', grid: 'tvGrid', sentinel: 'tvSentinel', empty: 'tvEmpty',
+    search: 'tvSearch', genre: 'tvGenre', status: 'tvStatus', sort: 'tvSort', chips: 'tvChips',
+    page: 0, total: 0, loading: false, q: '', genreVal: '', statusVal: '', sortVal: 'newest',
   },
   movie: {
-    endpoint: '/api/movies',
-    grid: 'movieGrid',
-    sentinel: 'movieSentinel',
-    empty: 'movieEmpty',
-    search: 'movieSearch',
-    genre: 'movieGenre',
-    status: 'movieStatus',
-    sort: 'movieSort',
-    chips: 'movieChips',
-    page: 0,
-    total: 0,
-    loading: false,
-    q: '',
-    genreVal: '',
-    statusVal: '',
-    sortVal: 'newest',
+    endpoint: '/api/movies', grid: 'movieGrid', sentinel: 'movieSentinel', empty: 'movieEmpty',
+    search: 'movieSearch', genre: 'movieGenre', status: 'movieStatus', sort: 'movieSort', chips: 'movieChips',
+    page: 0, total: 0, loading: false, q: '', genreVal: '', statusVal: '', sortVal: 'newest',
   },
 };
 
@@ -165,7 +129,6 @@ function showPage(page) {
     b.classList.toggle('active', b.dataset.page === page);
   });
   movePill();
-
   $('sidebar')?.classList.remove('open');
 
   const type = PAGE_TYPES[page];
@@ -295,22 +258,13 @@ async function loadHome() {
 
 async function loadContinueWatching() {
   const section = $('continueSection');
-  if (!state.user) {
-    section?.classList.add('hidden');
-    return;
-  }
+  if (!state.user) { section?.classList.add('hidden'); return; }
   try {
     const items = await api('/api/continue-watching');
-    if (!items.length) {
-      section?.classList.add('hidden');
-      return;
-    }
+    if (!items.length) { section?.classList.add('hidden'); return; }
     section?.classList.remove('hidden');
     const mapped = items.map((i) => ({
-      ...i,
-      _id: i.content_id,
-      _type: i.content_type,
-      progress_percent: i.progress_percent,
+      ...i, _id: i.content_id, _type: i.content_type, progress_percent: i.progress_percent,
     }));
     renderGrid($('continueGrid'), mapped, 'anime');
   } catch {
@@ -321,19 +275,12 @@ async function loadContinueWatching() {
 async function loadList(type, reset = false) {
   const l = LISTS[type];
   if (l.loading) return;
-  if (reset) {
-    l.page = 0;
-    l.total = 0;
-  }
+  if (reset) { l.page = 0; l.total = 0; }
   if (l.page > 0 && l.page * PAGE_SIZE >= l.total) return;
 
   l.loading = true;
   const next = l.page + 1;
-  const params = new URLSearchParams({
-    page: next,
-    limit: PAGE_SIZE,
-    sort: l.sortVal || 'newest',
-  });
+  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE, sort: l.sortVal || 'newest' });
   if (l.q) params.set('q', l.q);
   if (l.genreVal) params.set('genre', l.genreVal);
   if (l.statusVal) params.set('status', l.statusVal);
@@ -344,10 +291,7 @@ async function loadList(type, reset = false) {
     const data = await api(`${l.endpoint}?${params}`);
     l.page = next;
     l.total = data.total;
-    renderGrid($(l.grid), data.items, type, {
-      append: next > 1,
-      empty: 'No results found.',
-    });
+    renderGrid($(l.grid), data.items, type, { append: next > 1, empty: 'No results found.' });
     const emptyEl = $(l.empty);
     if (emptyEl) emptyEl.classList.toggle('hidden', data.items.length > 0 || next > 1);
   } catch (err) {
@@ -385,14 +329,8 @@ Object.entries(LISTS).forEach(([type, l]) => {
     });
     loadList(type, true);
   });
-  $(l.status)?.addEventListener('change', (e) => {
-    l.statusVal = e.target.value;
-    loadList(type, true);
-  });
-  $(l.sort)?.addEventListener('change', (e) => {
-    l.sortVal = e.target.value;
-    loadList(type, true);
-  });
+  $(l.status)?.addEventListener('change', (e) => { l.statusVal = e.target.value; loadList(type, true); });
+  $(l.sort)?.addEventListener('change', (e) => { l.sortVal = e.target.value; loadList(type, true); });
 });
 
 async function loadGenres() {
@@ -457,9 +395,7 @@ async function checkUser() {
   try {
     const res = await api('/api/auth/me');
     state.user = res.authenticated ? { email: res.email, role: res.role || 'user' } : null;
-  } catch {
-    state.user = null;
-  }
+  } catch { state.user = null; }
   updateAuthUI();
   return state.user;
 }
@@ -506,7 +442,6 @@ $('authForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const email = $('authEmail').value.trim();
   const password = $('authPass').value;
-
   if (!email || !password) return showAuthError('Please fill in all fields.');
   if (state.authMode === 'register' && password.length < 6) {
     return showAuthError('Password must be at least 6 characters.');
@@ -571,11 +506,8 @@ async function loadProfile() {
   try {
     const list = await api('/api/watchlist');
     const items = list.map((w) => ({
-      _id: w.content_id,
-      _type: w.content_type,
-      title: w.title,
-      poster: w.poster,
-      avg_rating: w.avg_rating,
+      _id: w.content_id, _type: w.content_type,
+      title: w.title, poster: w.poster, avg_rating: w.avg_rating,
     }));
     renderGrid($('watchlistGrid'), items, 'anime', { empty: 'Your watchlist is empty.' });
   } catch (err) {
@@ -743,18 +675,14 @@ function bindDetailEvents(type, item, container) {
         await api('/api/progress', {
           method: 'POST',
           body: JSON.stringify({
-            content_type: type,
-            content_id: item._id,
-            season: Number(btn.dataset.season),
-            episode: Number(btn.dataset.episode),
+            content_type: type, content_id: item._id,
+            season: Number(btn.dataset.season), episode: Number(btn.dataset.episode),
             progress_percent: 100,
           }),
         });
         toast('Progress saved');
         loadContinueWatching();
-      } catch (err) {
-        toast(err.message, 'error');
-      }
+      } catch (err) { toast(err.message, 'error'); }
     });
   });
 
@@ -775,8 +703,7 @@ function bindDetailEvents(type, item, container) {
       const res = await api('/api/ratings', {
         method: 'POST',
         body: JSON.stringify({
-          content_type: type,
-          content_id: item._id,
+          content_type: type, content_id: item._id,
           rating: selected,
           review: container.querySelector('#reviewText')?.value || '',
         }),
@@ -787,9 +714,7 @@ function bindDetailEvents(type, item, container) {
       const reviews = await api(`/api/ratings/${type}/${item._id}`);
       const list = container.querySelector('#reviewList');
       if (list) list.innerHTML = reviewsHtml(reviews.items);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+    } catch (err) { toast(err.message, 'error'); }
   });
 
   container.querySelector('#commentForm')?.addEventListener('submit', async (e) => {
@@ -805,9 +730,7 @@ function bindDetailEvents(type, item, container) {
       container.querySelector('#commentList').innerHTML = commentsHtml(
         await api(`/api/comments/${type}/${item._id}`)
       );
-    } catch (err) {
-      toast(err.message, 'error');
-    }
+    } catch (err) { toast(err.message, 'error'); }
   });
 }
 
@@ -845,7 +768,6 @@ async function openDetail(type, id, preview) {
       api(`/api/ratings/${type}/${id}?limit=10`),
     ]);
     if (state.detailId !== id) return;
-
     contentEl.innerHTML = buildDetailHtml(type, item, comments, reviews.items);
     bindDetailEvents(type, item, contentEl);
   } catch (err) {
@@ -907,9 +829,7 @@ function initSheet() {
   sheet.addEventListener('touchmove', (e) => {
     if (!startY) return;
     currentY = e.touches[0].clientY - startY;
-    if (currentY > 0) {
-      sheet.style.transform = `translateY(${currentY}px)`;
-    }
+    if (currentY > 0) sheet.style.transform = `translateY(${currentY}px)`;
   }, { passive: true });
   sheet.addEventListener('touchend', () => {
     if (currentY > 120) closeDetail();
@@ -985,10 +905,7 @@ async function loadAdminRequests() {
   try {
     const rows = await api('/api/admin/requests');
     const el = $('adminRequests');
-    if (!rows.length) {
-      el.innerHTML = '<p class="muted">No requests yet.</p>';
-      return;
-    }
+    if (!rows.length) { el.innerHTML = '<p class="muted">No requests yet.</p>'; return; }
     el.innerHTML = rows.map((r) => `
       <div class="request-row">
         <div>
@@ -1007,18 +924,13 @@ async function loadAdminRequests() {
       sel.addEventListener('change', async () => {
         try {
           await api(`/api/admin/requests/${sel.dataset.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status: sel.value }),
+            method: 'PATCH', body: JSON.stringify({ status: sel.value }),
           });
           toast('Request updated');
-        } catch (err) {
-          toast(err.message, 'error');
-        }
+        } catch (err) { toast(err.message, 'error'); }
       });
     });
-  } catch (err) {
-    toast(err.message, 'error');
-  }
+  } catch (err) { toast(err.message, 'error'); }
 }
 
 let libPage = 0;
@@ -1042,16 +954,15 @@ async function loadLibrary(reset = false) {
           <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}</p>
         </div>
         <div class="lib-actions">
-          ${type !== 'movie' ? `<button type="button" class="outline ep-btn">Eps</button>` : ''}
+          ${type !== 'movie' ? `<button type="button" class="outline ep-btn"
+            data-type="${esc(type)}"
+            data-id="${esc(item._id)}"
+            data-title="${esc(item.title)}">Eps</button>` : ''}
           <button type="button" class="outline edit-btn">Edit</button>
           <button type="button" class="outline danger del-btn">Del</button>
         </div>`;
 
-      if (type !== 'movie') {
-        row.querySelector('.ep-btn').addEventListener('click',
-          () => openEpisodesModal(type, item._id, item.title));
-      }
-
+      // Event delegation — attaches to libList, not each button
       row.querySelector('.edit-btn').addEventListener('click', () => {
         $('aId').value = item._id;
         $('aType').value = type;
@@ -1074,9 +985,7 @@ async function loadLibrary(reset = false) {
           await api(`/api/admin/content/${type}/${item._id}`, { method: 'DELETE' });
           toast('Deleted');
           loadLibrary(true);
-        } catch (err) {
-          toast(err.message, 'error');
-        }
+        } catch (err) { toast(err.message, 'error'); }
       });
       el.appendChild(row);
     });
@@ -1085,6 +994,19 @@ async function loadLibrary(reset = false) {
     toast(err.message, 'error');
   }
 }
+
+// Event delegation for "Eps" button — survives library re-renders
+$('libList')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('.ep-btn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const type = btn.dataset.type;
+  const id = btn.dataset.id;
+  const title = btn.dataset.title;
+  console.log('[libList] Eps clicked:', { type, id, title });
+  openEpisodesModal(type, id, title);
+});
 
 $('libType')?.addEventListener('change', () => loadLibrary(true));
 $('libSearch')?.addEventListener('input', (() => {
@@ -1144,7 +1066,8 @@ $('aCancel')?.addEventListener('click', () => {
 // --- Admin Episode Manager ---
 let currentEpisodeTarget = null;
 
-async function openEpisodesModal(type, id, title) {
+function openEpisodesModal(type, id, title) {
+  console.log('[episodes] open:', { type, id, title });
   currentEpisodeTarget = { type, id, title };
   $('episodesTitle').textContent = `Episodes — ${title}`;
   $('episodeForm').reset();
@@ -1153,17 +1076,20 @@ async function openEpisodesModal(type, id, title) {
   $('epSubmit').textContent = 'Add Episode';
   $('epCancel').classList.add('hidden');
   $('episodesModal').classList.remove('hidden');
-  await refreshEpisodeList();
+  console.log('[episodes] modal shown:', !$('episodesModal').classList.contains('hidden'));
+  refreshEpisodeList();
 }
 
 async function refreshEpisodeList() {
-  if (!currentEpisodeTarget) return;
+  if (!currentEpisodeTarget) { console.log('[episodes] no target'); return; }
   const { type, id } = currentEpisodeTarget;
+  console.log('[episodes] fetching content:', type, id);
   try {
     const doc = await api(`/api/content/${type}/${id}`);
     const eps = (doc.episodes || []).sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    console.log('[episodes] fetched', eps.length, 'episodes');
     const el = $('episodeList');
-    if (!eps.length) { el.innerHTML = '<p class="muted">No episodes yet.</p>'; return; }
+    if (!eps.length) { el.innerHTML = '<p class="muted">No episodes yet. Add your first above.</p>'; return; }
     el.innerHTML = eps.map((ep) => `
       <div class="ep-admin-row">
         <div>
@@ -1173,44 +1099,74 @@ async function refreshEpisodeList() {
             : '<p class="muted" style="margin:2px 0 0;font-size:12px">⚠ No video link</p>'}
         </div>
         <div class="lib-actions">
-          <button class="outline small ep-edit" data-s="${ep.season}" data-e="${ep.episode}">Edit</button>
-          <button class="outline small danger ep-del" data-s="${ep.season}" data-e="${ep.episode}">Del</button>
+          <button class="outline small ep-edit" type="button"
+            data-s="${ep.season}" data-e="${ep.episode}">Edit</button>
+          <button class="outline small danger ep-del" type="button"
+            data-s="${ep.season}" data-e="${ep.episode}">Del</button>
         </div>
       </div>`).join('');
+  } catch (err) {
+    console.error('[episodes] fetch failed:', err);
+    toast(err.message, 'error');
+  }
+}
 
-    el.querySelectorAll('.ep-edit').forEach((b) => b.addEventListener('click', () => {
-      const s = Number(b.dataset.s), e = Number(b.dataset.e);
-      // CHANGED: use Number() comparison to tolerate string-typed legacy data
-      const ep = eps.find((x) => Number(x.season) === s && Number(x.episode) === e);
-      if (!ep) { toast('Episode not found in list — refresh and try again', 'error'); return; }
+// Event delegation on episodeList container — survives re-renders
+$('episodeList')?.addEventListener('click', async (e) => {
+  const editBtn = e.target.closest('.ep-edit');
+  const delBtn = e.target.closest('.ep-del');
+
+  if (editBtn) {
+    e.preventDefault();
+    const s = Number(editBtn.dataset.s);
+    const en = Number(editBtn.dataset.e);
+    console.log('[episodes] edit clicked:', { s, en });
+    if (!currentEpisodeTarget) return;
+
+    try {
+      const doc = await api(`/api/content/${currentEpisodeTarget.type}/${currentEpisodeTarget.id}`);
+      const eps = doc.episodes || [];
+      const ep = eps.find((x) => Number(x.season) === s && Number(x.episode) === en);
+      if (!ep) {
+        toast('Episode not found — refresh and try again', 'error');
+        console.error('[episodes] find failed. Available:', eps.map(x => ({ s: x.season, e: x.episode })));
+        return;
+      }
       $('epSeason').value = ep.season;
       $('epNumber').value = ep.episode;
       $('epTitle').value = ep.title || '';
       $('epDuration').value = ep.duration || '';
       $('epVideo').value = ep.video_url || '';
       $('epDesc').value = ep.description || '';
-      $('epId').value = `${s}_${e}`;
+      $('epId').value = `${s}_${en}`;
       $('epSubmit').textContent = 'Update Episode';
       $('epCancel').classList.remove('hidden');
       $('episodeForm').scrollIntoView({ behavior: 'smooth' });
-    }));
+      console.log('[episodes] form populated:', $('epVideo').value);
+    } catch (err) {
+      toast(err.message, 'error');
+      console.error('[episodes] edit failed:', err);
+    }
+    return;
+  }
 
-    el.querySelectorAll('.ep-del').forEach((b) => b.addEventListener('click', async () => {
-      if (!confirm('Delete this episode?')) return;
-      try {
-        await api(`/api/admin/${type}/${id}/episodes/${b.dataset.s}/${b.dataset.e}`, { method: 'DELETE' });
-        toast('Episode deleted');
-        refreshEpisodeList();
-      } catch (err) { toast(err.message, 'error'); }
-    }));
-  } catch (err) { toast(err.message, 'error'); }
-}
+  if (delBtn) {
+    e.preventDefault();
+    if (!currentEpisodeTarget) return;
+    if (!confirm('Delete this episode?')) return;
+    try {
+      await api(`/api/admin/${currentEpisodeTarget.type}/${currentEpisodeTarget.id}/episodes/${delBtn.dataset.s}/${delBtn.dataset.e}`, { method: 'DELETE' });
+      toast('Episode deleted');
+      refreshEpisodeList();
+    } catch (err) { toast(err.message, 'error'); }
+  }
+});
 
 $('episodeForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!currentEpisodeTarget) return;
+  if (!currentEpisodeTarget) return toast('No content selected', 'error');
   const { type, id } = currentEpisodeTarget;
-  // CHANGED: quality_links removed from payload — backend preserves existing on update
+
   const payload = {
     season: Number($('epSeason').value) || 1,
     episode: Number($('epNumber').value),
@@ -1219,11 +1175,13 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     description: $('epDesc').value.trim(),
     video_url: $('epVideo').value.trim(),
   };
+
   if (!payload.episode) return toast('Episode number required', 'error');
   if (!payload.video_url) return toast('Video URL required', 'error');
   if (!payload.video_url.startsWith('https://')) return toast('Video URL must start with https://', 'error');
 
   const epId = $('epId').value;
+  console.log('[episodes] submit:', { epId, payload });
   try {
     if (epId) {
       const [s, eNum] = epId.split('_').map(Number);
@@ -1245,7 +1203,10 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     $('epCancel').classList.add('hidden');
     await refreshEpisodeList();
     loadLibrary(true);
-  } catch (err) { toast(err.message, 'error'); }
+  } catch (err) {
+    toast(err.message, 'error');
+    console.error('[episodes] submit failed:', err);
+  }
 });
 
 $('epCancel')?.addEventListener('click', () => {
@@ -1283,10 +1244,8 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   }
   function create() {
     flakes = Array.from({ length: Math.min(60, Math.floor(w / 20)) }, () => ({
-      x: Math.random() * w,
-      y: Math.random() * h,
-      r: Math.random() * 2 + 0.5,
-      s: Math.random() * 1 + 0.3,
+      x: Math.random() * w, y: Math.random() * h,
+      r: Math.random() * 2 + 0.5, s: Math.random() * 1 + 0.3,
     }));
   }
   function draw() {
@@ -1315,7 +1274,11 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   initSheet();
 
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      console.log('[sw] registered', reg.scope);
+    }).catch((err) => {
+      console.warn('[sw] registration failed', err);
+    });
   }
 
   await checkUser();
