@@ -166,7 +166,6 @@ function showPage(page) {
   });
   movePill();
 
-  // Close mobile sidebar
   $('sidebar')?.classList.remove('open');
 
   const type = PAGE_TYPES[page];
@@ -358,7 +357,6 @@ async function loadList(type, reset = false) {
   }
 }
 
-// Infinite scroll observers
 const observers = {};
 Object.entries(LISTS).forEach(([type, l]) => {
   const sentinel = $(l.sentinel);
@@ -371,7 +369,6 @@ Object.entries(LISTS).forEach(([type, l]) => {
   observers[type].observe(sentinel);
 });
 
-// Search + filters
 Object.entries(LISTS).forEach(([type, l]) => {
   let timer;
   $(l.search)?.addEventListener('input', (e) => {
@@ -383,7 +380,6 @@ Object.entries(LISTS).forEach(([type, l]) => {
   });
   $(l.genre)?.addEventListener('change', (e) => {
     l.genreVal = e.target.value;
-    // Sync chips
     document.querySelectorAll(`#${l.chips} .genre-chip`).forEach((c) => {
       c.classList.toggle('active', c.dataset.genre === l.genreVal);
     });
@@ -415,7 +411,6 @@ async function loadGenres() {
       });
       sel.value = current;
 
-      // Chips (top 12)
       const chips = $(l.chips);
       if (chips) {
         chips.innerHTML = '';
@@ -620,14 +615,23 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
+// UPDATED: adds ▶ Watch button per episode
 function episodesHtml(episodes, type, contentId) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => `
     <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
-      <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+      <div class="ep-header">
+        <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+      </div>
+      <div class="ep-actions">
+        ${ep.video_url ? `<button type="button" class="outline small ep-play"
+          data-video="${esc(ep.video_url)}"
+          data-title="S${esc(ep.season)}E${esc(ep.episode)}${ep.title ? ' — ' + esc(ep.title) : ''}">▶ Watch</button>` : ''}
+        ${state.user ? `<button type="button" class="outline small mark-progress"
+          data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
+      </div>
       ${linkList(ep.quality_links)}
-      ${state.user ? `<button type="button" class="outline small mark-progress" data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
     </div>`).join('')}</div>`;
 }
 
@@ -712,6 +716,11 @@ function buildDetailHtml(type, item, comments, reviews) {
 function bindDetailEvents(type, item, container) {
   container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
+  // NEW: wire up ▶ Watch buttons
+  container.querySelectorAll('.ep-play').forEach((btn) => {
+    btn.addEventListener('click', () => openPlayer(btn.dataset.video, btn.dataset.title));
+  });
+
   container.querySelector('#wlBtn')?.addEventListener('click', async (e) => {
     if (!state.user) return openAuth('login');
     const btn = e.currentTarget;
@@ -729,7 +738,6 @@ function bindDetailEvents(type, item, container) {
     }
   });
 
-  // Mark progress
   container.querySelectorAll('.mark-progress').forEach((btn) => {
     btn.addEventListener('click', async () => {
       if (!state.user) return openAuth('login');
@@ -752,7 +760,6 @@ function bindDetailEvents(type, item, container) {
     });
   });
 
-  // Rating stars
   const stars = container.querySelector('#ratingStars');
   let selected = item.my_rating?.rating || 0;
   stars?.querySelectorAll('button').forEach((b) => {
@@ -779,7 +786,6 @@ function bindDetailEvents(type, item, container) {
       toast('Rating saved!');
       const meta = container.querySelector('#dMeta');
       if (meta) meta.textContent = metaText({ ...item, avg_rating: res.avg_rating, rating_count: res.rating_count, views: item.views });
-      // Refresh reviews
       const reviews = await api(`/api/ratings/${type}/${item._id}`);
       const list = container.querySelector('#reviewList');
       if (list) list.innerHTML = reviewsHtml(reviews.items);
@@ -827,9 +833,9 @@ async function openDetail(type, id, preview) {
     document.body.style.overflow = 'hidden';
   }
 
-  // Quick preview if available
   if (preview && contentEl) {
     contentEl.innerHTML = buildDetailHtml(type, preview, null, null);
+    bindDetailEvents(type, preview, contentEl);
   } else if (contentEl) {
     contentEl.innerHTML = '<p class="muted">Loading…</p>';
   }
@@ -891,7 +897,6 @@ $('detailModal')?.addEventListener('click', (e) => {
   if (e.target.id === 'detailModal') closeDetail();
 });
 
-// Swipe to dismiss (simplified)
 function initSheet() {
   const sheet = $('detailSheet');
   if (!sheet) return;
@@ -918,6 +923,50 @@ function initSheet() {
     currentY = 0;
   });
 }
+
+// --- NEW: Video Player ---
+function openPlayer(url, title = 'Now Playing') {
+  const modal = $('playerModal');
+  if (!modal || !url) return;
+  $('playerTitle').textContent = title;
+  $('playerOpenLink').href = url;
+  $('playerFrame').src = url;
+  $('playerFallback').classList.add('hidden');
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+
+  let loaded = false;
+  const onLoad = () => { loaded = true; };
+  $('playerFrame').addEventListener('load', onLoad, { once: true });
+  setTimeout(() => {
+    if (!loaded) {
+      $('playerFrame').removeEventListener('load', onLoad);
+      $('playerFallback').classList.remove('hidden');
+    }
+  }, 4000);
+}
+
+function closePlayer() {
+  const modal = $('playerModal');
+  if (!modal) return;
+  $('playerFrame').src = 'about:blank';
+  modal.classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+$('playerClose')?.addEventListener('click', closePlayer);
+$('playerModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'playerModal') closePlayer();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (!$('playerModal')?.classList.contains('hidden')) closePlayer();
+    if (!$('episodesModal')?.classList.contains('hidden')) {
+      $('episodesModal').classList.add('hidden');
+      currentEpisodeTarget = null;
+    }
+  }
+});
 
 // --- Admin ---
 
@@ -988,6 +1037,7 @@ async function loadLibrary(reset = false) {
     data.items.forEach((item) => {
       const row = document.createElement('div');
       row.className = 'lib-row';
+      // UPDATED: adds Eps button for non-movies
       row.innerHTML = `
         <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
         <div>
@@ -995,9 +1045,16 @@ async function loadLibrary(reset = false) {
           <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}</p>
         </div>
         <div class="lib-actions">
+          ${type !== 'movie' ? `<button type="button" class="outline ep-btn">Eps</button>` : ''}
           <button type="button" class="outline edit-btn">Edit</button>
           <button type="button" class="outline danger del-btn">Del</button>
         </div>`;
+
+      if (type !== 'movie') {
+        row.querySelector('.ep-btn').addEventListener('click',
+          () => openEpisodesModal(type, item._id, item.title));
+      }
+
       row.querySelector('.edit-btn').addEventListener('click', () => {
         $('aId').value = item._id;
         $('aType').value = type;
@@ -1087,11 +1144,135 @@ $('aCancel')?.addEventListener('click', () => {
   $('aCancel').classList.add('hidden');
 });
 
+// --- NEW: Admin Episode Manager ---
+let currentEpisodeTarget = null;
+
+async function openEpisodesModal(type, id, title) {
+  currentEpisodeTarget = { type, id, title };
+  $('episodesTitle').textContent = `Episodes — ${title}`;
+  $('episodeForm').reset();
+  $('epId').value = '';
+  $('epSeason').value = 1;
+  $('epSubmit').textContent = 'Add Episode';
+  $('epCancel').classList.add('hidden');
+  $('episodesModal').classList.remove('hidden');
+  await refreshEpisodeList();
+}
+
+async function refreshEpisodeList() {
+  if (!currentEpisodeTarget) return;
+  const { type, id } = currentEpisodeTarget;
+  try {
+    const doc = await api(`/api/content/${type}/${id}`);
+    const eps = (doc.episodes || []).sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const el = $('episodeList');
+    if (!eps.length) { el.innerHTML = '<p class="muted">No episodes yet.</p>'; return; }
+    el.innerHTML = eps.map((ep) => `
+      <div class="ep-admin-row">
+        <div>
+          <strong>S${esc(ep.season)}E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}
+          ${ep.video_url
+            ? `<p class="muted" style="margin:2px 0 0;font-size:12px;overflow-wrap:anywhere">${esc(ep.video_url)}</p>`
+            : '<p class="muted" style="margin:2px 0 0;font-size:12px">⚠ No video link</p>'}
+        </div>
+        <div class="lib-actions">
+          <button class="outline small ep-edit" data-s="${ep.season}" data-e="${ep.episode}">Edit</button>
+          <button class="outline small danger ep-del" data-s="${ep.season}" data-e="${ep.episode}">Del</button>
+        </div>
+      </div>`).join('');
+
+    el.querySelectorAll('.ep-edit').forEach((b) => b.addEventListener('click', () => {
+      const s = Number(b.dataset.s), e = Number(b.dataset.e);
+      const ep = eps.find((x) => x.season === s && x.episode === e);
+      $('epSeason').value = ep.season;
+      $('epNumber').value = ep.episode;
+      $('epTitle').value = ep.title || '';
+      $('epDuration').value = ep.duration || '';
+      $('epVideo').value = ep.video_url || '';
+      $('epDesc').value = ep.description || '';
+      $('epId').value = `${s}_${e}`;
+      $('epSubmit').textContent = 'Update Episode';
+      $('epCancel').classList.remove('hidden');
+      $('episodeForm').scrollIntoView({ behavior: 'smooth' });
+    }));
+
+    el.querySelectorAll('.ep-del').forEach((b) => b.addEventListener('click', async () => {
+      if (!confirm('Delete this episode?')) return;
+      try {
+        await api(`/api/admin/${type}/${id}/episodes/${b.dataset.s}/${b.dataset.e}`, { method: 'DELETE' });
+        toast('Episode deleted');
+        refreshEpisodeList();
+      } catch (err) { toast(err.message, 'error'); }
+    }));
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+$('episodeForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!currentEpisodeTarget) return;
+  const { type, id } = currentEpisodeTarget;
+  const payload = {
+    season: Number($('epSeason').value) || 1,
+    episode: Number($('epNumber').value),
+    title: $('epTitle').value.trim(),
+    duration: $('epDuration').value.trim(),
+    description: $('epDesc').value.trim(),
+    video_url: $('epVideo').value.trim(),
+    quality_links: {},
+  };
+  if (!payload.episode) return toast('Episode number required', 'error');
+  if (!payload.video_url) return toast('Video URL required', 'error');
+  if (!payload.video_url.startsWith('https://')) return toast('Video URL must start with https://', 'error');
+
+  const epId = $('epId').value;
+  try {
+    if (epId) {
+      const [s, eNum] = epId.split('_').map(Number);
+      await api(`/api/admin/${type}/${id}/episodes/${s}/${eNum}`, {
+        method: 'PUT', body: JSON.stringify(payload),
+      });
+      toast('Episode updated');
+    } else {
+      const path = type === 'anime'
+        ? `/api/admin/anime/${id}/episodes`
+        : `/api/admin/tvshows/${id}/episodes`;
+      await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      toast('Episode added');
+    }
+    $('episodeForm').reset();
+    $('epId').value = '';
+    $('epSeason').value = 1;
+    $('epSubmit').textContent = 'Add Episode';
+    $('epCancel').classList.add('hidden');
+    await refreshEpisodeList();
+    loadLibrary(true);
+  } catch (err) { toast(err.message, 'error'); }
+});
+
+$('epCancel')?.addEventListener('click', () => {
+  $('episodeForm').reset();
+  $('epId').value = '';
+  $('epSeason').value = 1;
+  $('epSubmit').textContent = 'Add Episode';
+  $('epCancel').classList.add('hidden');
+});
+
+$('episodesClose')?.addEventListener('click', () => {
+  $('episodesModal').classList.add('hidden');
+  currentEpisodeTarget = null;
+});
+$('episodesModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'episodesModal') {
+    $('episodesModal').classList.add('hidden');
+    currentEpisodeTarget = null;
+  }
+});
+
 // --- Theme buttons ---
 $('themeToggle')?.addEventListener('click', toggleTheme);
 $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 
-// --- Snow (lightweight) ---
+// --- Snow ---
 (function snow() {
   const canvas = $('snow');
   if (!canvas) return;
@@ -1134,7 +1315,6 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   $('yearNow').textContent = new Date().getFullYear();
   initSheet();
 
-  // PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }
