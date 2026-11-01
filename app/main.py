@@ -189,21 +189,25 @@ def get_paginated(collection, page: int = 1, limit: int = 20):
 
 @app.get("/api/anime")
 def get_anime(page: int = 1, limit: int = 20):
+    from pymongo import DESCENDING
     items, total = get_paginated(db.anime, page, limit)
     return {"items": items, "total": total}
 
 @app.get("/api/tvshows")
 def get_tvshows(page: int = 1, limit: int = 20):
+    from pymongo import DESCENDING
     items, total = get_paginated(db.tv_shows, page, limit)
     return {"items": items, "total": total}
 
 @app.get("/api/movies")
 def get_movies(page: int = 1, limit: int = 20):
+    from pymongo import DESCENDING
     items, total = get_paginated(db.movies, page, limit)
     return {"items": items, "total": total}
 
+# FIXED: Changed to async def to allow 'await'
 @app.get("/api/content/{type}/{id}")
-def get_content(type: str, id: str, request: Request):
+async def get_content(type: str, id: str, request: Request):
     coll = db.anime if type == "anime" else db.tv_shows if type == "tv_show" else db.movies
     item = coll.find_one({"_id": object_id(id)})
     if not item: raise HTTPException(status_code=404, detail="Not found")
@@ -230,7 +234,9 @@ def add_anime(data: AnimeData, admin=Depends(require_admin)):
     item["views"] = 0
     item["episodes"] = []
     db.anime.insert_one(item)
-    send_webhook(f"New Anime Added: {item['title']}")
+    # Note: send_webhook is async, so we use create_task to run it in background without blocking
+    import asyncio
+    asyncio.create_task(send_webhook(f"New Anime Added: {item['title']}"))
     return {"message": "Added"}
 
 @app.post("/api/admin/tvshows")
@@ -242,7 +248,8 @@ def add_tvshow(data: TvShowData, admin=Depends(require_admin)):
     item["views"] = 0
     item["episodes"] = []
     db.tv_shows.insert_one(item)
-    send_webhook(f"New TV Show Added: {item['title']}")
+    import asyncio
+    asyncio.create_task(send_webhook(f"New TV Show Added: {item['title']}"))
     return {"message": "Added"}
 
 @app.post("/api/admin/movies")
