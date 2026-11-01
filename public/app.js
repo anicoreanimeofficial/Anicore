@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 
-const state = { user: null, authMode: 'login', page: 'home' };
+const state = { user: null, authMode: 'login', page: 'home', detailId: null };
 const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin'];
 
 // One config per browsable list (anime / tv_show / movie)
@@ -141,7 +141,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     card.querySelector('h3').textContent = item.title || 'Untitled';
     card.querySelector('p').textContent = item.views ? `${item.views} views` : (item.year || '');
 
-    const open = () => openDetail(item._type || type, item._id);
+    const open = () => openDetail(item._type || type, item._id, item);
     card.addEventListener('click', open);
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -377,22 +377,58 @@ function commentsHtml(comments) {
     </div>`).join('');
 }
 
-async function openDetail(type, id) {
+function metaText(item) {
+  if (!('description' in item)) return '';
+  return `👁 ${item.views || 0} · ⭐ ${item.rating || 'N/A'} · 📅 ${item.year || 'N/A'}${item.status ? ` · ${item.status}` : ''}`;
+}
+
+function recapHtml(item) {
+  return item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : '';
+}
+
+// Fills in the live details (views, watchlist state, recap, comments)
+// without redrawing the sheet, so nothing flickers.
+function updateDetail(item, comments) {
+  $('dMeta').textContent = metaText(item);
+  $('dRecapSlot').innerHTML = recapHtml(item);
+  const wl = $('wlBtn');
+  wl.textContent = item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist';
+  wl.classList.toggle('saved', !!item.in_watchlist);
+  $('commentList').innerHTML = commentsHtml(comments);
+}
+
+async function openDetail(type, id, preview) {
   const modal = $('detailModal');
-  const content = $('detailContent');
   clearTimeout(closeTimer);
   resetSheet();
-  content.innerHTML = '<p class="muted empty">Loading…</p>';
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
+  state.detailId = id;
+  const complete = !!preview && 'description' in preview;
+
+  const show = () => {
+    modal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+  };
+
+  if (preview) {
+    // Draw instantly from the card's own data: the sheet slides up with content, no loading state.
+    renderDetail(type, preview, null);
+    show();
+  }
 
   try {
     const [item, comments] = await Promise.all([
       api(`/api/content/${type}/${id}`),
       api(`/api/comments/${type}/${id}`),
     ]);
-    renderDetail(type, item, comments);
+    if (state.detailId !== id) return; // closed or switched while loading
+    if (complete) {
+      updateDetail(item, comments);
+    } else {
+      renderDetail(type, item, comments);
+      if (!preview) show();
+    }
   } catch (err) {
+    if (state.detailId !== id) return;
     closeDetail();
     toast(err.message || 'Failed to load details.', 'error');
   }
@@ -405,10 +441,10 @@ function renderDetail(type, item, comments) {
   $('detailContent').innerHTML = `
     ${banner ? `<img class="detail-banner" src="${esc(banner)}" alt="">` : ''}
     <h2>${esc(item.title)}</h2>
-    <p class="muted meta">👁 ${esc(item.views || 0)} · ⭐ ${esc(item.rating || 'N/A')} · 📅 ${esc(item.year || 'N/A')}${item.status ? ` · ${esc(item.status)}` : ''}</p>
-    <p class="desc">${esc(item.description || 'No description available.')}</p>
+    <p class="muted meta" id="dMeta">${esc(metaText(item))}</p>
+    <p class="desc">${'description' in item ? esc(item.description || 'No description available.') : ''}</p>
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
-    ${item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : ''}
+    <div id="dRecapSlot">${recapHtml(item)}</div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
     ${episodesHtml(item.episodes)}
     <div class="detail-actions">
@@ -420,7 +456,7 @@ function renderDetail(type, item, comments) {
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
       : '<p class="muted">Sign in to comment.</p>'}
-    <div id="commentList">${commentsHtml(comments)}</div>`;
+    <div id="commentList">${comments ? commentsHtml(comments) : ''}</div>`;
 
   $('detailContent').querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
@@ -476,6 +512,7 @@ function resetSheet() {
 function closeDetail() {
   const modal = $('detailModal');
   if (modal.classList.contains('hidden')) return;
+  state.detailId = null;
   const sheet = $('detailSheet');
   sheet.style.transition = 'transform .3s cubic-bezier(.32, .72, 0, 1)';
   sheet.style.transform = 'translateY(100%)';
@@ -725,10 +762,74 @@ $('libSearch').addEventListener('input', () => {
   libTimer = setTimeout(() => loadLibrary(true), 300);
 });
 
+// --- Falling snow background ---
+
+function initSnow() {
+  const canvas = $('snow');
+  if (!canvas || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const ctx = canvas.getContext('2d');
+  let w = 0;
+  let h = 0;
+  let last = 0;
+  let raf = 0;
+  const flakes = [];
+
+  const makeFlake = (anywhere) => ({
+    x: Math.random() * w,
+    y: anywhere ? Math.random() * h : -10,
+    r: Math.random() * 2.2 + 0.8,   // size
+    s: Math.random() * 0.8 + 0.4,   // fall speed
+    a: Math.random() * Math.PI * 2, // sway phase
+    sway: Math.random() * 0.6 + 0.2,
+    o: Math.random() * 0.5 + 0.3,   // opacity
+  });
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = window.innerWidth;
+    h = window.innerHeight;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const count = Math.max(40, Math.min(110, Math.round((w * h) / 16000)));
+    while (flakes.length < count) flakes.push(makeFlake(true));
+    flakes.length = count;
+  }
+
+  function frame(t) {
+    const dt = Math.min((t - last) / 16.67, 3) || 1;
+    last = t;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f4eeff';
+    for (const f of flakes) {
+      f.y += f.s * dt * (0.6 + f.r * 0.35);
+      f.a += 0.01 * dt;
+      f.x += Math.sin(f.a) * f.sway * dt;
+      if (f.y > h + 10) Object.assign(f, makeFlake(false));
+      if (f.x > w + 10) f.x = -10;
+      if (f.x < -10) f.x = w + 10;
+      ctx.globalAlpha = f.o;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+  const stop = () => { cancelAnimationFrame(raf); raf = 0; };
+
+  resize();
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', () => (document.hidden ? stop() : start()));
+  start();
+}
+
 // --- Init ---
 
 (async () => {
   $('yearNow').textContent = new Date().getFullYear();
+  initSnow();
   initSheet();
   movePill(false);
   await checkUser();
