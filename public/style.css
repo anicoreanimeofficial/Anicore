@@ -53,7 +53,6 @@ button, input, textarea, select, a { outline: none; }
 .hidden { display: none !important; }
 .block { display: block; width: 100%; }
 
-/* Snow */
 #snow {
   position: fixed;
   inset: 0;
@@ -63,7 +62,6 @@ button, input, textarea, select, a { outline: none; }
   pointer-events: none;
 }
 
-/* Sidebar (desktop) */
 .sidebar {
   display: none;
   position: fixed;
@@ -125,7 +123,6 @@ button, input, textarea, select, a { outline: none; }
   min-height: 100vh;
 }
 
-/* Pages */
 .page { display: none; animation: pageEnter .28s ease; }
 .page.active { display: block; }
 @keyframes pageEnter {
@@ -149,7 +146,6 @@ button, input, textarea, select, a { outline: none; }
 .section { padding: 20px 5%; }
 .section-title { padding: 0 5%; margin: 24px 0 0; }
 
-/* Header */
 .app-header {
   position: sticky;
   top: 0;
@@ -176,7 +172,6 @@ button, input, textarea, select, a { outline: none; }
 }
 .brand span { color: var(--pink); }
 
-/* Buttons */
 .primary {
   background: linear-gradient(110deg, var(--pink), var(--purple));
   color: white;
@@ -218,7 +213,6 @@ button, input, textarea, select, a { outline: none; }
   cursor: pointer;
 }
 
-/* Panels */
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -244,7 +238,6 @@ button, input, textarea, select, a { outline: none; }
   color: white;
 }
 
-/* Filters */
 .filters { margin-bottom: 16px; }
 .filter-row {
   display: grid;
@@ -277,7 +270,6 @@ button, input, textarea, select, a { outline: none; }
   background: rgba(255, 63, 130, .1);
 }
 
-/* Grids & cards */
 .media-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -379,7 +371,6 @@ button, input, textarea, select, a { outline: none; }
 
 .empty { grid-column: 1 / -1; text-align: center; padding: 40px 10px; }
 
-/* Skeleton loaders */
 .skeleton-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -414,7 +405,6 @@ button, input, textarea, select, a { outline: none; }
 
 .scroll-sentinel { height: 40px; }
 
-/* Forms */
 input, textarea, select {
   width: 100%;
   padding: 14px;
@@ -458,7 +448,6 @@ input:focus, textarea:focus, select:focus {
   75% { transform: translateX(5px); }
 }
 
-/* Stars */
 .stars {
   display: inline-flex;
   gap: 4px;
@@ -475,7 +464,6 @@ input:focus, textarea:focus, select:focus {
 }
 .stars button:hover, .stars button.active { color: #ffd166; transform: scale(1.15); }
 
-/* Modals */
 .modal {
   position: fixed;
   inset: 0;
@@ -488,6 +476,7 @@ input:focus, textarea:focus, select:focus {
   animation: fadeIn .25s ease;
 }
 #authModal { z-index: 1100; }
+#playerModal { z-index: 1200; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
 .modal-card {
@@ -541,7 +530,6 @@ input:focus, textarea:focus, select:focus {
 
 .auth-toggle { text-align: center; margin: 16px 0 0; font-size: 14px; }
 
-/* Detail */
 .detail-banner {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -604,7 +592,6 @@ input:focus, textarea:focus, select:focus {
 }
 .review-card .stars-display { color: #ffd166; font-size: 14px; }
 
-/* Admin */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
@@ -650,7 +637,6 @@ input:focus, textarea:focus, select:focus {
 .lib-actions .outline { padding: 7px 10px; font-size: 12px; }
 #libMore { margin-top: 14px; }
 
-/* Toast */
 .toast {
   position: fixed;
   top: 20px;
@@ -667,7 +653,6 @@ input:focus, textarea:focus, select:focus {
 }
 .toast.error { background: #c0344f; }
 
-/* Bottom navigation */
 .bottom-nav {
   position: fixed;
   z-index: 999;
@@ -744,6 +729,33 @@ footer {
   color: var(--muted);
 }
 
+/* ---------- NEW: Video player ---------- */
+.player-card { max-width: 960px; width: 100%; }
+.player-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.player-header h3 { margin: 0; }
+.player-wrap {
+  position: relative; aspect-ratio: 16 / 9;
+  background: #000; border-radius: 14px; overflow: hidden; margin-bottom: 10px;
+}
+.player-wrap iframe {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+}
+#playerFallback a { color: var(--pink); font-weight: 700; }
+
+/* ---------- NEW: Episode rows in detail ---------- */
+.ep-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ep-header { line-height: 1.4; }
+
+/* ---------- NEW: Admin episode rows ---------- */
+.ep-admin-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px;
+  align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border);
+}
+.ep-admin-row:last-child { border-bottom: 0; }
+
 /* Desktop */
 @media (min-width: 900px) {
   body { padding-bottom: 0; }
@@ -757,7 +769,6 @@ footer {
     gap: 22px;
   }
   .intro { text-align: left; padding-left: 5%; }
-  /* On desktop prefer full-page detail over modal */
   .sheet-modal { display: none !important; }
 }
 
