@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css">
+  <link rel="stylesheet" href="/assets/style.css?v=3">
 </head>
 <body>
 
@@ -50,18 +50,14 @@
           <h1>Discover Your Next Story</h1>
           <p class="muted">Anime, TV Shows, and Movies.</p>
         </div>
-
         <div id="continueSection" class="hidden">
           <h3 class="section-title">Continue Watching</h3>
           <div id="continueGrid" class="media-grid horizontal"></div>
         </div>
-
         <h3 class="section-title">Trending Anime</h3>
         <div id="homeAnimeGrid" class="media-grid"></div>
-
         <h3 class="section-title">Popular TV Shows</h3>
         <div id="homeTvGrid" class="media-grid"></div>
-
         <h3 class="section-title">Latest Movies</h3>
         <div id="homeMovieGrid" class="media-grid"></div>
       </section>
@@ -292,7 +288,7 @@
     <div class="modal-card wide">
       <button class="close" type="button" id="episodesClose" aria-label="Close">×</button>
       <h2 id="episodesTitle">Episodes</h2>
-      <form id="episodeForm">
+      <form id="episodeForm" novalidate>
         <input type="hidden" id="epId">
         <div class="row">
           <input id="epSeason" type="number" min="1" value="1" placeholder="Season" required>
@@ -300,8 +296,7 @@
         </div>
         <input id="epTitle" placeholder="Episode title (optional)">
         <input id="epDuration" placeholder="Duration (e.g. 24m)">
-        <!-- CHANGED: type="text" instead of type="url" (browser URL validator was blocking submit) -->
-        <input id="epVideo" type="text" placeholder="Video URL (https://...)" required>
+        <input id="epVideo" type="text" placeholder="Video URL (https://...)">
         <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
         <button type="submit" class="primary block" id="epSubmit">Add Episode</button>
         <button type="button" class="outline block form-cancel hidden" id="epCancel">Cancel edit</button>
@@ -320,6 +315,6 @@
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js"></script>
+  <script src="/assets/app.js?v=3"></script>
 </body>
 </html>
