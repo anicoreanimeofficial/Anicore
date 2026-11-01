@@ -42,6 +42,16 @@ button, input, textarea, select, a { outline: none; }
 .hidden { display: none !important; }
 .block { display: block; width: 100%; }
 
+/* Falling snow (canvas sits behind all content) */
+#snow {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+}
+
 /* Pages */
 .page { display: none; animation: pageEnter .28s ease; }
 .page.active { display: block; }
@@ -299,6 +309,7 @@ input:focus, textarea:focus, select:focus {
 /* Detail modal */
 .detail-banner {
   width: 100%;
+  aspect-ratio: 16 / 9; /* reserves space so the sheet doesn't jump when the image loads */
   max-height: 300px;
   object-fit: cover;
   border-radius: 12px;
