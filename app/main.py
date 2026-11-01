@@ -1,32 +1,60 @@
-import os
 import re
-import json
-import aiohttp
-from datetime import datetime, timezone
 from contextlib import asynccontextmanager
-from typing import Optional, List
+from datetime import datetime, timezone
+from typing import List, Literal, Optional
 
+import aiohttp
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import FastAPI, HTTPException, Request, Response, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field, EmailStr
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, EmailStr, Field
 
-from .config import APP_NAME, SECRET_KEY, ENABLE_AI_RECAPS, WEBHOOK_URL, MONGODB_URI
-from .database import connect_database, close_database, db
-from .security import hash_password, verify_password, create_session_token, decode_session_token, get_cookie_options
+from .config import APP_NAME, ENABLE_AI_RECAPS, WEBHOOK_URL
+from . import database
+from .database import close_database, connect_database
+from .security import (
+    COOKIE_NAME,
+    create_session_token,
+    decode_session_token,
+    get_cookie_options,
+    hash_password,
+    verify_password,
+)
+
+
+class _DB:
+    """Always resolves to the live database.
+
+    `from .database import db` copies the value None at import time (before
+    connect_database() runs), so every db.xxx call would crash. This proxy
+    looks the real handle up on each access instead.
+    """
+
+    def __getattr__(self, name):
+        if database.db is None:
+            raise RuntimeError("Database is not connected.")
+        return getattr(database.db, name)
+
+
+db = _DB()
 
 # --- Models ---
 
+
 class AuthData(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=128)
+
+
+class RegisterData(AuthData):
+    password: str = Field(min_length=6, max_length=128)
+
 
 class ContentBase(BaseModel):
     title: str = Field(min_length=1, max_length=180)
-    description: str = ""
+    description: str = Field(default="", max_length=5000)
     genres: List[str] = []
     year: Optional[int] = None
     rating: str = ""
@@ -36,14 +64,18 @@ class ContentBase(BaseModel):
     poster_tag: str = "NEW"
     dubbed_on: List[str] = []
 
+
 class AnimeData(ContentBase):
     pass
+
 
 class TvShowData(ContentBase):
     pass
 
+
 class MovieData(ContentBase):
     quality_links: dict = {}
+
 
 class EpisodeData(BaseModel):
     season: int = 1
@@ -54,20 +86,31 @@ class EpisodeData(BaseModel):
     duration: str = ""
     quality_links: dict = {}
 
+
 class CommentData(BaseModel):
     content_type: str
     content_id: str
     text: str = Field(min_length=1, max_length=1000)
 
+
 class RequestData(BaseModel):
-    title: str
-    language: str = "Hindi Dub"
-    notes: str = ""
+    title: str = Field(min_length=1, max_length=180)
+    language: str = Field(default="Hindi Dub", max_length=60)
+    notes: str = Field(default="", max_length=500)
+
+
+class RequestStatus(BaseModel):
+    status: Literal["Pending", "Approved", "Rejected", "Completed"]
+
 
 # --- Helpers ---
 
+COLLECTIONS = {"anime": "anime", "tv_show": "tv_shows", "movie": "movies"}
+
+
 def utc_now():
     return datetime.now(timezone.utc)
+
 
 def object_id(value):
     try:
@@ -75,52 +118,106 @@ def object_id(value):
     except (InvalidId, TypeError):
         raise HTTPException(status_code=400, detail="Invalid ID.")
 
-def serialize_doc(doc):
-    if not doc: return None
-    res = dict(doc)
-    res["_id"] = str(res["_id"])
-    for k, v in res.items():
-        if isinstance(v, datetime):
-            res[k] = v.isoformat()
-    return res
 
-def valid_url(url):
-    if not url: return ""
-    if not url.startswith("https://"): raise ValueError("Must be HTTPS")
+def get_collection(content_type: str):
+    name = COLLECTIONS.get(content_type)
+    if not name:
+        raise HTTPException(status_code=400, detail="Invalid content type.")
+    return getattr(db, name)
+
+
+def serialize_value(value):
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, list):
+        return [serialize_value(v) for v in value]
+    if isinstance(value, dict):
+        return {k: serialize_value(v) for k, v in value.items()}
+    return value
+
+
+def serialize_doc(doc):
+    return serialize_value(doc) if doc else None
+
+
+def valid_url(url: str) -> str:
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if not url.startswith("https://"):
+        raise HTTPException(status_code=400, detail="Poster and banner URLs must start with https://")
     return url
 
+
 def get_current_user(request: Request):
-    token = request.cookies.get("anicore_session")
-    if not token: return None
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return None
     try:
         data = decode_session_token(token)
-        user = db.users.find_one({"_id": object_id(data["sub"])})
-        return user
-    except:
+        return db.users.find_one({"_id": object_id(data["sub"])})
+    except Exception:
         return None
+
 
 def require_user(request: Request):
     user = get_current_user(request)
-    if not user: raise HTTPException(status_code=401, detail="Sign in required")
+    if not user:
+        raise HTTPException(status_code=401, detail="Sign in required")
     return user
 
+
 def require_admin(user=Depends(require_user)):
-    if user.get("role") != "admin": raise HTTPException(status_code=403, detail="Admin only")
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
     return user
+
 
 async def send_webhook(message: str):
     if WEBHOOK_URL:
         try:
             async with aiohttp.ClientSession() as session:
                 await session.post(WEBHOOK_URL, json={"content": message})
-        except:
+        except Exception:
             pass
 
+
 async def generate_ai_recap(description: str):
-    if not ENABLE_AI_RECAPS: return "AI recaps disabled."
+    if not ENABLE_AI_RECAPS:
+        return "AI recaps disabled."
     return f"AI Recap: This story involves {description[:50]}... (Generated by AI)"
 
+
+def get_paginated(collection, page: int = 1, limit: int = 20, q: str = ""):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 50)
+    query = {}
+    q = (q or "").strip()
+    if q:
+        query["title"] = {"$regex": re.escape(q), "$options": "i"}
+    total = collection.count_documents(query)
+    items = list(
+        collection.find(query).sort("created_at", -1).skip((page - 1) * limit).limit(limit)
+    )
+    return [serialize_doc(i) for i in items], total
+
+
+def insert_content(collection, data: ContentBase, with_episodes: bool):
+    item = data.model_dump()
+    item["poster"] = valid_url(item["poster"])
+    item["banner"] = valid_url(item["banner"])
+    item["created_at"] = utc_now()
+    item["views"] = 0
+    if with_episodes:
+        item["episodes"] = []
+    collection.insert_one(item)
+    return item
+
+
 # --- Lifespan ---
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -133,286 +230,263 @@ async def lifespan(app: FastAPI):
     finally:
         close_database()
 
+
 app = FastAPI(title=APP_NAME, lifespan=lifespan)
 
-# Global exception handler for better error responses
+# The frontend is served by this same app, so no CORS middleware is needed.
+# (allow_origins=["*"] together with credentials is also rejected by browsers.)
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     print(f"Unhandled error: {exc}")
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error. Please try again."}
+        content={"detail": "Internal server error. Please try again."},
     )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # --- Auth Routes ---
 
+
 @app.post("/api/auth/register")
-def register(data: AuthData, response: Response):
-    try:
-        email = data.email.lower().strip()
-        if db.users.find_one({"email": email}):
-            raise HTTPException(status_code=409, detail="Email already registered")
-        
-        uid = db.users.insert_one({
+def register(data: RegisterData, response: Response):
+    email = data.email.lower().strip()
+    if db.users.find_one({"email": email}):
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    uid = db.users.insert_one(
+        {
             "email": email,
             "password_hash": hash_password(data.password),
             "role": "user",
-            "created_at": utc_now()
-        }).inserted_id
-        
-        token = create_session_token(str(uid), email, "user")
-        response.set_cookie(**get_cookie_options(), value=token)
-        return {"message": "Registered successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Register error: {e}")
-        raise HTTPException(status_code=500, detail="Registration failed")
+            "created_at": utc_now(),
+        }
+    ).inserted_id
+
+    token = create_session_token(str(uid), email, "user")
+    response.set_cookie(**get_cookie_options(), value=token)
+    return {"message": "Registered successfully"}
+
 
 @app.post("/api/auth/login")
 def login(data: AuthData, response: Response):
-    try:
-        email = data.email.lower().strip()
-        user = db.users.find_one({"email": email})
-        if not user or not verify_password(data.password, user["password_hash"]):
-            raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
-        response.set_cookie(**get_cookie_options(), value=token)
-        return {"message": "Logged in successfully", "role": user.get("role")}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail="Login failed")
+    email = data.email.lower().strip()
+    user = db.users.find_one({"email": email})
+    if not user or not verify_password(data.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
+    response.set_cookie(**get_cookie_options(), value=token)
+    return {"message": "Logged in successfully", "role": user.get("role", "user")}
+
 
 @app.get("/api/auth/me")
 def me(request: Request):
-    try:
-        user = get_current_user(request)
-        if not user: return {"authenticated": False}
-        return {"authenticated": True, "email": user["email"], "role": user.get("role")}
-    except Exception as e:
-        print(f"Me endpoint error: {e}")
+    user = get_current_user(request)
+    if not user:
         return {"authenticated": False}
+    return {"authenticated": True, "email": user["email"], "role": user.get("role", "user")}
+
 
 @app.post("/api/auth/logout")
 def logout(response: Response):
-    response.delete_cookie("anicore_session", path="/")
+    response.delete_cookie(COOKIE_NAME, path="/")
     return {"message": "Logged out"}
+
 
 # --- Content Routes ---
 
-def get_paginated(collection, page: int = 1, limit: int = 20):
-    skip = (page - 1) * limit
-    total = collection.count_documents({})
-    items = list(collection.find().sort("created_at", -1).skip(skip).limit(limit))
-    return [serialize_doc(i) for i in items], total
 
 @app.get("/api/anime")
-def get_anime(page: int = 1, limit: int = 20):
-    try:
-        items, total = get_paginated(db.anime, page, limit)
-        return {"items": items, "total": total}
-    except Exception as e:
-        print(f"Get anime error: {e}")
-        return {"items": [], "total": 0}
+def get_anime(page: int = 1, limit: int = 20, q: str = ""):
+    items, total = get_paginated(db.anime, page, limit, q)
+    return {"items": items, "total": total}
+
 
 @app.get("/api/tvshows")
-def get_tvshows(page: int = 1, limit: int = 20):
-    try:
-        items, total = get_paginated(db.tv_shows, page, limit)
-        return {"items": items, "total": total}
-    except Exception as e:
-        print(f"Get TV shows error: {e}")
-        return {"items": [], "total": 0}
+def get_tvshows(page: int = 1, limit: int = 20, q: str = ""):
+    items, total = get_paginated(db.tv_shows, page, limit, q)
+    return {"items": items, "total": total}
+
 
 @app.get("/api/movies")
-def get_movies(page: int = 1, limit: int = 20):
-    try:
-        items, total = get_paginated(db.movies, page, limit)
-        return {"items": items, "total": total}
-    except Exception as e:
-        print(f"Get movies error: {e}")
-        return {"items": [], "total": 0}
+def get_movies(page: int = 1, limit: int = 20, q: str = ""):
+    items, total = get_paginated(db.movies, page, limit, q)
+    return {"items": items, "total": total}
+
 
 @app.get("/api/content/{type}/{id}")
 async def get_content(type: str, id: str, request: Request):
-    try:
-        coll = db.anime if type == "anime" else db.tv_shows if type == "tv_show" else db.movies
-        item = coll.find_one({"_id": object_id(id)})
-        if not item: raise HTTPException(status_code=404, detail="Not found")
-        
-        coll.update_one({"_id": item["_id"]}, {"$inc": {"views": 1}})
-        
-        if type != "movie" and ENABLE_AI_RECAPS and not item.get("ai_recap"):
-            recap = await generate_ai_recap(item.get("description", ""))
-            coll.update_one({"_id": item["_id"]}, {"$set": {"ai_recap": recap}})
-            item["ai_recap"] = recap
-            
-        return serialize_doc(item)
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Get content error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to load content")
+    coll = get_collection(type)
+    item = coll.find_one({"_id": object_id(id)})
+    if not item:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    coll.update_one({"_id": item["_id"]}, {"$inc": {"views": 1}})
+    item["views"] = item.get("views", 0) + 1
+
+    if type != "movie" and ENABLE_AI_RECAPS and not item.get("ai_recap"):
+        recap = await generate_ai_recap(item.get("description", ""))
+        coll.update_one({"_id": item["_id"]}, {"$set": {"ai_recap": recap}})
+        item["ai_recap"] = recap
+
+    user = get_current_user(request)
+    item["in_watchlist"] = bool(
+        user
+        and db.watchlist.find_one(
+            {"user_id": user["_id"], "content_type": type, "content_id": id}
+        )
+    )
+    return serialize_doc(item)
+
 
 # --- Admin Routes ---
 
+
 @app.post("/api/admin/anime")
-def add_anime(data: AnimeData, admin=Depends(require_admin)):
-    try:
-        item = data.model_dump()
-        item["poster"] = valid_url(item["poster"])
-        item["banner"] = valid_url(item["banner"])
-        item["created_at"] = utc_now()
-        item["views"] = 0
-        item["episodes"] = []
-        db.anime.insert_one(item)
-        import asyncio
-        asyncio.create_task(send_webhook(f"New Anime Added: {item['title']}"))
-        return {"message": "Anime added"}
-    except Exception as e:
-        print(f"Add anime error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add anime")
+def add_anime(data: AnimeData, background: BackgroundTasks, admin=Depends(require_admin)):
+    item = insert_content(db.anime, data, with_episodes=True)
+    background.add_task(send_webhook, f"New Anime Added: {item['title']}")
+    return {"message": "Anime added"}
+
 
 @app.post("/api/admin/tvshows")
 def add_tvshow(data: TvShowData, admin=Depends(require_admin)):
-    try:
-        item = data.model_dump()
-        item["poster"] = valid_url(item["poster"])
-        item["banner"] = valid_url(item["banner"])
-        item["created_at"] = utc_now()
-        item["views"] = 0
-        item["episodes"] = []
-        db.tv_shows.insert_one(item)
-        return {"message": "TV show added"}
-    except Exception as e:
-        print(f"Add TV show error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add TV show")
+    insert_content(db.tv_shows, data, with_episodes=True)
+    return {"message": "TV show added"}
+
 
 @app.post("/api/admin/movies")
 def add_movie(data: MovieData, admin=Depends(require_admin)):
-    try:
-        item = data.model_dump()
-        item["poster"] = valid_url(item["poster"])
-        item["banner"] = valid_url(item["banner"])
-        item["created_at"] = utc_now()
-        item["views"] = 0
-        db.movies.insert_one(item)
-        return {"message": "Movie added"}
-    except Exception as e:
-        print(f"Add movie error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add movie")
+    insert_content(db.movies, data, with_episodes=False)
+    return {"message": "Movie added"}
+
 
 @app.post("/api/admin/anime/{id}/episodes")
 def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
-    try:
-        ep = data.model_dump()
-        db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
-        return {"message": "Episode added"}
-    except Exception as e:
-        print(f"Add episode error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add episode")
+    result = db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": data.model_dump()}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Anime not found")
+    return {"message": "Episode added"}
+
 
 @app.post("/api/admin/tvshows/{id}/episodes")
 def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
-    try:
-        ep = data.model_dump()
-        db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
-        return {"message": "Episode added"}
-    except Exception as e:
-        print(f"Add TV episode error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to add episode")
+    result = db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": data.model_dump()}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="TV show not found")
+    return {"message": "Episode added"}
+
 
 # --- Watchlist & Comments ---
 
+
 @app.post("/api/watchlist/{type}/{id}")
 def toggle_watchlist(type: str, id: str, user=Depends(require_user)):
-    try:
-        if type not in ["anime", "tv_show", "movie"]: raise HTTPException(400, "Invalid type")
-        query = {"user_id": user["_id"], "content_type": type, "content_id": id}
-        if db.watchlist.find_one(query):
-            db.watchlist.delete_one(query)
-            return {"saved": False}
-        else:
-            db.watchlist.insert_one({**query, "created_at": utc_now()})
-            return {"saved": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Watchlist error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to update watchlist")
+    get_collection(type)  # validates type
+    object_id(id)  # validates id
+    query = {"user_id": user["_id"], "content_type": type, "content_id": id}
+    if db.watchlist.find_one(query):
+        db.watchlist.delete_one(query)
+        return {"saved": False}
+    db.watchlist.insert_one({**query, "created_at": utc_now()})
+    return {"saved": True}
+
 
 @app.get("/api/watchlist")
 def get_watchlist(user=Depends(require_user)):
-    try:
-        return list(db.watchlist.find({"user_id": user["_id"]}))
-    except Exception as e:
-        print(f"Get watchlist error: {e}")
-        return []
+    rows = list(db.watchlist.find({"user_id": user["_id"]}).sort("created_at", -1))
+    result = []
+    for row in rows:
+        try:
+            doc = get_collection(row["content_type"]).find_one(
+                {"_id": ObjectId(row["content_id"])}, {"title": 1, "poster": 1}
+            )
+        except Exception:
+            doc = None
+        if not doc:
+            continue
+        result.append(
+            {
+                "content_type": row["content_type"],
+                "content_id": row["content_id"],
+                "title": doc.get("title", ""),
+                "poster": doc.get("poster", ""),
+                "created_at": serialize_value(row.get("created_at")),
+            }
+        )
+    return result
+
 
 @app.post("/api/comments")
 def add_comment(data: CommentData, user=Depends(require_user)):
-    try:
-        db.comments.insert_one({
+    get_collection(data.content_type)
+    object_id(data.content_id)
+    db.comments.insert_one(
+        {
             "content_type": data.content_type,
             "content_id": data.content_id,
             "user_id": user["_id"],
             "username": user["email"].split("@")[0],
             "text": data.text,
-            "created_at": utc_now()
-        })
-        return {"message": "Comment posted"}
-    except Exception as e:
-        print(f"Add comment error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to post comment")
+            "created_at": utc_now(),
+        }
+    )
+    return {"message": "Comment posted"}
+
 
 @app.get("/api/comments/{type}/{id}")
 def get_comments(type: str, id: str):
-    try:
-        return list(db.comments.find({"content_type": type, "content_id": id}).sort("created_at", -1))
-    except Exception as e:
-        print(f"Get comments error: {e}")
-        return []
+    get_collection(type)
+    rows = db.comments.find({"content_type": type, "content_id": id}).sort("created_at", -1).limit(100)
+    return [
+        {
+            "username": r.get("username", "user"),
+            "text": r.get("text", ""),
+            "created_at": serialize_value(r.get("created_at")),
+        }
+        for r in rows
+    ]
+
 
 # --- Requests ---
 
+
 @app.post("/api/requests")
 def create_request(data: RequestData, user=Depends(require_user)):
-    try:
-        db.requests.insert_one({
+    db.requests.insert_one(
+        {
             "user_id": user["_id"],
             "email": user["email"],
             **data.model_dump(),
             "status": "Pending",
-            "created_at": utc_now()
-        })
-        return {"message": "Request submitted"}
-    except Exception as e:
-        print(f"Create request error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to submit request")
+            "created_at": utc_now(),
+        }
+    )
+    return {"message": "Request submitted"}
+
 
 @app.get("/api/admin/requests")
 def get_requests(admin=Depends(require_admin)):
-    try:
-        return list(db.requests.find().sort("created_at", -1))
-    except Exception as e:
-        print(f"Get requests error: {e}")
-        return []
+    rows = db.requests.find().sort("created_at", -1).limit(200)
+    return [serialize_doc(r) for r in rows]
+
+
+@app.patch("/api/admin/requests/{id}")
+def update_request(id: str, data: RequestStatus, admin=Depends(require_admin)):
+    result = db.requests.update_one({"_id": object_id(id)}, {"$set": {"status": data.status}})
+    if not result.matched_count:
+        raise HTTPException(status_code=404, detail="Request not found")
+    return {"message": "Request updated"}
+
 
 # --- Frontend Serving ---
+
 
 @app.get("/")
 def home():
     return FileResponse("public/index.html")
+
 
 app.mount("/assets", StaticFiles(directory="public"), name="assets")
