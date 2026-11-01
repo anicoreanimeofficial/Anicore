@@ -13,19 +13,25 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
+from bson import ObjectId
+
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from pydantic import BaseModel, Field
 
 
-# ---------------- CONFIGURATION ----------------
+# ==================================================
+# CONFIGURATION
+# ==================================================
 
 APP_NAME = "Anicore"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PUBLIC_DIR = BASE_DIR / "public"
 
-MONGODB_URI = os.getenv("MONGODB_URI", "")
+MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
 DATABASE_NAME = os.getenv("DATABASE_NAME", "anicore")
+
 SECRET_KEY = os.getenv("SECRET_KEY", "")
 
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "").strip().lower()
@@ -40,13 +46,24 @@ if len(SECRET_KEY) < 32:
     raise RuntimeError("SECRET_KEY must be at least 32 characters")
 
 if not PUBLIC_DIR.is_dir():
-    raise RuntimeError(f"Frontend folder not found: {PUBLIC_DIR}")
+    raise RuntimeError(f"Frontend directory not found: {PUBLIC_DIR}")
+
+if ADMIN_EMAIL and not ADMIN_PASSWORD:
+    raise RuntimeError("ADMIN_PASSWORD is missing")
+
+if ADMIN_PASSWORD and len(ADMIN_PASSWORD) < 6:
+    raise RuntimeError("ADMIN_PASSWORD must contain at least 6 characters")
+
+
+# ==================================================
+# DATABASE
+# ==================================================
 
 client = MongoClient(
     MONGODB_URI,
     serverSelectionTimeoutMS=10000,
     connectTimeoutMS=10000,
-    maxPoolSize=30,
+    maxPoolSize=30
 )
 
 db = client[DATABASE_NAME]
@@ -59,11 +76,16 @@ serializer = URLSafeTimedSerializer(
     salt="anicore-session"
 )
 
+
+# ==================================================
+# FASTAPI APPLICATION
+# ==================================================
+
 app = FastAPI(title=APP_NAME)
 
 allowed_origins = [
     FRONTEND_URL,
-    "https://anicore-f6f4.onrender.com",
+    "https://anicore-f6f4.onrender.com"
 ]
 
 allowed_origins = list(dict.fromkeys(
@@ -75,11 +97,13 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type"]
 )
 
 
-# ---------------- SECURITY ----------------
+# ==================================================
+# SECURITY
+# ==================================================
 
 COOKIE_NAME = "anicore_session"
 
@@ -89,8 +113,8 @@ def hash_password(password):
 
     hashed = hashlib.pbkdf2_hmac(
         "sha256",
-        password.encode(),
-        salt.encode(),
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
         310000
     ).hex()
 
@@ -103,8 +127,8 @@ def verify_password(password, stored):
 
         new_hash = hashlib.pbkdf2_hmac(
             "sha256",
-            password.encode(),
-            salt.encode(),
+            password.encode("utf-8"),
+            salt.encode("utf-8"),
             310000
         ).hex()
 
@@ -120,12 +144,13 @@ def set_session(response, user):
     })
 
     response.set_cookie(
-        COOKIE_NAME,
-        token,
+        key=COOKIE_NAME,
+        value=token,
         httponly=True,
         secure=True,
         samesite="none",
-        max_age=60 * 60 * 24 * 7
+        max_age=604800,
+        path="/"
     )
 
 
@@ -138,7 +163,7 @@ def get_current_user(request: Request):
     try:
         data = serializer.loads(
             token,
-            max_age=60 * 60 * 24 * 7
+            max_age=604800
         )
 
         return users.find_one({
@@ -156,19 +181,64 @@ def require_user(request: Request):
     user = get_current_user(request)
 
     if not user:
-        raise HTTPException(401, "Please sign in")
+        raise HTTPException(
+            status_code=401,
+            detail="Please sign in"
+        )
 
     return user
 
 
 def require_admin(user=Depends(require_user)):
     if user.get("role") != "admin":
-        raise HTTPException(403, "Admin access required")
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required"
+        )
 
     return user
 
 
-# ---------------- INPUT MODELS ----------------
+# ==================================================
+# DATABASE STARTUP AND ADMIN SETUP
+# ==================================================
+
+@app.on_event("startup")
+def startup():
+    client.admin.command("ping")
+
+    users.create_index("email", unique=True)
+    anime_collection.create_index("title")
+
+    if ADMIN_EMAIL and ADMIN_PASSWORD:
+
+        admin_password_hash = hash_password(ADMIN_PASSWORD)
+
+        users.update_one(
+            {"email": ADMIN_EMAIL},
+            {
+                "$set": {
+                    "email": ADMIN_EMAIL,
+                    "password": admin_password_hash,
+                    "role": "admin"
+                },
+                "$setOnInsert": {
+                    "created_at": datetime.now(timezone.utc),
+                    "watchlist": [],
+                    "progress": {}
+                }
+            },
+            upsert=True
+        )
+
+        print("Anicore admin account synchronized successfully.")
+
+    print("Anicore database connected successfully.")
+
+
+# ==================================================
+# INPUT MODELS
+# ==================================================
 
 class RegisterData(BaseModel):
     email: str
@@ -206,7 +276,9 @@ class ProgressData(BaseModel):
     episode: int
 
 
-# ---------------- HELPERS ----------------
+# ==================================================
+# HELPERS
+# ==================================================
 
 def clean_anime(anime):
     anime["_id"] = str(anime["_id"])
@@ -228,37 +300,16 @@ def valid_telegram_url(url):
         return False
 
 
-def valid_object_id(anime_id):
-    from bson import ObjectId
-    return ObjectId.is_valid(anime_id)
+def get_object_id(anime_id):
+    if not ObjectId.is_valid(anime_id):
+        raise HTTPException(400, "Invalid anime ID")
+
+    return ObjectId(anime_id)
 
 
-# ---------------- DATABASE ----------------
-
-@app.on_event("startup")
-def startup():
-    client.admin.command("ping")
-
-    users.create_index("email", unique=True)
-    anime_collection.create_index("title")
-
-    if ADMIN_EMAIL and ADMIN_PASSWORD:
-        existing_admin = users.find_one({
-            "email": ADMIN_EMAIL
-        })
-
-        if not existing_admin:
-            users.insert_one({
-                "email": ADMIN_EMAIL,
-                "password": hash_password(ADMIN_PASSWORD),
-                "role": "admin",
-                "created_at": datetime.now(timezone.utc),
-                "watchlist": [],
-                "progress": {}
-            })
-
-
-# ---------------- BASIC ROUTES ----------------
+# ==================================================
+# HEALTH
+# ==================================================
 
 @app.get("/api/health")
 def health():
@@ -267,6 +318,10 @@ def health():
         "app": APP_NAME
     }
 
+
+# ==================================================
+# AUTHENTICATION
+# ==================================================
 
 @app.get("/api/auth/me")
 def me(request: Request):
@@ -284,8 +339,6 @@ def me(request: Request):
     }
 
 
-# ---------------- AUTHENTICATION ----------------
-
 @app.post("/api/auth/register")
 def register(data: RegisterData, response: Response):
     email = data.email.strip().lower()
@@ -293,8 +346,8 @@ def register(data: RegisterData, response: Response):
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
         raise HTTPException(400, "Enter a valid email address")
 
-    if users.find_one({"email": email}):
-        raise HTTPException(409, "Account already exists")
+    if email == ADMIN_EMAIL:
+        raise HTTPException(403, "This email is reserved for the administrator")
 
     user = {
         "email": email,
@@ -307,10 +360,9 @@ def register(data: RegisterData, response: Response):
 
     try:
         users.insert_one(user)
-    except Exception as exc:
-        if "DuplicateKeyError" in type(exc).__name__:
-            raise HTTPException(409, "Account already exists")
-        raise
+
+    except DuplicateKeyError:
+        raise HTTPException(409, "Account already exists")
 
     set_session(response, user)
 
@@ -324,13 +376,18 @@ def register(data: RegisterData, response: Response):
 def login(data: LoginData, response: Response):
     email = data.email.strip().lower()
 
-    user = users.find_one({"email": email})
+    user = users.find_one({
+        "email": email
+    })
 
     if not user or not verify_password(
         data.password,
         user.get("password", "")
     ):
-        raise HTTPException(401, "Incorrect email or password")
+        raise HTTPException(
+            401,
+            "Incorrect email or password"
+        )
 
     set_session(response, user)
 
@@ -345,13 +402,16 @@ def logout(response: Response):
     response.delete_cookie(
         COOKIE_NAME,
         secure=True,
-        samesite="none"
+        samesite="none",
+        path="/"
     )
 
     return {"success": True}
 
 
-# ---------------- ANIME API ----------------
+# ==================================================
+# ANIME API
+# ==================================================
 
 @app.get("/api/anime")
 def list_anime():
@@ -365,13 +425,8 @@ def list_anime():
 
 @app.get("/api/anime/{anime_id}")
 def anime_detail(anime_id: str):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     anime = anime_collection.find_one({
-        "_id": ObjectId(anime_id)
+        "_id": get_object_id(anime_id)
     })
 
     if not anime:
@@ -380,7 +435,9 @@ def anime_detail(anime_id: str):
     return clean_anime(anime)
 
 
-# ---------------- ADMIN ANIME MANAGEMENT ----------------
+# ==================================================
+# ADMIN ANIME MANAGEMENT
+# ==================================================
 
 @app.post("/api/admin/anime")
 def create_anime(
@@ -410,11 +467,6 @@ def update_anime(
     data: AnimeData,
     admin=Depends(require_admin)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     anime_data = data.model_dump()
     anime_data["title"] = anime_data["title"].strip()
 
@@ -422,7 +474,7 @@ def update_anime(
         raise HTTPException(400, "Anime title is required")
 
     result = anime_collection.update_one(
-        {"_id": ObjectId(anime_id)},
+        {"_id": get_object_id(anime_id)},
         {"$set": anime_data}
     )
 
@@ -437,13 +489,8 @@ def delete_anime(
     anime_id: str,
     admin=Depends(require_admin)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     result = anime_collection.delete_one({
-        "_id": ObjectId(anime_id)
+        "_id": get_object_id(anime_id)
     })
 
     if not result.deleted_count:
@@ -457,7 +504,9 @@ def delete_anime(
     return {"success": True}
 
 
-# ---------------- EPISODE API ----------------
+# ==================================================
+# EPISODE MANAGEMENT
+# ==================================================
 
 @app.post("/api/admin/anime/{anime_id}/episodes")
 def add_episode(
@@ -465,11 +514,6 @@ def add_episode(
     data: EpisodeData,
     admin=Depends(require_admin)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     if not valid_telegram_url(data.telegram_url):
         raise HTTPException(400, "Enter a valid Telegram post link")
 
@@ -477,7 +521,7 @@ def add_episode(
     episode["telegram_url"] = episode["telegram_url"].strip()
 
     result = anime_collection.update_one(
-        {"_id": ObjectId(anime_id)},
+        {"_id": get_object_id(anime_id)},
         {"$push": {"episodes": episode}}
     )
 
@@ -494,16 +538,13 @@ def update_episode(
     data: EpisodeData,
     admin=Depends(require_admin)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     if not valid_telegram_url(data.telegram_url):
         raise HTTPException(400, "Enter a valid Telegram post link")
 
+    anime_oid = get_object_id(anime_id)
+
     anime = anime_collection.find_one({
-        "_id": ObjectId(anime_id)
+        "_id": anime_oid
     })
 
     episodes = anime.get("episodes", []) if anime else []
@@ -515,7 +556,7 @@ def update_episode(
     episode["telegram_url"] = episode["telegram_url"].strip()
 
     anime_collection.update_one(
-        {"_id": ObjectId(anime_id)},
+        {"_id": anime_oid},
         {"$set": {
             f"episodes.{episode_index}": episode
         }}
@@ -530,13 +571,10 @@ def delete_episode(
     episode_index: int,
     admin=Depends(require_admin)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
+    anime_oid = get_object_id(anime_id)
 
     anime = anime_collection.find_one({
-        "_id": ObjectId(anime_id)
+        "_id": anime_oid
     })
 
     episodes = anime.get("episodes", []) if anime else []
@@ -547,28 +585,25 @@ def delete_episode(
     episodes.pop(episode_index)
 
     anime_collection.update_one(
-        {"_id": ObjectId(anime_id)},
+        {"_id": anime_oid},
         {"$set": {"episodes": episodes}}
     )
 
     return {"success": True}
 
 
-# ---------------- USER FEATURES ----------------
+# ==================================================
+# USER WATCHLIST
+# ==================================================
 
 @app.post("/api/watchlist/{anime_id}")
 def toggle_watchlist(
     anime_id: str,
     user=Depends(require_user)
 ):
-    from bson import ObjectId
+    anime_oid = get_object_id(anime_id)
 
-    if not ObjectId.is_valid(anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
-    if not anime_collection.find_one({
-        "_id": ObjectId(anime_id)
-    }):
+    if not anime_collection.find_one({"_id": anime_oid}):
         raise HTTPException(404, "Anime not found")
 
     email = user["email"]
@@ -589,22 +624,21 @@ def toggle_watchlist(
     return {"saved": True}
 
 
+# ==================================================
+# WATCH PROGRESS
+# ==================================================
+
 @app.post("/api/progress")
 def save_progress(
     data: ProgressData,
     user=Depends(require_user)
 ):
-    from bson import ObjectId
-
-    if not ObjectId.is_valid(data.anime_id):
-        raise HTTPException(400, "Invalid anime ID")
-
     if data.episode < 1:
         raise HTTPException(400, "Invalid episode number")
 
-    if not anime_collection.find_one({
-        "_id": ObjectId(data.anime_id)
-    }):
+    anime_oid = get_object_id(data.anime_id)
+
+    if not anime_collection.find_one({"_id": anime_oid}):
         raise HTTPException(404, "Anime not found")
 
     users.update_one(
@@ -617,11 +651,13 @@ def save_progress(
     return {"success": True}
 
 
-# ---------------- FRONTEND ----------------
-# Keep these mounts AFTER all API routes.
-# /static/style.css and /static/app.js will work.
-# /style.css and /app.js will also work.
-# / will serve public/index.html.
+# ==================================================
+# FRONTEND
+# ==================================================
+
+# Serve static assets:
+# /static/style.css
+# /static/app.js
 
 app.mount(
     "/static",
@@ -629,8 +665,29 @@ app.mount(
     name="static"
 )
 
-app.mount(
-    "/",
-    StaticFiles(directory=str(PUBLIC_DIR), html=True),
-    name="frontend"
-)
+
+# Serve the homepage and other public files:
+# /
+# /index.html
+# /style.css
+# /app.js
+
+@app.get("/", include_in_schema=False)
+def homepage():
+    return FileResponse(
+        str(PUBLIC_DIR / "index.html")
+    )
+
+
+@app.get("/{filename:path}", include_in_schema=False)
+def frontend_files(filename: str):
+    requested_file = (PUBLIC_DIR / filename).resolve()
+
+    # Prevent directory traversal.
+    if not requested_file.is_relative_to(PUBLIC_DIR.resolve()):
+        raise HTTPException(404, "File not found")
+
+    if not requested_file.is_file():
+        raise HTTPException(404, "File not found")
+
+    return FileResponse(str(requested_file))
