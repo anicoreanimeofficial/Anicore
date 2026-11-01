@@ -1,4 +1,4 @@
-const CACHE = "anicore-v1";
+const CACHE = "anicore-v2";
 const ASSETS = ["/", "/assets/style.css", "/assets/app.js", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -18,7 +18,6 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  // Only cache same-origin static assets; always network for API
   if (url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
 
   e.respondWith(
