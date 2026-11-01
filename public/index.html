@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#09090f">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#09090f" id="themeColorMeta">
+  <meta name="description" content="ANICORE — Discover Anime, TV Shows and Movies">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.json">
   <title>ANICORE</title>
   <link rel="stylesheet" href="/assets/style.css">
 </head>
@@ -11,147 +15,243 @@
 
   <canvas id="snow" aria-hidden="true"></canvas>
 
-  <header class="app-header">
+  <!-- Desktop sidebar -->
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <a class="brand" href="#" data-page="home">ANICORE<span>™</span></a>
-    <div class="header-actions">
-      <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
-      <button id="signInBtn" class="outline small" type="button">Sign In</button>
-      <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
+    <nav class="side-nav">
+      <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span> Home</button>
+      <button type="button" data-page="anime"><span class="nav-icon">▣</span> Anime</button>
+      <button type="button" data-page="tv"><span class="nav-icon">📺</span> TV Shows</button>
+      <button type="button" data-page="movies"><span class="nav-icon">▶</span> Movies</button>
+      <button type="button" data-page="profile"><span class="nav-icon">◉</span> Profile</button>
+      <button type="button" id="sideAdminBtn" data-page="admin" class="hidden"><span class="nav-icon">⚙</span> Admin</button>
+    </nav>
+    <div class="side-footer">
+      <button type="button" id="themeToggle" class="outline small" aria-label="Toggle dark/light mode">🌓 Theme</button>
+      <button type="button" id="sideSignIn" class="outline small">Sign In</button>
+      <button type="button" id="sideLogout" class="outline small hidden">Logout</button>
     </div>
-  </header>
+  </aside>
 
-  <main id="appMain">
-    <!-- HOME -->
-    <section class="page active" id="page-home">
-      <div class="intro">
-        <h1>Discover Your Next Story</h1>
-        <p class="muted">Anime, TV Shows, and Movies.</p>
+  <div class="app-shell">
+    <header class="app-header">
+      <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
+      <a class="brand mobile-brand" href="#" data-page="home">ANICORE<span>™</span></a>
+      <div class="header-actions">
+        <button id="themeToggleMobile" class="outline small" type="button" aria-label="Toggle theme">🌓</button>
+        <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
+        <button id="signInBtn" class="outline small" type="button">Sign In</button>
+        <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
       </div>
-      <h3 class="section-title">Trending Anime</h3>
-      <div id="homeAnimeGrid" class="media-grid"></div>
+    </header>
 
-      <h3 class="section-title">Popular TV Shows</h3>
-      <div id="homeTvGrid" class="media-grid"></div>
+    <main id="appMain">
+      <!-- HOME -->
+      <section class="page active" id="page-home" aria-label="Home">
+        <div class="intro">
+          <h1>Discover Your Next Story</h1>
+          <p class="muted">Anime, TV Shows, and Movies.</p>
+        </div>
 
-      <h3 class="section-title">Latest Movies</h3>
-      <div id="homeMovieGrid" class="media-grid"></div>
-    </section>
+        <div id="continueSection" class="hidden">
+          <h3 class="section-title">Continue Watching</h3>
+          <div id="continueGrid" class="media-grid horizontal"></div>
+        </div>
 
-    <!-- ANIME -->
-    <section class="page" id="page-anime">
-      <div class="section">
-        <h2>Anime Catalogue</h2>
-        <input type="search" id="animeSearch" placeholder="Search anime..." aria-label="Search anime">
-        <div id="animeGrid" class="media-grid flush"></div>
-        <button id="loadMoreAnime" class="outline block hidden" type="button">Load More</button>
-      </div>
-    </section>
+        <h3 class="section-title">Trending Anime</h3>
+        <div id="homeAnimeGrid" class="media-grid"></div>
 
-    <!-- TV SHOWS -->
-    <section class="page" id="page-tv">
-      <div class="section">
-        <h2>TV Shows</h2>
-        <input type="search" id="tvSearch" placeholder="Search TV shows..." aria-label="Search TV shows">
-        <div id="tvGrid" class="media-grid flush"></div>
-        <button id="loadMoreTv" class="outline block hidden" type="button">Load More</button>
-      </div>
-    </section>
+        <h3 class="section-title">Popular TV Shows</h3>
+        <div id="homeTvGrid" class="media-grid"></div>
 
-    <!-- MOVIES -->
-    <section class="page" id="page-movies">
-      <div class="section">
-        <h2>Movies</h2>
-        <input type="search" id="movieSearch" placeholder="Search movies..." aria-label="Search movies">
-        <div id="movieGrid" class="media-grid flush"></div>
-        <button id="loadMoreMovies" class="outline block hidden" type="button">Load More</button>
-      </div>
-    </section>
+        <h3 class="section-title">Latest Movies</h3>
+        <div id="homeMovieGrid" class="media-grid"></div>
+      </section>
 
-    <!-- PROFILE -->
-    <section class="page" id="page-profile">
-      <div class="section">
-        <h2>My Profile</h2>
-        <div id="profileInfo"></div>
-
-        <div id="profileMember" class="hidden">
-          <div class="panel">
-            <h3>Request a Title</h3>
-            <form id="requestForm">
-              <input id="reqTitle" placeholder="Title" maxlength="180" required>
-              <select id="reqLanguage" aria-label="Language">
-                <option>Hindi Dub</option>
-                <option>English Dub</option>
-                <option>Subbed</option>
-                <option>Other</option>
+      <!-- ANIME -->
+      <section class="page" id="page-anime" aria-label="Anime catalogue">
+        <div class="section">
+          <h2>Anime Catalogue</h2>
+          <div class="filters" id="animeFilters">
+            <input type="search" id="animeSearch" placeholder="Search anime..." aria-label="Search anime">
+            <div class="filter-row">
+              <select id="animeGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="animeStatus" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
               </select>
-              <textarea id="reqNotes" rows="2" maxlength="500" placeholder="Notes (optional)"></textarea>
-              <button type="submit" class="primary block">Send Request</button>
+              <select id="animeSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+            <div class="genre-chips" id="animeChips" role="listbox" aria-label="Quick genres"></div>
+          </div>
+          <div id="animeGrid" class="media-grid flush"></div>
+          <div id="animeSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="animeEmpty" class="muted empty hidden">No anime found.</p>
+        </div>
+      </section>
+
+      <!-- TV -->
+      <section class="page" id="page-tv" aria-label="TV Shows">
+        <div class="section">
+          <h2>TV Shows</h2>
+          <div class="filters" id="tvFilters">
+            <input type="search" id="tvSearch" placeholder="Search TV shows..." aria-label="Search TV shows">
+            <div class="filter-row">
+              <select id="tvGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="tvStatus" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <select id="tvSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+            <div class="genre-chips" id="tvChips" role="listbox" aria-label="Quick genres"></div>
+          </div>
+          <div id="tvGrid" class="media-grid flush"></div>
+          <div id="tvSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="tvEmpty" class="muted empty hidden">No TV shows found.</p>
+        </div>
+      </section>
+
+      <!-- MOVIES -->
+      <section class="page" id="page-movies" aria-label="Movies">
+        <div class="section">
+          <h2>Movies</h2>
+          <div class="filters" id="movieFilters">
+            <input type="search" id="movieSearch" placeholder="Search movies..." aria-label="Search movies">
+            <div class="filter-row">
+              <select id="movieGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="movieStatus" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <select id="movieSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+            <div class="genre-chips" id="movieChips" role="listbox" aria-label="Quick genres"></div>
+          </div>
+          <div id="movieGrid" class="media-grid flush"></div>
+          <div id="movieSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="movieEmpty" class="muted empty hidden">No movies found.</p>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section class="page" id="page-profile" aria-label="Profile">
+        <div class="section">
+          <h2>My Profile</h2>
+          <div id="profileInfo"></div>
+          <div id="profileMember" class="hidden">
+            <div class="panel">
+              <h3>Request a Title</h3>
+              <form id="requestForm">
+                <input id="reqTitle" placeholder="Title" maxlength="180" required>
+                <select id="reqLanguage" aria-label="Language">
+                  <option>Hindi Dub</option>
+                  <option>English Dub</option>
+                  <option>Subbed</option>
+                  <option>Other</option>
+                </select>
+                <textarea id="reqNotes" rows="2" maxlength="500" placeholder="Notes (optional)"></textarea>
+                <button type="submit" class="primary block">Send Request</button>
+              </form>
+            </div>
+            <h3>My Watchlist</h3>
+            <div id="watchlistGrid" class="media-grid flush"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ADMIN -->
+      <section class="page" id="page-admin" aria-label="Admin">
+        <div class="section">
+          <h2>Admin Studio</h2>
+          <div class="panel" id="adminStatsPanel">
+            <h3>Overview</h3>
+            <div id="adminStats" class="stats-grid"></div>
+          </div>
+          <div class="panel">
+            <h3 id="adminFormTitle">Add Content</h3>
+            <form id="adminForm">
+              <input type="hidden" id="aId">
+              <select id="aType" aria-label="Content type">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+                <option value="movie">Movie</option>
+              </select>
+              <input id="aTitle" placeholder="Title" maxlength="180" required>
+              <textarea id="aDesc" rows="3" maxlength="5000" placeholder="Description"></textarea>
+              <input id="aGenres" placeholder="Genres (comma separated)">
+              <div class="row">
+                <input id="aYear" type="number" min="1900" max="2100" placeholder="Year">
+                <input id="aRating" placeholder="Display rating (e.g. 8.5)">
+              </div>
+              <select id="aStatus" aria-label="Status">
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
+              <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
+              <button type="submit" id="aSubmit" class="primary block">Save</button>
+              <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
             </form>
           </div>
-
-          <h3>My Watchlist</h3>
-          <div id="watchlistGrid" class="media-grid flush"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ADMIN -->
-    <section class="page" id="page-admin">
-      <div class="section">
-        <h2>Admin Studio</h2>
-        <div class="panel">
-          <h3 id="adminFormTitle">Add Content</h3>
-          <form id="adminForm">
-            <input type="hidden" id="aId">
-            <select id="aType" aria-label="Content type">
-              <option value="anime">Anime</option>
-              <option value="tv_show">TV Show</option>
-              <option value="movie">Movie</option>
-            </select>
-            <input id="aTitle" placeholder="Title" maxlength="180" required>
-            <textarea id="aDesc" rows="3" maxlength="5000" placeholder="Description"></textarea>
-            <input id="aGenres" placeholder="Genres (comma separated)">
-            <div class="row">
-              <input id="aYear" type="number" min="1900" max="2100" placeholder="Year">
-              <input id="aRating" placeholder="Rating (e.g. 8.5)">
+          <div class="panel">
+            <h3>Manage Library</h3>
+            <div class="lib-tools">
+              <select id="libType" aria-label="Library type">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Shows</option>
+                <option value="movie">Movies</option>
+              </select>
+              <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
             </div>
-            <select id="aStatus" aria-label="Status">
-              <option>Ongoing</option>
-              <option>Completed</option>
-              <option>Upcoming</option>
-            </select>
-            <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
-            <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
-            <button type="submit" id="aSubmit" class="primary block">Save</button>
-            <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
-          </form>
-        </div>
-
-        <div class="panel">
-          <h3>Manage Library</h3>
-          <div class="lib-tools">
-            <select id="libType" aria-label="Library type">
-              <option value="anime">Anime</option>
-              <option value="tv_show">TV Shows</option>
-              <option value="movie">Movies</option>
-            </select>
-            <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
+            <div id="libList"></div>
+            <button id="libMore" class="outline block hidden" type="button">Load More</button>
           </div>
-          <div id="libList"></div>
-          <button id="libMore" class="outline block hidden" type="button">Load More</button>
+          <div class="panel">
+            <h3>Requests</h3>
+            <div id="adminRequests"></div>
+          </div>
         </div>
+      </section>
 
-        <div class="panel">
-          <h3>Requests</h3>
-          <div id="adminRequests"></div>
+      <!-- DETAIL (full-page on desktop) -->
+      <section class="page" id="page-detail" aria-label="Details">
+        <div class="section detail-page">
+          <button type="button" class="outline small" id="detailBack">← Back</button>
+          <div id="detailPageContent"></div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
+    </main>
 
-  <footer>© <span id="yearNow"></span> ANICORE</footer>
+    <footer>© <span id="yearNow"></span> ANICORE</footer>
+  </div>
 
-  <!-- DETAIL MODAL (before auth modal so sign-in can appear on top) -->
+  <!-- DETAIL MODAL (mobile bottom sheet) -->
   <div id="detailModal" class="modal sheet-modal hidden" role="dialog" aria-modal="true" aria-label="Details">
     <div class="modal-card wide sheet" id="detailSheet">
       <div class="sheet-grip" aria-hidden="true"><span></span></div>
@@ -179,7 +279,7 @@
     </div>
   </div>
 
-  <!-- BOTTOM NAV -->
+  <!-- BOTTOM NAV (mobile) -->
   <nav class="bottom-nav" id="bottomNav" aria-label="Main">
     <span class="nav-pill" id="navPill" aria-hidden="true"></span>
     <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span>Home</button>
