@@ -30,6 +30,11 @@ class _DB:
             raise RuntimeError("Database is not connected.")
         return getattr(database.db, name)
 
+    def __getitem__(self, name):  # NEW: fixes '_DB' object is not subscriptable
+        if database.db is None:
+            raise RuntimeError("Database is not connected.")
+        return database.db[name]
+
 
 db = _DB()
 
@@ -77,7 +82,7 @@ class EpisodeData(BaseModel):
     description: str = ""
     thumbnail: str = ""
     duration: str = ""
-    video_url: str = ""          # NEW
+    video_url: str = ""
     quality_links: dict = {}
 
 
@@ -88,7 +93,7 @@ class EpisodeUpdate(BaseModel):
     description: Optional[str] = None
     thumbnail: Optional[str] = None
     duration: Optional[str] = None
-    video_url: Optional[str] = None   # NEW
+    video_url: Optional[str] = None
     quality_links: Optional[dict] = None
 
 
@@ -183,7 +188,7 @@ def valid_url(url: str) -> str:
     return url
 
 
-def valid_video_url(url: str) -> str:  # NEW
+def valid_video_url(url: str) -> str:
     url = (url or "").strip()
     if not url:
         return ""
