@@ -279,6 +279,49 @@
     </div>
   </div>
 
+  <!-- VIDEO PLAYER MODAL (NEW) -->
+  <div id="playerModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Video player">
+    <div class="modal-card player-card">
+      <div class="player-header">
+        <h3 id="playerTitle">Now Playing</h3>
+        <button class="close" type="button" id="playerClose" aria-label="Close">×</button>
+      </div>
+      <div class="player-wrap">
+        <iframe id="playerFrame" allowfullscreen
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                referrerpolicy="no-referrer"></iframe>
+      </div>
+      <div id="playerFallback" class="hidden">
+        <p class="muted">This source may block embedding.
+          <a id="playerOpenLink" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN EPISODES MODAL (NEW) -->
+  <div id="episodesModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Manage episodes">
+    <div class="modal-card wide">
+      <button class="close" type="button" id="episodesClose" aria-label="Close">×</button>
+      <h2 id="episodesTitle">Episodes</h2>
+      <form id="episodeForm">
+        <input type="hidden" id="epId">
+        <div class="row">
+          <input id="epSeason" type="number" min="1" value="1" placeholder="Season" required>
+          <input id="epNumber" type="number" min="1" placeholder="Episode" required>
+        </div>
+        <input id="epTitle" placeholder="Episode title (optional)">
+        <input id="epDuration" placeholder="Duration (e.g. 24m)">
+        <input id="epVideo" type="url" placeholder="Video URL (https://...) — embed or stream link" required>
+        <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
+        <button type="submit" class="primary block" id="epSubmit">Add Episode</button>
+        <button type="button" class="outline block form-cancel hidden" id="epCancel">Cancel edit</button>
+      </form>
+      <h3 style="margin-top:20px">Existing Episodes</h3>
+      <div id="episodeList"></div>
+    </div>
+  </div>
+
   <!-- BOTTOM NAV (mobile) -->
   <nav class="bottom-nav" id="bottomNav" aria-label="Main">
     <span class="nav-pill" id="navPill" aria-hidden="true"></span>
