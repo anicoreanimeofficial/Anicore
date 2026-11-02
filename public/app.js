@@ -1,6 +1,9 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+const BOOT_NAV = (() => {
+  try { return JSON.parse(sessionStorage.getItem('anicore-nav') || 'null'); } catch (e) { return null; }
+})();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 const APP_JS_VERSION = 'v13';
@@ -346,7 +349,7 @@ function showPage(page) {
     loadAdminStats();
   }
 
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo(0, 0);
 }
 
 document.addEventListener('click', (e) => {
@@ -410,7 +413,9 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     const progress = item.progress_percent
       ? `<div class="progress-bar"><span style="width:${Math.min(100, item.progress_percent)}%"></span></div>`
       : '';
-    const sub = rating || (item.year ? String(item.year) : (item.status || ''));
+    const sub = item._continue
+      ? `▶ Resume S${item.season || 1} · E${item.episode || 1}`
+      : (rating || (item.year ? String(item.year) : (item.status || '')));
 
     card.innerHTML = `
       <div class="poster-wrap">
@@ -432,7 +437,8 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 
     const open = () => {
       card.classList.add('card-press');
-      setTimeout(() => openDetail(item._type || type, item._id || item.content_id, item), 90);
+      if (item._continue) { requestAnimationFrame(() => resumeWatching(item)); return; }
+      requestAnimationFrame(() => openDetail(item._type || type, item._id || item.content_id, item));
     };
     card.addEventListener('click', open);
     card.addEventListener('keydown', (e) => {
@@ -482,7 +488,7 @@ async function loadContinueWatching() {
     if (!items.length) { section?.classList.add('hidden'); return; }
     section?.classList.remove('hidden');
     const mapped = items.map((i) => ({
-      ...i, _id: i.content_id, _type: i.content_type, progress_percent: i.progress_percent,
+      ...i, _id: i.content_id, _type: i.content_type, progress_percent: i.progress_percent, _continue: true,
     }));
     renderGrid($('continueGrid'), mapped, 'anime');
   } catch {
@@ -819,14 +825,20 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
+function seasonThumb(episodes, season) {
+  const hit = (episodes || []).find((e) => Number(e.season) === Number(season) && safeUrl(e.thumbnail));
+  return hit ? safeUrl(hit.thumbnail) : '';
+}
+
 function episodesHtml(episodes, type, contentId) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
-  return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => {
+  const seasons = [...new Set(sorted.map((e) => e.season))];
+  const epHtml = (ep) => {
     const thumb = safeUrl(ep.thumbnail) || '';
     return `
     <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
-      ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy">` : ''}
+      ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy" decoding="async">` : ''}
       <div class="ep-body">
         <div class="ep-header">
           <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
@@ -841,7 +853,19 @@ function episodesHtml(episodes, type, contentId) {
         ${linkList(ep.quality_links)}
       </div>
     </div>`;
-  }).join('')}</div>`;
+  };
+  return `<h3>Episodes</h3>` + seasons.map((s) => {
+    const list = sorted.filter((e) => e.season === s);
+    const st = seasonThumb(sorted, s);
+    return `
+    <div class="season-block">
+      <div class="season-head">
+        ${st ? `<img class="season-thumb" src="${esc(st)}" alt="" loading="lazy" decoding="async">` : ''}
+        <div><strong>Season ${esc(s)}</strong><div class="muted small-muted">${list.length} episode${list.length === 1 ? '' : 's'}</div></div>
+      </div>
+      <div class="episodes">${list.map(epHtml).join('')}</div>
+    </div>`;
+  }).join('');
 }
 
 function commentsHtml(comments) {
@@ -899,7 +923,7 @@ function buildDetailHtml(type, item, comments, reviews) {
   const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
 
   const rawDesc = ('description' in item) ? (item.description || 'No description available.') : '';
-  const longDesc = rawDesc.length > 220;
+  const longDesc = rawDesc.length > 160;
 
   return `
     ${banner ? `<img class="detail-banner" src="${esc(banner)}" alt="">` : ''}
@@ -907,7 +931,7 @@ function buildDetailHtml(type, item, comments, reviews) {
     <p class="muted meta" id="dMeta">${esc(metaText(item))}</p>
     <div class="synopsis ${longDesc ? 'collapsed' : ''}" id="synopsisBox">
       <p class="desc" id="synopsisText">${esc(rawDesc)}</p>
-      ${longDesc ? '<button type="button" class="text-button synopsis-toggle" id="synopsisToggle">More</button>' : ''}
+      ${longDesc ? '<button type="button" class="text-button synopsis-toggle" id="synopsisToggle">Read more</button>' : ''}
     </div>
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
     <div id="dRecapSlot">${recapHtml(item)}</div><div id="similarSlot"></div>
@@ -928,6 +952,13 @@ function buildDetailHtml(type, item, comments, reviews) {
 
 function bindDetailEvents(type, item, container) {
   container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
+
+  const synBtn = container.querySelector('#synopsisToggle');
+  synBtn?.addEventListener('click', () => {
+    const box = container.querySelector('#synopsisBox');
+    const collapsed = box.classList.toggle('collapsed');
+    synBtn.textContent = collapsed ? 'Read more' : 'Show less';
+  });
 
   container.querySelectorAll('.ep-play').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -1131,6 +1162,15 @@ async function mountPlayer(url, posterSrc = '') {
     video.preload = 'metadata';
     if (posterSrc) video.poster = posterSrc;
     video.setAttribute('playsinline', '');
+    let lastSave = 0;
+    video.addEventListener('timeupdate', () => {
+      if (!video.duration) return;
+      const now = Date.now();
+      if (now - lastSave < 15000) return;
+      lastSave = now;
+      saveWatchProgress(Math.round((video.currentTime / video.duration) * 100));
+    });
+    video.addEventListener('ended', () => saveWatchProgress(100));
     video.addEventListener('error', () => {
       fallback?.classList.remove('hidden');
     }, { once: true });
@@ -1200,6 +1240,45 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
   showPage('video');
 }
 
+
+// --- Continue Watching: save + resume ---
+
+function saveWatchProgress(percent = 0) {
+  if (!state.user || !videoContext || videoContext.type === 'movie') return;
+  const ep = videoContext.episodes[videoContext.currentIndex];
+  if (!ep) return;
+  api('/api/progress', {
+    method: 'POST',
+    body: JSON.stringify({
+      content_type: videoContext.type,
+      content_id: videoContext.contentId,
+      season: Number(ep.season),
+      episode: Number(ep.episode),
+      progress_percent: Math.max(0, Math.min(100, Number(percent) || 0)),
+    }),
+  }).catch(() => {});
+}
+
+async function resumeWatching(item) {
+  const type = item._type || item.content_type;
+  const id = item._id || item.content_id;
+  try {
+    const full = await api(`/api/content/${type}/${id}`);
+    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    if (!eps.length) { openDetail(type, id, item); return; }
+    let idx = eps.findIndex((e) => Number(e.season) === Number(item.season) && Number(e.episode) === Number(item.episode));
+    if (idx === -1) idx = 0;
+    // Finished that episode? jump to the next one
+    if (Number(item.progress_percent) >= 95 && idx < eps.length - 1) idx += 1;
+    const ep = eps[idx];
+    state.detailId = id;
+    state.detailType = type;
+    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster);
+  } catch (err) {
+    toast(err.message || 'Could not resume', 'error');
+  }
+}
+
 function loadVideoEpisode() {
   if (!videoContext) return;
   const ep = videoContext.episodes[videoContext.currentIndex];
@@ -1231,9 +1310,10 @@ function loadVideoEpisode() {
     }
   }
 
-  const posterSrc = safeUrl(ep.thumbnail) || safeUrl(videoContext.poster) || '';
+  const posterSrc = safeUrl(ep.thumbnail) || seasonThumb(videoContext.episodes, ep.season) || safeUrl(videoContext.poster) || '';
   mountPlayer(ep.video_url, posterSrc);
   updateVideoNav();
+  saveWatchProgress(0);
 }
 
 function updateVideoNav() {
@@ -1690,13 +1770,9 @@ wireSeriesPage();
   }
 
   await checkUser();
-  await loadGenres();
-  loadHome();
-  loadContinueWatching();
-  movePill(false);
 
   // Stay on the same page after refresh
-  const saved = restoreNavState();
+  const saved = BOOT_NAV;
   if (saved?.page && saved.page !== 'home') {
     if ((saved.page === 'detail' || saved.page === 'video') && saved.detailId && saved.detailType) {
       openDetail(saved.detailType, saved.detailId);
@@ -1704,6 +1780,11 @@ wireSeriesPage();
       showPage(saved.page);
     }
   }
+
+  await loadGenres();
+  loadHome();
+  loadContinueWatching();
+  movePill(false);
 })();
 
 
