@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const BOOT_NAV = (() => {
   try {
     // A shared link wins: #/detail/<type>/<id> or #/<page>
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const d = location.hash.match(/^#\/(?:detail|watch)\/([a-z_]+)\/([A-Za-z0-9]+)$/);
     if (d) return { page: 'detail', detailType: d[1], detailId: d[2] };
     const p = location.hash.match(/^#\/([a-z]+)$/);
     if (p) return { page: p[1] };
@@ -293,15 +293,50 @@ function saveNavState() {
       detailType: state.detailType,
     }));
   } catch (e) {}
-  // Give every page its own link in the address bar
+  // Give every page its own link + a real history entry (so the phone Back button stays in the app)
   try {
+    if (navPopping) return;
     let h = state.page === 'home' ? '' : '#/' + state.page;
     if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
-      h = '#/detail/' + state.detailType + '/' + state.detailId;
+      h = (state.page === 'video' ? '#/watch/' : '#/detail/') + state.detailType + '/' + state.detailId;
     }
-    if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
+    if (location.hash === h) return;
+    const idx = (history.state && history.state.i) || 0;
+    const url = location.pathname + location.search + h;
+    if (navReady) {
+      history.pushState({ i: idx + 1 }, '', url);
+      navStack[idx + 1] = h;
+    } else {
+      history.replaceState({ i: idx }, '', url);
+      navStack[idx] = h;
+    }
   } catch (e) {}
 }
+
+let navReady = false;
+let navPopping = false;
+const navStack = [];
+
+function goBack(fallbackPage) {
+  if ((history.state && history.state.i) > 0) history.back();
+  else showPage(fallbackPage);
+}
+
+window.addEventListener('popstate', () => {
+  navPopping = true;
+  try {
+    const d = location.hash.match(/^#\/(?:detail|watch)\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    if (d) {
+      openDetail(d[1], d[2]);
+    } else {
+      const p = location.hash.match(/^#\/([a-z]+)$/);
+      const page = p && PAGE_ORDER.includes(p[1]) && p[1] !== 'video' && p[1] !== 'detail' ? p[1] : 'home';
+      showPage(page);
+    }
+  } finally {
+    navPopping = false;
+  }
+});
 
 function restoreNavState() {
   try {
@@ -1096,7 +1131,7 @@ async function openDetail(type, id, preview) {
   }
 }
 
-$('detailBack')?.addEventListener('click', () => showPage('home'));
+$('detailBack')?.addEventListener('click', () => goBack('home'));
 
 // --- Video Player ---
 
@@ -1367,6 +1402,11 @@ $('videoBack')?.addEventListener('click', () => {
   clearPlayer();
   const backType = videoContext?.type || state.detailType;
   const backId = videoContext?.contentId || state.detailId;
+  const i = (history.state && history.state.i) || 0;
+  if (i > 0 && navStack[i - 1] === '#/detail/' + backType + '/' + backId) {
+    history.back();
+    return;
+  }
   videoContext = null;
   if (backType && backId) {
     openDetail(backType, backId);
@@ -1798,6 +1838,7 @@ wireSeriesPage();
   loadHome();
   loadContinueWatching();
   movePill(false);
+  navReady = true;
 })();
 
 
