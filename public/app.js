@@ -611,17 +611,17 @@ async function loadGenres() {
     }
 
 
-    const sg = $("seriesGenre");
-    if (sg) {
-      const cur = sg.value;
-      sg.innerHTML = '<option value="">All Genres</option>';
+    const ssg = $("seriesGenre");
+    if (ssg) {
+      const cur = ssg.value;
+      ssg.innerHTML = '<option value="">All Genres</option>';
       state.genres.forEach((g) => {
         const opt = document.createElement("option");
         opt.value = g;
         opt.textContent = g;
-        sg.appendChild(opt);
+        ssg.appendChild(opt);
       });
-      sg.value = cur;
+      ssg.value = cur;
     }
     const schips = $("seriesChips");
     if (schips) {
@@ -637,8 +637,8 @@ async function loadGenres() {
           schips.querySelectorAll(".genre-chip").forEach((c) => c.classList.remove("active"));
           if (!active) {
             btn.classList.add("active");
-            if (sg) sg.value = g;
-          } else if (sg) sg.value = "";
+            if (ssg) ssg.value = g;
+          } else if (ssg) ssg.value = "";
           loadSeries(true);
         });
         schips.appendChild(btn);
