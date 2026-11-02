@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v7';
+const APP_JS_VERSION = 'v8';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -15,12 +15,15 @@ const state = {
   detailType: null,
   genres: [],
   theme: localStorage.getItem('anicore-theme') || 'dark',
+  accent: localStorage.getItem('anicore-accent') || 'pink',
+  language: localStorage.getItem('anicore-lang') || 'en',
+  deferredInstall: null,
 };
 
 // videoContext = { type, contentId, contentTitle, episodes: [...], currentIndex: 0 }
 let videoContext = null;
 
-const PAGE_ORDER = ['home', 'anime', 'tv', 'movies', 'profile', 'admin', 'detail', 'video'];
+const PAGE_ORDER = ['home', 'search', 'anime', 'tv', 'movies', 'profile', 'admin', 'detail', 'video'];
 
 const LISTS = {
   anime: {
@@ -41,6 +44,35 @@ const LISTS = {
 };
 
 const PAGE_TYPES = { anime: 'anime', tv: 'tv_show', movies: 'movie' };
+
+
+// --- i18n ---
+const I18N = {
+  en: {
+    home: "Home", search: "Search", anime: "Anime", tv: "TV Shows", movies: "Movies",
+    profile: "Profile", admin: "Admin", recommended: "Recommended for You",
+    continue: "Continue Watching", activity: "Your Activity", preferences: "Preferences",
+    signIn: "Sign In", logout: "Logout", save: "Save Preferences",
+  },
+  hi: {
+    home: "होम", search: "खोजें", anime: "एनिमे", tv: "टीवी शो", movies: "फ़िल्में",
+    profile: "प्रोफ़ाइल", admin: "एडमिन", recommended: "आपके लिए सुझाव",
+    continue: "देखना जारी रखें", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
+    signIn: "साइन इन", logout: "लॉग आउट", save: "सेव करें",
+  },
+};
+
+function t(key) {
+  return (I18N[state.language] || I18N.en)[key] || key;
+}
+
+function applyI18n() {
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (key && t(key)) el.textContent = t(key);
+  });
+}
+
 
 // --- Helpers ---
 
@@ -89,9 +121,32 @@ async function api(path, options = {}) {
 
 // --- Theme ---
 
+
+function applyAccent(accent) {
+  state.accent = accent || "pink";
+  document.documentElement.setAttribute("data-accent", state.accent);
+  localStorage.setItem("anicore-accent", state.accent);
+  const sel = $("accentSelect");
+  if (sel) sel.value = state.accent;
+  const psel = $("profileAccent");
+  if (psel) psel.value = state.accent;
+}
+
+function applyLanguage(lang) {
+  state.language = lang === "hi" ? "hi" : "en";
+  localStorage.setItem("anicore-lang", state.language);
+  document.documentElement.lang = state.language === "hi" ? "hi" : "en";
+  const sel = $("langSelect");
+  if (sel) sel.value = state.language;
+  const psel = $("profileLang");
+  if (psel) psel.value = state.language;
+  applyI18n();
+}
+
+
 function applyTheme(theme) {
   state.theme = theme;
-  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : '');
+  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
   localStorage.setItem('anicore-theme', theme);
   const meta = $('themeColorMeta');
   if (meta) meta.content = theme === 'light' ? '#f4f2f8' : '#09090f';
@@ -150,11 +205,11 @@ function showPage(page) {
 
   const type = PAGE_TYPES[page];
   if (type && !LISTS[type].page) loadList(type, true);
-  if (page === 'home') {
+  if (page === 'home' && loadRecommendations()) {
     loadHome();
     loadContinueWatching();
   }
-  if (page === 'profile') loadProfile();
+  if (page === 'profile') { loadProfileActivity(); } loadProfile();
   if (page === 'admin') {
     loadAdminRequests();
     loadLibrary(true);
@@ -393,6 +448,20 @@ async function loadGenres() {
         });
       }
     });
+
+    const sg = $("searchGenre");
+    if (sg) {
+      const cur = sg.value;
+      sg.innerHTML = '<option value="">All Genres</option>';
+      state.genres.forEach((g) => {
+        const opt = document.createElement("option");
+        opt.value = g;
+        opt.textContent = g;
+        sg.appendChild(opt);
+      });
+      sg.value = cur;
+    }
+
   } catch { /* ignore */ }
 }
 
@@ -645,7 +714,7 @@ function buildDetailHtml(type, item, comments, reviews) {
     <p class="muted meta" id="dMeta">${esc(metaText(item))}</p>
     <p class="desc">${'description' in item ? esc(item.description || 'No description available.') : ''}</p>
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
-    <div id="dRecapSlot">${recapHtml(item)}</div>
+    <div id="dRecapSlot">${recapHtml(item)}</div><div id="similarSlot"></div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
     ${episodesHtml(item.episodes, type, item._id)}
     <div class="detail-actions">
@@ -1361,3 +1430,310 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   loadContinueWatching();
   movePill(false);
 })();
+
+
+// ============================================================
+// NEW FEATURES: Search, Recommendations, Profile Activity,
+// Anilist, Bulk Episodes, Analytics, PWA install, Prefs
+// ============================================================
+
+async function loadRecommendations() {
+  const section = $("recommendSection");
+  const grid = $("recommendGrid");
+  if (!section || !grid) return;
+  try {
+    const items = await api("/api/recommendations?limit=12");
+    if (!items || !items.length) {
+      section.classList.add("hidden");
+      return;
+    }
+    section.classList.remove("hidden");
+    renderGrid(grid, items.map((i) => ({ ...i, _type: i.content_type || "anime" })), "anime");
+  } catch {
+    section.classList.add("hidden");
+  }
+}
+
+let searchTimer;
+async function runGlobalSearch() {
+  const q = ($("globalSearch")?.value || "").trim();
+  const type = $("searchType")?.value || "";
+  const genre = $("searchGenre")?.value || "";
+  const sort = $("searchSort")?.value || "newest";
+  const grid = $("searchGrid");
+  const empty = $("searchEmpty");
+  if (!grid) return;
+  if (!q) {
+    grid.innerHTML = "";
+    if (empty) {
+      empty.textContent = "Type to search the catalogue.";
+      empty.classList.remove("hidden");
+    }
+    return;
+  }
+  try {
+    const params = new URLSearchParams({ q, sort, limit: "30" });
+    if (type) params.set("type", type);
+    if (genre) params.set("genre", genre);
+    const data = await api("/api/search?" + params.toString());
+    const items = data.items || [];
+    if (!items.length) {
+      grid.innerHTML = "";
+      if (empty) {
+        empty.textContent = "No results found.";
+        empty.classList.remove("hidden");
+      }
+      return;
+    }
+    if (empty) empty.classList.add("hidden");
+    renderGrid(grid, items.map((i) => ({ ...i, _type: i.content_type || "anime" })), "anime");
+  } catch (err) {
+    grid.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
+}
+
+function wireSearchPage() {
+  $("globalSearch")?.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runGlobalSearch, 280);
+  });
+  ["searchType", "searchGenre", "searchSort"].forEach((id) => {
+    $(id)?.addEventListener("change", runGlobalSearch);
+  });
+}
+
+async function loadProfileActivity() {
+  if (!state.user) return;
+  try {
+    const data = await api("/api/users/me/activity");
+    const box = $("profileActivity");
+    if (!box) return;
+    const rows = [];
+    (data.progress || []).slice(0, 5).forEach((p) => {
+      rows.push(`<div class="activity-item">▶ Continue S${p.season || 1}E${p.episode || 1} · ${esc(p.content_type)} · ${Math.round(p.progress_percent || 0)}%</div>`);
+    });
+    (data.ratings || []).slice(0, 5).forEach((r) => {
+      rows.push(`<div class="activity-item">★ Rated ${esc(r.rating)}/10 · ${esc(r.content_type)}</div>`);
+    });
+    (data.requests || []).slice(0, 3).forEach((r) => {
+      rows.push(`<div class="activity-item">✉ Request: <strong>${esc(r.title)}</strong> · ${esc(r.status)}</div>`);
+    });
+    if (!rows.length) {
+      box.innerHTML = `<p class="muted">No recent activity yet.</p>`;
+    } else {
+      box.innerHTML = rows.join("");
+    }
+    // Prefs
+    const prefs = data.prefs || {};
+    if (prefs.theme) applyTheme(prefs.theme);
+    if (prefs.accent) applyAccent(prefs.accent);
+    if (prefs.language) applyLanguage(prefs.language);
+  } catch { /* ignore */ }
+}
+
+async function savePreferences() {
+  if (!state.user) {
+    openAuth();
+    return;
+  }
+  const theme = $("profileTheme")?.value || state.theme;
+  const accent = $("profileAccent")?.value || state.accent;
+  const language = $("profileLang")?.value || state.language;
+  try {
+    await api("/api/users/me/prefs", {
+      method: "PUT",
+      body: JSON.stringify({ theme, accent, language }),
+    });
+    applyTheme(theme);
+    applyAccent(accent);
+    applyLanguage(language);
+    toast("Preferences saved");
+  } catch (err) {
+    toast(err.message, "err");
+  }
+}
+
+async function importFromAnilist(e) {
+  e.preventDefault();
+  const anilist_id = Number($("anilistId")?.value) || null;
+  const search = ($("anilistSearch")?.value || "").trim();
+  const content_type = $("anilistType")?.value || "anime";
+  const msg = $("anilistMsg");
+  if (!anilist_id && !search) {
+    if (msg) msg.textContent = "Enter an Anilist ID or search text.";
+    return;
+  }
+  try {
+    if (msg) msg.textContent = "Importing…";
+    const body = { content_type };
+    if (anilist_id) body.anilist_id = anilist_id;
+    else body.search = search;
+    const res = await api("/api/admin/import/anilist", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    if (msg) msg.textContent = res.message + (res.item ? ` — ${res.item.title}` : "");
+    toast(res.message);
+    $("anilistForm")?.reset();
+    // refresh lists
+    Object.keys(LISTS).forEach((t) => loadList(t, true));
+    loadAdminStats();
+  } catch (err) {
+    if (msg) msg.textContent = err.message;
+    toast(err.message, "err");
+  }
+}
+
+async function submitBulkEpisodes(e) {
+  e.preventDefault();
+  const content_type = $("bulkEpType")?.value || "anime";
+  const content_id = $("bulkEpContent")?.value;
+  const text = ($("bulkEpText")?.value || "").trim();
+  const msg = $("bulkEpMsg");
+  if (!content_id || !text) {
+    if (msg) msg.textContent = "Select a title and paste episode lines.";
+    return;
+  }
+  const episodes = [];
+  text.split("\n").forEach((line) => {
+    const parts = line.split("|").map((s) => s.trim());
+    if (parts.length < 2) return;
+    const season = Number(parts[0]) || 1;
+    const episode = Number(parts[1]);
+    if (!episode) return;
+    episodes.push({
+      season,
+      episode,
+      title: parts[2] || "",
+      video_url: parts[3] || "",
+      duration: parts[4] || "",
+      description: parts[5] || "",
+    });
+  });
+  if (!episodes.length) {
+    if (msg) msg.textContent = "No valid episode lines found.";
+    return;
+  }
+  try {
+    if (msg) msg.textContent = "Saving…";
+    const res = await api("/api/admin/bulk-episodes", {
+      method: "POST",
+      body: JSON.stringify({ content_type, content_id, episodes }),
+    });
+    if (msg) msg.textContent = res.message;
+    toast(res.message);
+    $("bulkEpText").value = "";
+  } catch (err) {
+    if (msg) msg.textContent = err.message;
+    toast(err.message, "err");
+  }
+}
+
+async function populateBulkContentSelect() {
+  const type = $("bulkEpType")?.value || "anime";
+  const sel = $("bulkEpContent");
+  if (!sel) return;
+  try {
+    const endpoint = type === "tv_show" ? "/api/tvshows?limit=100" : "/api/anime?limit=100";
+    const data = await api(endpoint);
+    const items = Array.isArray(data) ? data : (data.items || []);
+    sel.innerHTML = '<option value="">Select title…</option>' +
+      items.map((i) => `<option value="${esc(i._id)}">${esc(i.title)}</option>`).join("");
+  } catch {
+    sel.innerHTML = '<option value="">Failed to load</option>';
+  }
+}
+
+async function loadAnalytics() {
+  const box = $("analyticsContent");
+  const top = $("analyticsTop");
+  if (!box) return;
+  try {
+    const data = await api("/api/admin/analytics");
+    const t = data.totals || {};
+    const g = data.growth || {};
+    box.innerHTML = [
+      ["Anime", t.anime],
+      ["TV Shows", t.tv_shows],
+      ["Movies", t.movies],
+      ["Users", t.users],
+      ["Comments", t.comments],
+      ["Pending Req", t.requests_pending],
+      ["Users 7d", g.users_7d],
+      ["Comments 7d", g.comments_7d],
+    ].map(([label, num]) => `
+      <div class="stat-card">
+        <div class="num">${num ?? 0}</div>
+        <div class="label">${label}</div>
+      </div>
+    `).join("");
+
+    if (top) {
+      const anime = (data.top_viewed?.anime || []).map((a) =>
+        `<div class="activity-item">${esc(a.title)} · ${a.views || 0} views</div>`
+      ).join("") || "<p class='muted'>No data</p>";
+      const movies = (data.top_viewed?.movies || []).map((m) =>
+        `<div class="activity-item">${esc(m.title)} · ${m.views || 0} views</div>`
+      ).join("") || "<p class='muted'>No data</p>";
+      top.innerHTML = `
+        <div><h4>Top Anime (views)</h4>${anime}</div>
+        <div><h4>Top Movies (views)</h4>${movies}</div>
+      `;
+    }
+  } catch (err) {
+    box.innerHTML = `<p class="muted">${esc(err.message)}</p>`;
+  }
+}
+
+async function loadSimilar(type, id, container) {
+  if (!container) return;
+  try {
+    const items = await api(`/api/content/${type}/${id}/similar?limit=8`);
+    if (!items.length) {
+      container.innerHTML = "";
+      return;
+    }
+    container.innerHTML = `
+      <div class="similar-row">
+        <h3>Similar Titles</h3>
+        <div class="media-grid horizontal" id="similarGrid"></div>
+      </div>
+    `;
+    renderGrid($("similarGrid"), items.map((i) => ({ ...i, _type: type })), type);
+  } catch {
+    container.innerHTML = "";
+  }
+}
+
+// PWA install prompt
+function wirePWA() {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    state.deferredInstall = e;
+    if ($("installBanner")) return;
+    const bar = document.createElement("div");
+    bar.className = "install-banner";
+    bar.id = "installBanner";
+    bar.innerHTML = `
+      <span>Install ANICORE for a better experience</span>
+      <div>
+        <button type="button" class="primary small" id="installBtn">Install</button>
+        <button type="button" class="outline small" id="installDismiss">✕</button>
+      </div>
+    `;
+    document.body.appendChild(bar);
+    $("installBtn")?.addEventListener("click", async () => {
+      if (!state.deferredInstall) return;
+      state.deferredInstall.prompt();
+      await state.deferredInstall.userChoice;
+      state.deferredInstall = null;
+      bar.remove();
+    });
+    $("installDismiss")?.addEventListener("click", () => bar.remove());
+  });
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
+}
+

@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="/manifest.json">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css?v=7">
+  <link rel="stylesheet" href="/assets/style.css?v=8">
 </head>
 <body>
 
@@ -19,6 +19,7 @@
     <a class="brand" href="#" data-page="home">ANICORE<span>™</span></a>
     <nav class="side-nav">
       <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span> Home</button>
+      <button type="button" data-page="search"><span class="nav-icon">⌕</span> Search</button>
       <button type="button" data-page="anime"><span class="nav-icon">▣</span> Anime</button>
       <button type="button" data-page="tv"><span class="nav-icon">📺</span> TV Shows</button>
       <button type="button" data-page="movies"><span class="nav-icon">▶</span> Movies</button>
@@ -26,6 +27,19 @@
       <button type="button" id="sideAdminBtn" data-page="admin" class="hidden"><span class="nav-icon">⚙</span> Admin</button>
     </nav>
     <div class="side-footer">
+      <div class="pref-row">
+        <select id="langSelect" class="small" aria-label="Language" title="Language">
+          <option value="en">EN</option>
+          <option value="hi">हिं</option>
+        </select>
+        <select id="accentSelect" class="small" aria-label="Accent color" title="Accent">
+          <option value="pink">Pink</option>
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="green">Green</option>
+          <option value="orange">Orange</option>
+        </select>
+      </div>
       <button type="button" id="themeToggle" class="outline small" aria-label="Toggle dark/light mode">🌓 Theme</button>
       <button type="button" id="sideSignIn" class="outline small">Sign In</button>
       <button type="button" id="sideLogout" class="outline small hidden">Logout</button>
@@ -53,6 +67,10 @@
         <div id="continueSection" class="hidden">
           <h3 class="section-title">Continue Watching</h3>
           <div id="continueGrid" class="media-grid horizontal"></div>
+        </div>
+        <div id="recommendSection" class="hidden">
+          <h3 class="section-title" data-i18n="recommended">Recommended for You</h3>
+          <div id="recommendGrid" class="media-grid horizontal"></div>
         </div>
         <h3 class="section-title">Trending Anime</h3>
         <div id="homeAnimeGrid" class="media-grid"></div>
@@ -149,11 +167,69 @@
         </div>
       </section>
 
+      
+      <section class="page" id="page-search" aria-label="Search">
+        <div class="section">
+          <h2 data-i18n="search">Search</h2>
+          <div class="filters">
+            <input type="search" id="globalSearch" placeholder="Search anime, TV shows, movies..." aria-label="Global search" autofocus>
+            <div class="filter-row">
+              <select id="searchType" aria-label="Type">
+                <option value="">All types</option>
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Shows</option>
+                <option value="movie">Movies</option>
+              </select>
+              <select id="searchGenre" aria-label="Genre"><option value="">All Genres</option></select>
+              <select id="searchSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+              </select>
+            </div>
+          </div>
+          <div id="searchGrid" class="media-grid flush"></div>
+          <p id="searchEmpty" class="muted empty hidden">Type to search the catalogue.</p>
+        </div>
+      </section>
+
       <section class="page" id="page-profile" aria-label="Profile">
         <div class="section">
           <h2>My Profile</h2>
           <div id="profileInfo"></div>
           <div id="profileMember" class="hidden">
+            <div class="panel" id="profileActivityPanel">
+              <h3 data-i18n="activity">Your Activity</h3>
+              <div id="profileActivity" class="activity-list"></div>
+            </div>
+            <div class="panel">
+              <h3 data-i18n="preferences">Preferences</h3>
+              <div class="pref-controls">
+                <label>Theme
+                  <select id="profileTheme">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                  </select>
+                </label>
+                <label>Accent
+                  <select id="profileAccent">
+                    <option value="pink">Pink</option>
+                    <option value="purple">Purple</option>
+                    <option value="blue">Blue</option>
+                    <option value="green">Green</option>
+                    <option value="orange">Orange</option>
+                  </select>
+                </label>
+                <label>Language
+                  <select id="profileLang">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी</option>
+                  </select>
+                </label>
+                <button type="button" id="savePrefsBtn" class="primary small">Save Preferences</button>
+              </div>
+            </div>
             <div class="panel">
               <h3>Request a Title</h3>
               <form id="requestForm">
@@ -177,6 +253,43 @@
       <section class="page" id="page-admin" aria-label="Admin">
         <div class="section">
           <h2>Admin Studio</h2>
+          
+          <div class="panel">
+            <h3>Import from Anilist</h3>
+            <form id="anilistForm" class="stack">
+              <div class="row">
+                <input id="anilistId" type="number" placeholder="Anilist ID (e.g. 21)" min="1">
+                <span class="muted">or</span>
+                <input id="anilistSearch" placeholder="Search title...">
+              </div>
+              <select id="anilistType">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+              </select>
+              <button type="submit" class="primary block">Import</button>
+            </form>
+            <p id="anilistMsg" class="hint"></p>
+          </div>
+          <div class="panel">
+            <h3>Bulk Add Episodes</h3>
+            <p class="hint">One episode per line: <code>season|episode|title|video_url|duration</code></p>
+            <form id="bulkEpForm" class="stack">
+              <select id="bulkEpType">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+              </select>
+              <select id="bulkEpContent"><option value="">Select title…</option></select>
+              <textarea id="bulkEpText" rows="6" placeholder="1|1|Episode 1|https://...|24m&#10;1|2|Episode 2|https://...|24m"></textarea>
+              <button type="submit" class="primary block">Add Episodes</button>
+            </form>
+            <p id="bulkEpMsg" class="hint"></p>
+          </div>
+          <div class="panel" id="analyticsPanel">
+            <h3>Analytics</h3>
+            <div id="analyticsContent" class="stats-grid"></div>
+            <div id="analyticsTop" class="analytics-top"></div>
+          </div>
+
           <div class="panel" id="adminStatsPanel">
             <h3>Overview</h3>
             <div id="adminStats" class="stats-grid"></div>
@@ -302,12 +415,13 @@
   <nav class="bottom-nav" id="bottomNav" aria-label="Main">
     <span class="nav-pill" id="navPill" aria-hidden="true"></span>
     <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span>Home</button>
+    <button type="button" data-page="search"><span class="nav-icon">⌕</span>Search</button>
     <button type="button" data-page="anime"><span class="nav-icon">▣</span>Anime</button>
     <button type="button" data-page="tv"><span class="nav-icon">📺</span>TV</button>
     <button type="button" data-page="movies"><span class="nav-icon">▶</span>Movies</button>
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=7"></script>
+  <script src="/assets/app.js?v=8"></script>
 </body>
 </html>
