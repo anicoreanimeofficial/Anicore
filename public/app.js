@@ -316,8 +316,6 @@ function showPage(page) {
   void target.offsetWidth;
   if (page !== state.page) target.classList.add(dir);
   state.page = page;
-  const bgv = $('bgVideo');
-  if (bgv) { if (page === 'video') bgv.pause(); else bgv.play().catch(() => {}); }
   saveNavState();
 
   // Highlight the parent category when on detail/video
@@ -2099,6 +2097,7 @@ function wirePWA() {
 document.addEventListener('visibilitychange', () => {
   const bgv = $('bgVideo');
   if (!bgv) return;
-  if (document.hidden || state.page === 'video') bgv.pause();
+  if (document.hidden) bgv.pause();
   else bgv.play().catch(() => {});
 });
+
