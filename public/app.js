@@ -313,6 +313,8 @@ function showPage(page) {
   void target.offsetWidth;
   if (page !== state.page) target.classList.add(dir);
   state.page = page;
+  const bgv = $('bgVideo');
+  if (bgv) { if (page === 'video') bgv.pause(); else bgv.play().catch(() => {}); }
   saveNavState();
 
   // Highlight the parent category when on detail/video
@@ -421,6 +423,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
       </div>`;
 
     const img = card.querySelector('img');
+    img.decoding = 'async';
     img.src = safeUrl(item.poster) || PLACEHOLDER;
     img.alt = item.title || '';
     img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
@@ -931,7 +934,7 @@ function bindDetailEvents(type, item, container) {
       const s = Number(btn.dataset.season);
       const e = Number(btn.dataset.episode);
       if (!item.episodes) return;
-      openVideo(type, item._id, item.title, item.episodes, s, e, item.poster);
+      openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster);
     });
   });
 
@@ -1109,7 +1112,7 @@ function clearPlayer() {
   wrap.innerHTML = '';
 }
 
-async function mountPlayer(url) {
+async function mountPlayer(url, posterSrc = '') {
   const wrap = $('playerWrap');
   if (!wrap) return;
 
@@ -1125,6 +1128,8 @@ async function mountPlayer(url) {
     video.controls = true;
     video.autoplay = true;
     video.playsInline = true;
+    video.preload = 'metadata';
+    if (posterSrc) video.poster = posterSrc;
     video.setAttribute('playsinline', '');
     video.addEventListener('error', () => {
       fallback?.classList.remove('hidden');
@@ -1151,12 +1156,28 @@ async function mountPlayer(url) {
     }
     wrap.appendChild(video);
   } else {
-    const iframe = document.createElement('iframe');
-    iframe.allowFullscreen = true;
-    iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write');
-    iframe.setAttribute('referrerpolicy', 'origin');
-    iframe.src = normalizeEmbedUrl(url);
-    wrap.appendChild(iframe);
+    const mountIframe = () => {
+      wrap.innerHTML = '';
+      const iframe = document.createElement('iframe');
+      iframe.allowFullscreen = true;
+      iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write');
+      iframe.setAttribute('referrerpolicy', 'origin');
+      iframe.src = normalizeEmbedUrl(url);
+      wrap.appendChild(iframe);
+    };
+
+    if (posterSrc) {
+      const cover = document.createElement('button');
+      cover.type = 'button';
+      cover.className = 'player-cover';
+      cover.setAttribute('aria-label', 'Play');
+      cover.style.backgroundImage = `url("${posterSrc.replace(/"/g, '%22')}")`;
+      cover.innerHTML = '<span class="player-play">&#9654;</span>';
+      cover.addEventListener('click', mountIframe, { once: true });
+      wrap.appendChild(cover);
+    } else {
+      mountIframe();
+    }
   }
 }
 
@@ -1210,7 +1231,8 @@ function loadVideoEpisode() {
     }
   }
 
-  mountPlayer(ep.video_url);
+  const posterSrc = safeUrl(ep.thumbnail) || safeUrl(videoContext.poster) || '';
+  mountPlayer(ep.video_url, posterSrc);
   updateVideoNav();
 }
 
@@ -1990,3 +2012,12 @@ function wirePWA() {
   }
 }
 
+
+
+// Pause the background video when the tab is hidden (saves battery, smoother scrolling)
+document.addEventListener('visibilitychange', () => {
+  const bgv = $('bgVideo');
+  if (!bgv) return;
+  if (document.hidden || state.page === 'video') bgv.pause();
+  else bgv.play().catch(() => {});
+});
