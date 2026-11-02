@@ -2,7 +2,14 @@
 
 const $ = (id) => document.getElementById(id);
 const BOOT_NAV = (() => {
-  try { return JSON.parse(sessionStorage.getItem('anicore-nav') || 'null'); } catch (e) { return null; }
+  try {
+    // A shared link wins: #/detail/<type>/<id> or #/<page>
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    if (d) return { page: 'detail', detailType: d[1], detailId: d[2] };
+    const p = location.hash.match(/^#\/([a-z]+)$/);
+    if (p) return { page: p[1] };
+    return JSON.parse(sessionStorage.getItem('anicore-nav') || 'null');
+  } catch (e) { return null; }
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
@@ -285,6 +292,14 @@ function saveNavState() {
       detailId: state.detailId,
       detailType: state.detailType,
     }));
+  } catch (e) {}
+  // Give every page its own link in the address bar
+  try {
+    let h = state.page === 'home' ? '' : '#/' + state.page;
+    if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
+      h = '#/detail/' + state.detailType + '/' + state.detailId;
+    }
+    if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
   } catch (e) {}
 }
 
