@@ -150,7 +150,7 @@ button, input, textarea, select, a { outline: none; }
   transition: border-color .2s ease, background .2s ease, transform .2s;
 }
 .outline:hover { border-color: var(--pink); background: rgba(255, 63, 130, .06); }
-.outline:disabled { opacity: .6; cursor: not-allowed; }
+.outline:disabled { opacity: .35; cursor: not-allowed; }
 .outline.small { padding: 8px 12px; font-size: 13px; }
 .outline.danger { color: #ff6b8a; border-color: rgba(255, 75, 99, .4); }
 
@@ -318,7 +318,6 @@ input:focus, textarea:focus, select:focus {
   animation: fadeIn .25s ease;
 }
 #authModal { z-index: 1100; }
-#playerModal { z-index: 1200; }
 #episodesModal { z-index: 1150; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -335,21 +334,6 @@ input:focus, textarea:focus, select:focus {
 }
 [data-theme="light"] .modal-card { background: linear-gradient(145deg, #fff, #f0eef6); }
 .modal-card.wide { max-width: 560px; }
-
-.sheet-modal { align-items: flex-end; padding: 0; }
-.modal-card.sheet {
-  max-height: 92vh;
-  border-radius: 28px 28px 0 0;
-  border-bottom: 0;
-  padding-bottom: max(26px, env(safe-area-inset-bottom));
-  overscroll-behavior: contain;
-  will-change: transform;
-  transition: transform .3s cubic-bezier(.32, .72, 0, 1);
-  animation: sheetUp .45s cubic-bezier(.32, .72, 0, 1);
-}
-@keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.sheet-grip { display: flex; justify-content: center; margin: -12px 0 6px; padding: 8px 0; touch-action: none; }
-.sheet-grip span { width: 40px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .28); }
 @keyframes pop { from { transform: scale(.95); } to { transform: scale(1); } }
 
 .close {
@@ -531,9 +515,6 @@ input:focus, textarea:focus, select:focus {
 footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-top: 1px solid var(--border); color: var(--muted); }
 
 /* --- Video player --- */
-.player-card { max-width: 960px; width: 100%; }
-.player-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.player-header h3 { margin: 0; }
 .player-wrap {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -553,6 +534,24 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
   display: block;
 }
 #playerFallback a { color: var(--pink); font-weight: 700; }
+
+/* --- Video page --- */
+.video-header { margin: 20px 0 16px; }
+.video-header h2 { margin: 0 0 4px; font-size: 22px; overflow-wrap: anywhere; }
+.video-header p { margin: 0; font-size: 14px; }
+.video-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+}
+.video-nav button {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* --- Episode rows in detail --- */
 .ep-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
@@ -579,11 +578,9 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
   .menu-btn { display: none; }
   .media-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 22px; }
   .intro { text-align: left; padding-left: 5%; }
-  .sheet-modal { display: none !important; }
 }
 
 @media (max-width: 899px) {
-  #page-detail { display: none !important; }
   .sidebar.open { display: flex; animation: slideInLeft .3s ease; }
   .menu-btn { display: inline-flex; }
 }
@@ -595,6 +592,7 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
   .modal-card { padding: 19px; }
   .row { grid-template-columns: 1fr; gap: 0; }
   .skeleton-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .video-header h2 { font-size: 19px; }
 }
 
 @media (max-width: 360px) {
@@ -602,6 +600,7 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
   .bottom-nav button { font-size: 9px; }
   .nav-icon { font-size: 18px; }
   .media-grid { gap: 9px; }
+  .video-nav button { padding: 9px 8px; font-size: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
