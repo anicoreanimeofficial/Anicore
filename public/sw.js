@@ -1,5 +1,5 @@
-const CACHE = "anicore-v6";
-const ASSETS = ["/", "/assets/style.css?v=6", "/assets/app.js?v=6", "/manifest.json"];
+const CACHE = "anicore-v8";
+const ASSETS = ["/", "/assets/style.css?v=8", "/assets/app.js?v=8", "/manifest.json"];
 
 self.addEventListener("install", (e) => {
   console.log("[sw] installing", CACHE);
