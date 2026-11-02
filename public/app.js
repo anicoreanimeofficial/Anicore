@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v8';
+const APP_JS_VERSION = 'v13';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -23,17 +23,17 @@ const state = {
 // videoContext = { type, contentId, contentTitle, episodes: [...], currentIndex: 0 }
 let videoContext = null;
 
-const PAGE_ORDER = ['home', 'search', 'anime', 'tv', 'movies', 'profile', 'admin', 'detail', 'video'];
+const PAGE_ORDER = ['home', 'search', 'series', 'movies', 'profile', 'admin', 'detail', 'video'];
 
 const LISTS = {
   anime: {
-    endpoint: '/api/anime', grid: 'animeGrid', sentinel: 'animeSentinel', empty: 'animeEmpty',
-    search: 'animeSearch', genre: 'animeGenre', status: 'animeStatus', sort: 'animeSort', chips: 'animeChips',
+    endpoint: '/api/anime', grid: 'seriesGrid', sentinel: 'seriesSentinel', empty: 'seriesEmpty',
+    search: 'seriesSearch', genre: 'seriesGenre', status: 'seriesStatus', sort: 'seriesSort', chips: 'seriesChips',
     page: 0, total: 0, loading: false, q: '', genreVal: '', statusVal: '', sortVal: 'newest',
   },
   tv_show: {
-    endpoint: '/api/tvshows', grid: 'tvGrid', sentinel: 'tvSentinel', empty: 'tvEmpty',
-    search: 'tvSearch', genre: 'tvGenre', status: 'tvStatus', sort: 'tvSort', chips: 'tvChips',
+    endpoint: '/api/tvshows', grid: 'seriesGrid', sentinel: 'seriesSentinel', empty: 'seriesEmpty',
+    search: 'seriesSearch', genre: 'seriesGenre', status: 'seriesStatus', sort: 'seriesSort', chips: 'seriesChips',
     page: 0, total: 0, loading: false, q: '', genreVal: '', statusVal: '', sortVal: 'newest',
   },
   movie: {
@@ -43,19 +43,122 @@ const LISTS = {
   },
 };
 
-const PAGE_TYPES = { anime: 'anime', tv: 'tv_show', movies: 'movie' };
+// Series tab filter: 'all' | 'anime' | 'tv_show'
+let seriesTypeFilter = 'all';
+
+async function loadSeries(reset = false) {
+  const grid = $("seriesGrid");
+  const empty = $("seriesEmpty");
+  if (!grid) return;
+
+  if (reset) {
+    LISTS.anime.page = 0;
+    LISTS.tv_show.page = 0;
+    grid.innerHTML = "";
+    if (empty) empty.classList.add("hidden");
+  }
+
+  const types =
+    seriesTypeFilter === "all"
+      ? ["anime", "tv_show"]
+      : seriesTypeFilter === "tv_show"
+        ? ["tv_show"]
+        : ["anime"];
+
+  // Sync filters from shared series controls
+  const q = ($("seriesSearch")?.value || "").trim();
+  const genre = $("seriesGenre")?.value || "";
+  const status = $("seriesStatus")?.value || "";
+  const sort = $("seriesSort")?.value || "newest";
+
+  const allItems = [];
+  await Promise.all(
+    types.map(async (type) => {
+      const l = LISTS[type];
+      l.q = q;
+      l.genreVal = genre;
+      l.statusVal = status;
+      l.sortVal = sort;
+      try {
+        const params = new URLSearchParams({
+          page: "1",
+          limit: "40",
+          sort: sort,
+        });
+        if (q) params.set("q", q);
+        if (genre) params.set("genre", genre);
+        if (status) params.set("status", status);
+        const data = await api(`${l.endpoint}?${params}`);
+        const items = Array.isArray(data) ? data : data.items || [];
+        items.forEach((it) => {
+          it._type = type;
+          allItems.push(it);
+        });
+      } catch (err) {
+        console.warn("series load", type, err);
+      }
+    })
+  );
+
+  // Sort combined
+  const sortKey = sort;
+  allItems.sort((a, b) => {
+    if (sortKey === "title") return (a.title || "").localeCompare(b.title || "");
+    if (sortKey === "year") return (b.year || 0) - (a.year || 0);
+    if (sortKey === "rating") return (b.avg_rating || 0) - (a.avg_rating || 0);
+    if (sortKey === "views") return (b.views || 0) - (a.views || 0);
+    return String(b.created_at || "").localeCompare(String(a.created_at || ""));
+  });
+
+  if (!allItems.length) {
+    grid.innerHTML = "";
+    if (empty) {
+      empty.textContent = "No series found.";
+      empty.classList.remove("hidden");
+    }
+    return;
+  }
+  if (empty) empty.classList.add("hidden");
+  renderGrid(grid, allItems, "anime");
+}
+
+function wireSeriesPage() {
+  document.querySelectorAll(".series-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".series-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      seriesTypeFilter = btn.dataset.seriesType || "all";
+      loadSeries(true);
+    });
+  });
+
+  let timer;
+  $("seriesSearch")?.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => loadSeries(true), 280);
+  });
+  ["seriesGenre", "seriesStatus", "seriesSort"].forEach((id) => {
+    $(id)?.addEventListener("change", () => loadSeries(true));
+  });
+}
+
+
+
+
+const PAGE_TYPES = { movies: 'movie' };
+const SERIES_TYPES = ['anime', 'tv_show'];
 
 
 // --- i18n ---
 const I18N = {
   en: {
-    home: "Home", search: "Search", anime: "Anime", tv: "TV Shows", movies: "Movies",
+    home: "Home", search: "Search", series: "Series", anime: "Anime", tv: "TV Shows", movies: "Movies",
     profile: "Profile", admin: "Admin", recommended: "Recommended for You",
     continue: "Continue Watching", activity: "Your Activity", preferences: "Preferences",
     signIn: "Sign In", logout: "Logout", save: "Save Preferences",
   },
   hi: {
-    home: "होम", search: "खोजें", anime: "एनिमे", tv: "टीवी शो", movies: "फ़िल्में",
+    home: "होम", search: "खोजें", series: "सीरीज़", anime: "एनिमे", tv: "टीवी शो", movies: "फ़िल्में",
     profile: "प्रोफ़ाइल", admin: "एडमिन", recommended: "आपके लिए सुझाव",
     continue: "देखना जारी रखें", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
     signIn: "साइन इन", logout: "लॉग आउट", save: "सेव करें",
@@ -171,6 +274,28 @@ function movePill(animate = true) {
 }
 window.addEventListener('resize', () => movePill(false));
 
+
+function saveNavState() {
+  try {
+    sessionStorage.setItem("anicore-nav", JSON.stringify({
+      page: state.page,
+      detailId: state.detailId,
+      detailType: state.detailType,
+    }));
+  } catch (e) {}
+}
+
+function restoreNavState() {
+  try {
+    const raw = sessionStorage.getItem("anicore-nav");
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+
+
 function showPage(page) {
   if (page === 'admin' && state.user?.role !== 'admin') page = 'home';
   const target = $(`page-${page}`);
@@ -188,13 +313,13 @@ function showPage(page) {
   void target.offsetWidth;
   if (page !== state.page) target.classList.add(dir);
   state.page = page;
+  saveNavState();
 
   // Highlight the parent category when on detail/video
   let activePage = page;
   if (page === 'detail' || page === 'video') {
     const dt = state.detailType;
-    if (dt === 'anime') activePage = 'anime';
-    else if (dt === 'tv_show') activePage = 'tv';
+    if (dt === 'anime' || dt === 'tv_show') activePage = 'series';
     else if (dt === 'movie') activePage = 'movies';
   }
   document.querySelectorAll('.bottom-nav button, .side-nav button').forEach((b) => {
@@ -203,6 +328,9 @@ function showPage(page) {
   movePill();
   $('sidebar')?.classList.remove('open');
 
+  if (page === 'series') {
+    loadSeries(true);
+  }
   const type = PAGE_TYPES[page];
   if (type && !LISTS[type].page) loadList(type, true);
   if (page === 'home' && loadRecommendations()) {
@@ -280,6 +408,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     const progress = item.progress_percent
       ? `<div class="progress-bar"><span style="width:${Math.min(100, item.progress_percent)}%"></span></div>`
       : '';
+    const sub = rating || (item.year ? String(item.year) : (item.status || ''));
 
     card.innerHTML = `
       <div class="poster-wrap">
@@ -288,7 +417,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
       </div>
       <div class="media-info">
         <h3></h3>
-        <p>${rating || (item.views ? `${item.views} views` : (item.year || ''))}</p>
+        <p>${sub}</p>
       </div>`;
 
     const img = card.querySelector('img');
@@ -298,7 +427,10 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 
     card.querySelector('h3').textContent = item.title || 'Untitled';
 
-    const open = () => openDetail(item._type || type, item._id || item.content_id, item);
+    const open = () => {
+      card.classList.add('card-press');
+      setTimeout(() => openDetail(item._type || type, item._id || item.content_id, item), 90);
+    };
     card.addEventListener('click', open);
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
@@ -309,23 +441,34 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 }
 
 async function loadHome() {
-  showSkeleton('homeAnimeGrid', 6);
-  showSkeleton('homeTvGrid', 6);
+  showSkeleton('homeSeriesGrid', 8);
   showSkeleton('homeMovieGrid', 6);
 
-  const jobs = [
-    ['anime', 'homeAnimeGrid', '/api/anime'],
-    ['tv_show', 'homeTvGrid', '/api/tvshows'],
-    ['movie', 'homeMovieGrid', '/api/movies'],
-  ];
-  await Promise.all(jobs.map(async ([type, gridId, endpoint]) => {
-    try {
-      const data = await api(`${endpoint}?page=1&limit=10&sort=views`);
-      renderGrid($(gridId), data.items, type);
-    } catch {
-      $(gridId).innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
-    }
-  }));
+  // Merged anime + TV into Trending Series
+  try {
+    const [animeData, tvData] = await Promise.all([
+      api('/api/anime?page=1&limit=10&sort=views'),
+      api('/api/tvshows?page=1&limit=10&sort=views'),
+    ]);
+    const animeItems = (Array.isArray(animeData) ? animeData : animeData.items || []).map((i) => ({ ...i, _type: 'anime' }));
+    const tvItems = (Array.isArray(tvData) ? tvData : tvData.items || []).map((i) => ({ ...i, _type: 'tv_show' }));
+    const merged = [...animeItems, ...tvItems]
+      .sort((a, b) => (b.views || 0) - (a.views || 0) || String(b.created_at || '').localeCompare(String(a.created_at || '')))
+      .slice(0, 12);
+    renderGrid($('homeSeriesGrid'), merged, 'anime');
+  } catch {
+    const g = $('homeSeriesGrid');
+    if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
+  }
+
+  try {
+    const data = await api('/api/movies?page=1&limit=10&sort=views');
+    const items = Array.isArray(data) ? data : data.items || [];
+    renderGrid($('homeMovieGrid'), items, 'movie');
+  } catch {
+    const g = $('homeMovieGrid');
+    if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
+  }
 }
 
 async function loadContinueWatching() {
@@ -374,11 +517,13 @@ async function loadList(type, reset = false) {
 }
 
 const observers = {};
+// Only movies use infinite-scroll list page; series is handled by loadSeries()
 Object.entries(LISTS).forEach(([type, l]) => {
+  if (type === 'anime' || type === 'tv_show') return;
   const sentinel = $(l.sentinel);
   if (!sentinel) return;
   observers[type] = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && state.page === Object.keys(PAGE_TYPES).find((k) => PAGE_TYPES[k] === type)) {
+    if (entries[0].isIntersecting && state.page === 'movies') {
       loadList(type);
     }
   }, { rootMargin: '200px' });
@@ -386,6 +531,7 @@ Object.entries(LISTS).forEach(([type, l]) => {
 });
 
 Object.entries(LISTS).forEach(([type, l]) => {
+  if (type === 'anime' || type === 'tv_show') return; // series controls wired in wireSeriesPage
   let timer;
   $(l.search)?.addEventListener('input', (e) => {
     clearTimeout(timer);
@@ -442,7 +588,9 @@ async function loadGenres() {
               l.genreVal = '';
               if (sel) sel.value = '';
             }
-            loadList(Object.keys(LISTS).find((k) => LISTS[k] === l), true);
+            const listKey = Object.keys(LISTS).find((k) => LISTS[k] === l);
+            if (listKey === 'anime' || listKey === 'tv_show') loadSeries(true);
+            else loadList(listKey, true);
           });
           chips.appendChild(btn);
         });
@@ -460,6 +608,41 @@ async function loadGenres() {
         sg.appendChild(opt);
       });
       sg.value = cur;
+    }
+
+
+    const sg = $("seriesGenre");
+    if (sg) {
+      const cur = sg.value;
+      sg.innerHTML = '<option value="">All Genres</option>';
+      state.genres.forEach((g) => {
+        const opt = document.createElement("option");
+        opt.value = g;
+        opt.textContent = g;
+        sg.appendChild(opt);
+      });
+      sg.value = cur;
+    }
+    const schips = $("seriesChips");
+    if (schips) {
+      schips.innerHTML = "";
+      state.genres.slice(0, 12).forEach((g) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "genre-chip";
+        btn.dataset.genre = g;
+        btn.textContent = g;
+        btn.addEventListener("click", () => {
+          const active = btn.classList.contains("active");
+          schips.querySelectorAll(".genre-chip").forEach((c) => c.classList.remove("active"));
+          if (!active) {
+            btn.classList.add("active");
+            if (sg) sg.value = g;
+          } else if (sg) sg.value = "";
+          loadSeries(true);
+        });
+        schips.appendChild(btn);
+      });
     }
 
   } catch { /* ignore */ }
@@ -636,20 +819,26 @@ function linkList(links) {
 function episodesHtml(episodes, type, contentId) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
-  return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => `
+  return `<h3>Episodes</h3><div class="episodes">${sorted.map((ep) => {
+    const thumb = safeUrl(ep.thumbnail) || '';
+    return `
     <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
-      <div class="ep-header">
-        <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+      ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy">` : ''}
+      <div class="ep-body">
+        <div class="ep-header">
+          <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+        </div>
+        <div class="ep-actions">
+          ${ep.video_url ? `<button type="button" class="outline medium ep-play"
+            data-season="${ep.season}"
+            data-episode="${ep.episode}">▶ Watch</button>` : ''}
+          ${state.user ? `<button type="button" class="outline small mark-progress"
+            data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
+        </div>
+        ${linkList(ep.quality_links)}
       </div>
-      <div class="ep-actions">
-        ${ep.video_url ? `<button type="button" class="outline small ep-play"
-          data-season="${ep.season}"
-          data-episode="${ep.episode}">▶ Watch</button>` : ''}
-        ${state.user ? `<button type="button" class="outline small mark-progress"
-          data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
-      </div>
-      ${linkList(ep.quality_links)}
-    </div>`).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
 }
 
 function commentsHtml(comments) {
@@ -675,10 +864,8 @@ function reviewsHtml(reviews) {
 function metaText(item) {
   if (!('description' in item)) return '';
   const parts = [
-    `👁 ${item.views || 0}`,
-    item.avg_rating ? `★ ${item.avg_rating} (${item.rating_count || 0})` : null,
-    item.rating ? `⭐ ${item.rating}` : null,
-    item.year ? `📅 ${item.year}` : null,
+    item.avg_rating ? `★ ${item.avg_rating}` : null,
+    item.year ? String(item.year) : null,
     item.status || null,
   ].filter(Boolean);
   return parts.join(' · ');
@@ -689,18 +876,18 @@ function recapHtml(item) {
 }
 
 function ratingWidget(item, type) {
-  if (!state.user) return '<p class="muted">Sign in to rate this title.</p>';
+  if (!state.user) return '<p class="muted small-muted">Sign in to rate this title.</p>';
   const current = item.my_rating?.rating || 0;
   let stars = '';
   for (let i = 1; i <= 10; i++) {
     stars += `<button type="button" data-val="${i}" class="${i <= current ? 'active' : ''}" aria-label="Rate ${i}">★</button>`;
   }
   return `
-    <div class="panel" style="margin-top:16px">
-      <h3>Your Rating</h3>
-      <div class="stars" id="ratingStars">${stars}</div>
-      <textarea id="reviewText" rows="2" maxlength="2000" placeholder="Optional review...">${esc(item.my_rating?.review || '')}</textarea>
-      <button type="button" class="outline" id="saveRating">Save Rating</button>
+    <div class="rating-box">
+      <div class="rating-box-title">Your Rating</div>
+      <div class="stars stars-sm" id="ratingStars">${stars}</div>
+      <textarea id="reviewText" class="review-sm" rows="2" maxlength="2000" placeholder="Optional short review...">${esc(item.my_rating?.review || '')}</textarea>
+      <button type="button" class="outline small" id="saveRating">Save</button>
     </div>`;
 }
 
@@ -708,11 +895,17 @@ function buildDetailHtml(type, item, comments, reviews) {
   const banner = safeUrl(item.banner) || safeUrl(item.poster);
   const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
 
+  const rawDesc = ('description' in item) ? (item.description || 'No description available.') : '';
+  const longDesc = rawDesc.length > 220;
+
   return `
     ${banner ? `<img class="detail-banner" src="${esc(banner)}" alt="">` : ''}
     <h2>${esc(item.title)}</h2>
     <p class="muted meta" id="dMeta">${esc(metaText(item))}</p>
-    <p class="desc">${'description' in item ? esc(item.description || 'No description available.') : ''}</p>
+    <div class="synopsis ${longDesc ? 'collapsed' : ''}" id="synopsisBox">
+      <p class="desc" id="synopsisText">${esc(rawDesc)}</p>
+      ${longDesc ? '<button type="button" class="text-button synopsis-toggle" id="synopsisToggle">More</button>' : ''}
+    </div>
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
     <div id="dRecapSlot">${recapHtml(item)}</div><div id="similarSlot"></div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
@@ -738,7 +931,7 @@ function bindDetailEvents(type, item, container) {
       const s = Number(btn.dataset.season);
       const e = Number(btn.dataset.episode);
       if (!item.episodes) return;
-      openVideo(type, item._id, item.title, item.episodes, s, e);
+      openVideo(type, item._id, item.title, item.episodes, s, e, item.poster);
     });
   });
 
@@ -828,6 +1021,7 @@ function bindDetailEvents(type, item, container) {
 async function openDetail(type, id, preview) {
   state.detailId = id;
   state.detailType = type;
+  saveNavState();
 
   showPage('detail');
   const contentEl = $('detailPageContent');
@@ -966,14 +1160,21 @@ async function mountPlayer(url) {
   }
 }
 
-function openVideo(type, contentId, contentTitle, episodes, season, episode) {
+function openVideo(type, contentId, contentTitle, episodes, season, episode, poster) {
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
   if (idx === -1) { toast('Episode not found', 'error'); return; }
   const ep = sorted[idx];
   if (!ep.video_url) { toast('No video for this episode', 'error'); return; }
 
-  videoContext = { type, contentId, contentTitle, episodes: sorted, currentIndex: idx };
+  videoContext = {
+    type,
+    contentId,
+    contentTitle,
+    episodes: sorted,
+    currentIndex: idx,
+    poster: poster || null,
+  };
   loadVideoEpisode();
   showPage('video');
 }
@@ -984,6 +1185,31 @@ function loadVideoEpisode() {
   $('videoTitle').textContent = videoContext.contentTitle;
   const sub = `S${ep.season} · E${ep.episode}${ep.title ? ' — ' + ep.title : ''}${ep.duration ? ' · ' + ep.duration : ''}`;
   $('videoSubtitle').textContent = sub;
+
+  // Season / episode thumbnail above player
+  let thumbEl = $('videoThumb');
+  if (!thumbEl) {
+    const header = document.querySelector('.video-header');
+    if (header) {
+      thumbEl = document.createElement('img');
+      thumbEl.id = 'videoThumb';
+      thumbEl.className = 'video-thumb';
+      thumbEl.alt = '';
+      header.appendChild(thumbEl);
+    }
+  }
+  if (thumbEl) {
+    const src = safeUrl(ep.thumbnail) || safeUrl(videoContext.poster) || '';
+    if (src) {
+      thumbEl.src = src;
+      thumbEl.classList.remove('hidden');
+      thumbEl.onerror = () => thumbEl.classList.add('hidden');
+    } else {
+      thumbEl.removeAttribute('src');
+      thumbEl.classList.add('hidden');
+    }
+  }
+
   mountPlayer(ep.video_url);
   updateVideoNav();
 }
@@ -1412,9 +1638,26 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 })();
 
 // --- Init ---
+wireSeriesPage();
+
+// Background video
+(function initBgVideo() {
+  const v = document.getElementById("bgVideo");
+  if (!v) return;
+  v.muted = true;
+  v.playsInline = true;
+  const tryPlay = () => v.play().catch(() => {});
+  tryPlay();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) tryPlay();
+  });
+})();
+
 (async function init() {
   applyTheme(state.theme);
-  $('yearNow').textContent = new Date().getFullYear();
+  applyAccent(state.accent);
+  applyLanguage(state.language);
+  if ($('yearNow')) $('yearNow').textContent = new Date().getFullYear();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
@@ -1429,6 +1672,16 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   loadHome();
   loadContinueWatching();
   movePill(false);
+
+  // Stay on the same page after refresh
+  const saved = restoreNavState();
+  if (saved?.page && saved.page !== 'home') {
+    if ((saved.page === 'detail' || saved.page === 'video') && saved.detailId && saved.detailType) {
+      openDetail(saved.detailType, saved.detailId);
+    } else if (PAGE_ORDER.includes(saved.page) && saved.page !== 'video') {
+      showPage(saved.page);
+    }
+  }
 })();
 
 
@@ -1715,9 +1968,9 @@ function wirePWA() {
     bar.className = "install-banner";
     bar.id = "installBanner";
     bar.innerHTML = `
-      <span>Install ANICORE for a better experience</span>
+      <span>Install ANICORE app</span>
       <div>
-        <button type="button" class="primary small" id="installBtn">Install</button>
+        <button type="button" class="primary small" id="installBtn">Add to Home Screen</button>
         <button type="button" class="outline small" id="installDismiss">✕</button>
       </div>
     `;

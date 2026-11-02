@@ -2,16 +2,31 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#09090f" id="themeColorMeta">
   <meta name="description" content="ANICORE — Discover Anime, TV Shows and Movies">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ANICORE">
+  <meta name="application-name" content="ANICORE">
+  <meta name="msapplication-TileColor" content="#09090f">
+  <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="https://placehold.co/180x180/17101e/ff3f82?text=A">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32/17101e/ff3f82?text=A">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css?v=8">
+  <link rel="stylesheet" href="/assets/style.css?v=13">
 </head>
 <body>
+
+  <!-- Animated site background -->
+  <div class="bg-video-wrap" aria-hidden="true">
+    <video id="bgVideo" autoplay muted loop playsinline preload="auto" poster="">
+      <source src="/assets/media/bg.mp4" type="video/mp4">
+    </video>
+    <div class="bg-video-overlay"></div>
+  </div>
 
   <canvas id="snow" aria-hidden="true"></canvas>
 
@@ -20,8 +35,7 @@
     <nav class="side-nav">
       <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span> Home</button>
       <button type="button" data-page="search"><span class="nav-icon">⌕</span> Search</button>
-      <button type="button" data-page="anime"><span class="nav-icon">▣</span> Anime</button>
-      <button type="button" data-page="tv"><span class="nav-icon">📺</span> TV Shows</button>
+      <button type="button" data-page="series"><span class="nav-icon">▣</span> Series</button>
       <button type="button" data-page="movies"><span class="nav-icon">▶</span> Movies</button>
       <button type="button" data-page="profile"><span class="nav-icon">◉</span> Profile</button>
       <button type="button" id="sideAdminBtn" data-page="admin" class="hidden"><span class="nav-icon">⚙</span> Admin</button>
@@ -72,28 +86,38 @@
           <h3 class="section-title" data-i18n="recommended">Recommended for You</h3>
           <div id="recommendGrid" class="media-grid horizontal"></div>
         </div>
-        <h3 class="section-title">Trending Anime</h3>
-        <div id="homeAnimeGrid" class="media-grid"></div>
-        <h3 class="section-title">Popular TV Shows</h3>
-        <div id="homeTvGrid" class="media-grid"></div>
-        <h3 class="section-title">Latest Movies</h3>
+        <div class="section-heading-row">
+          <h3 class="section-title">Trending Series</h3>
+          <button type="button" class="text-button" data-page="series">See all</button>
+        </div>
+        <div id="homeSeriesGrid" class="media-grid"></div>
+        <div class="section-heading-row">
+          <h3 class="section-title">Latest Movies</h3>
+          <button type="button" class="text-button" data-page="movies">See all</button>
+        </div>
         <div id="homeMovieGrid" class="media-grid"></div>
       </section>
 
-      <section class="page" id="page-anime" aria-label="Anime catalogue">
+      
+      <section class="page" id="page-series" aria-label="Series catalogue">
         <div class="section">
-          <h2>Anime Catalogue</h2>
-          <div class="filters" id="animeFilters">
-            <input type="search" id="animeSearch" placeholder="Search anime..." aria-label="Search anime">
+          <h2 data-i18n="series">Series</h2>
+          <div class="series-tabs" id="seriesTabs" role="tablist">
+            <button type="button" class="series-tab active" data-series-type="all" role="tab">All</button>
+            <button type="button" class="series-tab" data-series-type="anime" role="tab">Anime</button>
+            <button type="button" class="series-tab" data-series-type="tv_show" role="tab">TV Shows</button>
+          </div>
+          <div class="filters" id="seriesFilters">
+            <input type="search" id="seriesSearch" placeholder="Search series..." aria-label="Search series">
             <div class="filter-row">
-              <select id="animeGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
-              <select id="animeStatus" aria-label="Status filter">
+              <select id="seriesGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="seriesStatus" aria-label="Status filter">
                 <option value="">All Status</option>
                 <option>Ongoing</option>
                 <option>Completed</option>
                 <option>Upcoming</option>
               </select>
-              <select id="animeSort" aria-label="Sort">
+              <select id="seriesSort" aria-label="Sort">
                 <option value="newest">Newest</option>
                 <option value="rating">Top Rated</option>
                 <option value="views">Most Viewed</option>
@@ -101,42 +125,14 @@
                 <option value="year">Year</option>
               </select>
             </div>
-            <div class="genre-chips" id="animeChips" role="listbox" aria-label="Quick genres"></div>
+            <div class="genre-chips" id="seriesChips" role="listbox" aria-label="Quick genres"></div>
           </div>
-          <div id="animeGrid" class="media-grid flush"></div>
-          <div id="animeSentinel" class="scroll-sentinel" aria-hidden="true"></div>
-          <p id="animeEmpty" class="muted empty hidden">No anime found.</p>
+          <div id="seriesGrid" class="media-grid flush"></div>
+          <div id="seriesSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="seriesEmpty" class="muted empty hidden">No series found.</p>
         </div>
       </section>
 
-      <section class="page" id="page-tv" aria-label="TV Shows">
-        <div class="section">
-          <h2>TV Shows</h2>
-          <div class="filters" id="tvFilters">
-            <input type="search" id="tvSearch" placeholder="Search TV shows..." aria-label="Search TV shows">
-            <div class="filter-row">
-              <select id="tvGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
-              <select id="tvStatus" aria-label="Status filter">
-                <option value="">All Status</option>
-                <option>Ongoing</option>
-                <option>Completed</option>
-                <option>Upcoming</option>
-              </select>
-              <select id="tvSort" aria-label="Sort">
-                <option value="newest">Newest</option>
-                <option value="rating">Top Rated</option>
-                <option value="views">Most Viewed</option>
-                <option value="title">Title A–Z</option>
-                <option value="year">Year</option>
-              </select>
-            </div>
-            <div class="genre-chips" id="tvChips" role="listbox" aria-label="Quick genres"></div>
-          </div>
-          <div id="tvGrid" class="media-grid flush"></div>
-          <div id="tvSentinel" class="scroll-sentinel" aria-hidden="true"></div>
-          <p id="tvEmpty" class="muted empty hidden">No TV shows found.</p>
-        </div>
-      </section>
 
       <section class="page" id="page-movies" aria-label="Movies">
         <div class="section">
@@ -416,12 +412,11 @@
     <span class="nav-pill" id="navPill" aria-hidden="true"></span>
     <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span>Home</button>
     <button type="button" data-page="search"><span class="nav-icon">⌕</span>Search</button>
-    <button type="button" data-page="anime"><span class="nav-icon">▣</span>Anime</button>
-    <button type="button" data-page="tv"><span class="nav-icon">📺</span>TV</button>
+    <button type="button" data-page="series"><span class="nav-icon">▣</span>Series</button>
     <button type="button" data-page="movies"><span class="nav-icon">▶</span>Movies</button>
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=8"></script>
+  <script src="/assets/app.js?v=13"></script>
 </body>
 </html>
