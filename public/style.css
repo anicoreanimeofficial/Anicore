@@ -1339,3 +1339,130 @@ body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+
+/* =========================================================
+   DETAIL PAGE POLISH (v16)
+   ========================================================= */
+/* remove the little progress bar on posters */
+.progress-bar { display: none !important; }
+
+/* faster taps, no grey flash */
+button, a, .media-card { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.page { animation-duration: .2s; }
+.page.from-right, .page.from-left { animation-duration: .24s; }
+
+/* Watch button: medium */
+.outline.medium.ep-play, button.medium.ep-play {
+  padding: 9px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(100deg, var(--pink), var(--purple, #8b5cf6));
+  border: 0;
+  box-shadow: 0 6px 18px rgba(255, 63, 130, .28);
+}
+.outline.medium.ep-play:hover { background: linear-gradient(100deg, var(--pink), var(--purple, #8b5cf6)); filter: brightness(1.08); }
+
+/* Synopsis: plain "Read more" link, 3 lines when collapsed */
+.synopsis .desc { font-size: 14px; line-height: 1.55; }
+.synopsis.collapsed .desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.text-button.synopsis-toggle {
+  margin-top: 4px;
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  color: var(--pink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Seasons */
+.season-block { margin-bottom: 16px; }
+.season-head { display: flex; align-items: center; gap: 12px; margin: 8px 0 10px; }
+.season-head strong { font-size: 15px; }
+.season-thumb {
+  width: 96px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #0d0b14;
+  border: 1px solid rgba(255, 255, 255, .14);
+  flex: 0 0 auto;
+}
+
+/* Smaller rating + reviews */
+.rating-box { margin-top: 10px; padding: 8px 10px; border-radius: 12px; }
+.rating-box-title { font-size: 11px; margin-bottom: 4px; }
+.stars-sm { gap: 0; margin-bottom: 6px; }
+.stars-sm button { font-size: 12px; padding: 1px; }
+.review-sm { font-size: 11px !important; min-height: 38px !important; padding: 6px 8px !important; margin-bottom: 6px; }
+.rating-box .outline.small { padding: 5px 12px; font-size: 12px; }
+.review-card { padding: 6px 0; font-size: 11px; }
+.review-card strong, .review-card p, .review-card .stars-display { font-size: 11px; }
+#reviewList + h3, #reviewList ~ h3 { font-size: 15px; }
+
+
+/* =========================================================
+   GLASS FILTERS (search / series / movies)
+   ========================================================= */
+.filter-row select,
+#page-search input,
+#seriesSearch,
+#movieSearch {
+  color: var(--text);
+  background-color: rgba(255, 255, 255, .10);
+  border: 1px solid rgba(255, 255, 255, .20);
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .18), 0 4px 14px rgba(0, 0, 0, .25);
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.filter-row select:focus,
+#page-search input:focus,
+#seriesSearch:focus,
+#movieSearch:focus {
+  background-color: rgba(255, 255, 255, .16);
+  border-color: var(--pink);
+}
+#page-search input::placeholder { color: var(--muted); font-weight: 500; }
+[data-theme="light"] .filter-row select,
+[data-theme="light"] #page-search input,
+[data-theme="light"] #seriesSearch,
+[data-theme="light"] #movieSearch {
+  background-color: rgba(255, 255, 255, .6);
+  border-color: rgba(0, 0, 0, .12);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .8), 0 4px 14px rgba(0, 0, 0, .08);
+}
+
+/* =========================================================
+   FIX: white strip at the bottom of the screen
+   (body is transparent, so the page canvas must be dark too)
+   ========================================================= */
+html {
+  background: #09090f;
+  color-scheme: dark;
+  min-height: 100%;
+}
+html[data-theme="light"] {
+  background: #f4f2f8;
+  color-scheme: light;
+}
+.bg-video-wrap {
+  height: 100lvh;
+  bottom: auto;
+}
+.app-shell { min-height: 100lvh; }
