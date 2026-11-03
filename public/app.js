@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v23';
+const APP_JS_VERSION = 'v24';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
