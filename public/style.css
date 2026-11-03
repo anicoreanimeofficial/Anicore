@@ -1466,3 +1466,235 @@ html[data-theme="light"] {
   bottom: auto;
 }
 .app-shell { min-height: 100lvh; }
+
+/* =========================================================
+   FLOATING NAV + FULL GLASS UI
+   ========================================================= */
+
+:root {
+  --glass: rgba(22, 18, 34, 0.45);
+  --glass-strong: rgba(22, 18, 34, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-blur: blur(22px) saturate(160%);
+  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="light"] {
+  --glass: rgba(255, 255, 255, 0.55);
+  --glass-strong: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 28px rgba(0, 0, 0, 0.1);
+}
+
+/* Floating bottom nav — pill, lifted from edges */
+.bottom-nav {
+  position: fixed !important;
+  left: 50% !important;
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 10px)) !important;
+  transform: translateX(-50%) !important;
+  width: min(92%, 420px) !important;
+  min-height: 64px !important;
+  padding: 6px 8px !important;
+  border-radius: 28px !important;
+  background: var(--glass-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+    0 1px 0 rgba(255, 255, 255, 0.12) inset !important;
+  z-index: 1000 !important;
+}
+
+.bottom-nav button {
+  border-radius: 20px !important;
+  transition: background .2s ease, color .2s ease, transform .15s ease !important;
+}
+.bottom-nav button.active {
+  background: rgba(255, 63, 130, 0.18) !important;
+  color: #ff7eb3 !important;
+  box-shadow: 0 0 20px rgba(255, 63, 130, 0.15);
+}
+
+/* Header glass + floating feel */
+.app-header {
+  background: var(--glass) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* Sidebar glass */
+.sidebar {
+  background: var(--glass-strong) !important;
+  border-right: 1px solid var(--glass-border) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+}
+.side-nav button.active {
+  background: rgba(255, 63, 130, 0.16) !important;
+  color: #ff7eb3 !important;
+}
+
+/* Cards glass */
+.media-card {
+  background: var(--glass) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(16px) saturate(140%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(140%) !important;
+  box-shadow: var(--glass-shadow) !important;
+  border-radius: 18px !important;
+  overflow: hidden;
+}
+.media-card:hover {
+  border-color: rgba(255, 63, 130, 0.45) !important;
+  box-shadow: 0 12px 36px rgba(255, 63, 130, 0.18) !important;
+}
+
+/* Panels / forms / filters */
+.panel,
+.filters,
+.rating-box,
+.stat-card,
+.install-banner,
+.section-heading-row + .media-grid,
+.intro,
+.request-row,
+.lib-row,
+.ep-admin-row {
+  background: var(--glass) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  border-radius: 16px;
+}
+
+.panel {
+  padding: 16px;
+  box-shadow: var(--glass-shadow);
+}
+
+.filters {
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.intro {
+  padding: 20px 16px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+/* Inputs glass */
+input, textarea, select {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+  color: var(--text);
+  border-radius: 12px;
+}
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select {
+  background: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Modal glass */
+.modal-card {
+  background: var(--glass-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(28px) saturate(170%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(170%) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 22px !important;
+}
+
+/* Buttons soft glass outline */
+button.outline {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+}
+button.outline:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Genre chips glass */
+.genre-chip {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(8px);
+  border-radius: 999px;
+}
+.genre-chip.active {
+  background: rgba(255, 63, 130, 0.22) !important;
+  border-color: rgba(255, 63, 130, 0.5) !important;
+}
+
+/* Series tabs glass */
+.series-tab {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+}
+.series-tab.active {
+  background: linear-gradient(110deg, rgba(255, 63, 130, 0.85), rgba(154, 92, 255, 0.85)) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+}
+
+/* Episode rows glass */
+.episode {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 12px !important;
+  margin-bottom: 8px;
+  backdrop-filter: blur(12px);
+}
+
+/* Detail actions / player chrome */
+.player-wrap {
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.video-nav button,
+.detail-actions button {
+  backdrop-filter: blur(10px);
+}
+
+/* Toast glass */
+.toast {
+  background: var(--glass-strong) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: var(--glass-blur) !important;
+  -webkit-backdrop-filter: var(--glass-blur) !important;
+}
+
+/* Space for floating nav */
+body {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+}
+@media (min-width: 900px) {
+  body { padding-bottom: 24px !important; }
+  .bottom-nav { display: none !important; }
+}
+
+/* Soft section titles over glass */
+.section-title {
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.section-heading-row .text-button {
+  background: var(--glass) !important;
+  border: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
