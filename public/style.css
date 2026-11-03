@@ -1559,7 +1559,6 @@ html[data-theme="light"] {
 .rating-box,
 .stat-card,
 .install-banner,
-.section-heading-row + .media-grid,
 .intro,
 .request-row,
 .lib-row,
@@ -1570,6 +1569,45 @@ html[data-theme="light"] {
   -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
   border-radius: 16px;
 }
+
+/* Home grids: no dark plate behind posters */
+.media-grid,
+#homeSeriesGrid,
+#homeMovieGrid,
+#continueGrid,
+#recommendGrid,
+#seriesGrid,
+#movieGrid,
+#searchGrid,
+#watchlistGrid {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Title under poster: no solid plate */
+.media-card .media-info {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 8px 2px 0 !important;
+}
+.media-card .media-info h3 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+  text-shadow: 0 1px 8px rgba(0,0,0,.5);
+}
+.media-card .media-info p {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 
 .panel {
   padding: 16px;
@@ -1799,16 +1837,7 @@ body {
   filter: drop-shadow(0 0 8px rgba(255, 126, 179, 0.85));
   text-shadow: 0 0 12px rgba(255, 63, 130, 0.9);
 }
-.bottom-nav button.active::after {
-  content: "";
-  display: block;
-  width: 14px;
-  height: 3px;
-  margin: 2px auto 0;
-  border-radius: 999px;
-  background: #ff7eb3;
-  box-shadow: 0 0 10px rgba(255, 126, 179, 0.8);
-}
+/* underline replaced by sliding pill */
 
 [data-theme="light"] .bottom-nav {
   background: rgba(255, 255, 255, 0.55) !important;
@@ -1822,4 +1851,336 @@ body {
 }
 
 /* Hide old nav pill if present */
-#navPill, .nav-pill { display: none !important; opacity: 0 !important; }
+/* nav pill enabled for slide animation */
+
+
+.video-nav button.hidden-nav-btn,
+.video-nav button[hidden] {
+  display: none !important;
+}
+.video-nav {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+}
+.video-nav:has(button:only-child),
+.video-nav.only-next {
+  justify-content: flex-end;
+}
+.video-nav.only-prev {
+  justify-content: flex-start;
+}
+
+
+/* =========================================================
+   SLIDING NAV PILL ANIMATION
+   ========================================================= */
+.bottom-nav {
+  position: fixed !important;
+  overflow: hidden; /* keep pill inside rounded bar */
+}
+
+.nav-pill,
+#navPill {
+  display: block !important;
+  position: absolute !important;
+  top: 6px;
+  left: 0;
+  bottom: 6px;
+  width: 64px;
+  border-radius: 999px !important;
+  background: linear-gradient(145deg, rgba(255, 63, 130, 0.35), rgba(154, 92, 255, 0.28)) !important;
+  border: 1px solid rgba(255, 126, 179, 0.35) !important;
+  box-shadow:
+    0 0 20px rgba(255, 63, 130, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none !important;
+  z-index: 0 !important;
+  opacity: 1 !important;
+  transition:
+    transform 0.38s cubic-bezier(0.34, 1.3, 0.64, 1),
+    width 0.32s cubic-bezier(0.34, 1.2, 0.64, 1) !important;
+  will-change: transform, width;
+}
+
+.bottom-nav button {
+  position: relative !important;
+  z-index: 1 !important;
+  background: transparent !important;
+}
+.bottom-nav button.active {
+  background: transparent !important;
+  color: #ff9ec8 !important;
+}
+.bottom-nav button.active .nav-icon {
+  color: #ff9ec8 !important;
+  filter: drop-shadow(0 0 6px rgba(255, 126, 179, 0.7));
+  transform: translateY(-1px) scale(1.08);
+  transition: transform 0.3s cubic-bezier(0.34, 1.4, 0.64, 1), filter 0.3s;
+}
+.bottom-nav button .nav-icon {
+  transition: transform 0.25s ease, filter 0.25s ease, color 0.25s ease;
+}
+.bottom-nav button:not(.active) .nav-icon {
+  transform: scale(1);
+  filter: none;
+}
+
+/* Tab press bounce */
+.bottom-nav button:active {
+  transform: scale(0.9) !important;
+}
+
+/* Page content slide (already partially present — smooth it) */
+.page {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+.page.from-right {
+  animation-name: pageInRight;
+}
+.page.from-left {
+  animation-name: pageInLeft;
+}
+@keyframes pageInRight {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pageInLeft {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+
+/* =========================================================
+   CRUNCHYROLL-STYLE INSTALL POPUP
+   ========================================================= */
+.install-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px 16px max(20px, env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0);
+  opacity: 0;
+  transition: background 0.35s ease, opacity 0.35s ease;
+  pointer-events: none;
+}
+.install-popup-overlay.install-in {
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 1;
+  pointer-events: auto;
+}
+.install-popup-overlay.install-out {
+  background: rgba(0, 0, 0, 0);
+  opacity: 0;
+  pointer-events: none;
+}
+.install-popup-overlay.install-out .install-popup {
+  transform: translateY(120%);
+  opacity: 0;
+}
+
+.install-popup {
+  position: relative;
+  width: min(100%, 400px);
+  padding: 22px 20px 18px;
+  border-radius: 24px 24px 20px 20px;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(255, 63, 130, 0.25), transparent 50%),
+    radial-gradient(ellipse at 90% 10%, rgba(154, 92, 255, 0.22), transparent 45%),
+    rgba(22, 16, 34, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  transform: translateY(110%);
+  opacity: 0.6;
+  transition: transform 0.45s cubic-bezier(0.22, 1.2, 0.36, 1), opacity 0.35s ease;
+  text-align: center;
+}
+.install-popup-overlay.install-in .install-popup {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.install-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.install-hero {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 4px auto 14px;
+}
+.install-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 900;
+  color: #fff;
+  background: linear-gradient(135deg, #ff3f82, #9a5cff);
+  box-shadow: 0 12px 30px rgba(255, 63, 130, 0.4);
+  animation: installLogoPop 0.6s cubic-bezier(0.34, 1.5, 0.64, 1) 0.15s both;
+}
+.install-sparkles::before,
+.install-sparkles::after {
+  content: "✦";
+  position: absolute;
+  color: #ff9ec8;
+  animation: installSpark 1.6s ease-in-out infinite;
+}
+.install-sparkles::before { top: -4px; right: -8px; font-size: 14px; }
+.install-sparkles::after { bottom: 2px; left: -10px; font-size: 11px; animation-delay: 0.4s; }
+
+@keyframes installLogoPop {
+  from { transform: scale(0.4) rotate(-8deg); opacity: 0; }
+  to { transform: scale(1) rotate(0); opacity: 1; }
+}
+@keyframes installSpark {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.install-popup h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  animation: installFadeUp 0.45s ease 0.2s both;
+}
+.install-sub {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted, #b7b3c7);
+  animation: installFadeUp 0.45s ease 0.28s both;
+}
+.install-perks {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  text-align: left;
+  animation: installFadeUp 0.45s ease 0.34s both;
+}
+.install-perks li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 13px;
+  font-weight: 600;
+}
+.install-perks li span { font-size: 16px; }
+
+.install-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: installFadeUp 0.45s ease 0.4s both;
+}
+.install-cta {
+  width: 100%;
+  padding: 13px 16px !important;
+  border-radius: 14px !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  background: linear-gradient(110deg, #ff3f82, #9a5cff) !important;
+  border: 0 !important;
+  box-shadow: 0 10px 28px rgba(255, 63, 130, 0.35);
+}
+.install-cta:active { transform: scale(0.98); }
+.install-later {
+  width: 100%;
+  padding: 11px 16px !important;
+  border-radius: 14px !important;
+  font-weight: 600 !important;
+}
+
+.install-ios-help {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 63, 130, 0.12);
+  border: 1px solid rgba(255, 63, 130, 0.28);
+  font-size: 12px;
+  line-height: 1.45;
+  color: #f5d0e0;
+}
+
+@keyframes installFadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (display-mode: standalone), (display-mode: minimal-ui) {
+  .install-popup-overlay { display: none !important; }
+}
+
+@media (min-width: 700px) {
+  .install-popup-overlay {
+    align-items: center;
+  }
+  .install-popup {
+    border-radius: 24px;
+  }
+}
+
+
+/* Brand logo */
+.brand {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  object-fit: cover;
+  box-shadow: 0 0 12px rgba(255, 63, 130, 0.35);
+}
+.mobile-brand .brand-logo {
+  width: 26px;
+  height: 26px;
+}
+.brand-text span {
+  color: var(--pink, #ff3f82);
+}
+
+.install-logo {
+  padding: 0 !important;
+  overflow: hidden;
+  background: transparent !important;
+  box-shadow: 0 12px 30px rgba(255, 63, 130, 0.35) !important;
+}
+.install-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

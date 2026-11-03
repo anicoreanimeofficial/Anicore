@@ -1,5 +1,5 @@
 /* ANICORE Service Worker — App Mode v9 */
-const CACHE = "anicore-v24";
+const CACHE = "anicore-v28";
 const ASSETS = [
   "/",
   "/assets/style.css?v=24",

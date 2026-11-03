@@ -13,10 +13,10 @@
   <meta name="msapplication-TileColor" content="#09090f">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="/manifest.json">
-  <link rel="apple-touch-icon" href="https://placehold.co/180x180/17101e/ff3f82?text=A">
-  <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32/17101e/ff3f82?text=A">
+  <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css?v=24">
+  <link rel="stylesheet" href="/assets/style.css?v=28">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
   <canvas id="snow" aria-hidden="true"></canvas>
 
   <aside class="sidebar" id="sidebar" aria-label="Main navigation">
-    <a class="brand" href="#" data-page="home">ANICORE<span>™</span></a>
+    <a class="brand" href="#" data-page="home"><img class="brand-logo" src="/assets/icons/logo.png" alt="" width="28" height="28"><span class="brand-text">ANICORE<span>™</span></span></a>
     <nav class="side-nav">
       <button type="button" data-page="home" class="active"><span class="nav-icon">⌂</span> Home</button>
       <button type="button" data-page="search"><span class="nav-icon">⌕</span> Search</button>
@@ -63,7 +63,7 @@
   <div class="app-shell">
     <header class="app-header">
       <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
-      <a class="brand mobile-brand" href="#" data-page="home">ANICORE<span>™</span></a>
+      <a class="brand mobile-brand" href="#" data-page="home"><img class="brand-logo" src="/assets/icons/logo.png" alt="" width="26" height="26"><span class="brand-text">ANICORE<span>™</span></span></a>
       <div class="header-actions">
         <button id="themeToggleMobile" class="outline small" type="button" aria-label="Toggle theme">🌓</button>
         <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
@@ -417,6 +417,6 @@
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=24"></script>
+  <script src="/assets/app.js?v=28"></script>
 </body>
 </html>

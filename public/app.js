@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v24';
+const APP_JS_VERSION = 'v28';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -273,14 +273,32 @@ function toggleTheme() {
 
 function movePill(animate = true) {
   const pill = $('navPill');
-  if (!pill) return;
-  const active = document.querySelector('.bottom-nav button.active');
-  if (!active) { pill.style.opacity = '0'; return; }
-  if (!animate) pill.style.transition = 'none';
-  pill.style.width = `${active.offsetWidth}px`;
-  pill.style.transform = `translateX(${active.offsetLeft}px)`;
+  const nav = $('bottomNav');
+  if (!pill || !nav) return;
+  const active = nav.querySelector('button.active');
+  if (!active) {
+    pill.style.opacity = '0';
+    return;
+  }
+  // Use offset relative to the nav container
+  const navRect = nav.getBoundingClientRect();
+  const btnRect = active.getBoundingClientRect();
+  const left = btnRect.left - navRect.left;
+  const width = btnRect.width;
+
+  if (!animate) {
+    pill.style.transition = 'none';
+  } else {
+    pill.style.transition = '';
+  }
+  pill.style.width = `${width}px`;
+  pill.style.transform = `translateX(${left}px)`;
   pill.style.opacity = '1';
-  if (!animate) { void pill.offsetWidth; pill.style.transition = ''; }
+
+  if (!animate) {
+    void pill.offsetWidth;
+    pill.style.transition = '';
+  }
 }
 window.addEventListener('resize', () => movePill(false));
 
@@ -1333,20 +1351,47 @@ function updateVideoNav() {
   const prevBtn = $('videoPrev');
   const nextBtn = $('videoNext');
   if (!prevBtn || !nextBtn) return;
-  if (!videoContext) {
-    prevBtn.disabled = true;
-    nextBtn.disabled = true;
+
+  if (!videoContext || !Array.isArray(videoContext.episodes) || !videoContext.episodes.length) {
+    prevBtn.hidden = true;
+    nextBtn.hidden = true;
+    prevBtn.classList.add('hidden-nav-btn');
+    nextBtn.classList.add('hidden-nav-btn');
     return;
   }
+
   const { episodes, currentIndex } = videoContext;
   const prevEp = currentIndex > 0 ? episodes[currentIndex - 1] : null;
   const nextEp = currentIndex < episodes.length - 1 ? episodes[currentIndex + 1] : null;
 
-  prevBtn.disabled = !prevEp;
-  prevBtn.textContent = prevEp ? `← S${prevEp.season}E${prevEp.episode}` : '← Previous';
+  // Ep 1 → hide Previous. Last ep → hide Next.
+  if (prevEp) {
+    prevBtn.hidden = false;
+    prevBtn.classList.remove('hidden-nav-btn');
+    prevBtn.disabled = false;
+    prevBtn.textContent = `← S${prevEp.season}E${prevEp.episode}`;
+  } else {
+    prevBtn.hidden = true;
+    prevBtn.classList.add('hidden-nav-btn');
+    prevBtn.disabled = true;
+  }
 
-  nextBtn.disabled = !nextEp;
-  nextBtn.textContent = nextEp ? `S${nextEp.season}E${nextEp.episode} →` : 'Next →';
+  if (nextEp) {
+    nextBtn.hidden = false;
+    nextBtn.classList.remove('hidden-nav-btn');
+    nextBtn.disabled = false;
+    nextBtn.textContent = `S${nextEp.season}E${nextEp.episode} →`;
+  } else {
+    nextBtn.hidden = true;
+    nextBtn.classList.add('hidden-nav-btn');
+    nextBtn.disabled = true;
+  }
+
+  const nav = prevBtn.parentElement;
+  if (nav) {
+    nav.classList.toggle('only-next', !prevEp && !!nextEp);
+    nav.classList.toggle('only-prev', !!prevEp && !nextEp);
+  }
 }
 
 $('videoPrev')?.addEventListener('click', () => {
@@ -1797,7 +1842,8 @@ wireSeriesPage();
   await loadGenres();
   loadHome();
   loadContinueWatching();
-  movePill(false);
+  requestAnimationFrame(() => { movePill(false); requestAnimationFrame(() => movePill(true)); });
+  wirePWA();
 })();
 
 
@@ -2074,37 +2120,128 @@ async function loadSimilar(type, id, container) {
   }
 }
 
-// PWA install prompt
+// PWA install prompt — Crunchyroll-style animated popup
+function isStandaloneApp() {
+  return window.matchMedia("(display-mode: standalone)").matches
+    || window.matchMedia("(display-mode: minimal-ui)").matches
+    || window.navigator.standalone === true;
+}
+
+function dismissInstallPopup(days = 7) {
+  try {
+    localStorage.setItem("anicore-install-dismissed", String(Date.now() + days * 86400000));
+  } catch (e) {}
+}
+
+function canShowInstallPopup() {
+  if (isStandaloneApp()) return false;
+  if ($("installPopup")) return false;
+  try {
+    const until = Number(localStorage.getItem("anicore-install-dismissed") || 0);
+    if (until && Date.now() < until) return false;
+  } catch (e) {}
+  return true;
+}
+
+function closeInstallPopup() {
+  const overlay = $("installPopup");
+  if (!overlay) return;
+  overlay.classList.add("install-out");
+  setTimeout(() => overlay.remove(), 320);
+}
+
+function showInstallPopup() {
+  if (!canShowInstallPopup()) return;
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const canNative = !!state.deferredInstall;
+
+  const overlay = document.createElement("div");
+  overlay.id = "installPopup";
+  overlay.className = "install-popup-overlay";
+  overlay.innerHTML = `
+    <div class="install-popup" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+      <button type="button" class="install-close" id="installDismiss" aria-label="Close">✕</button>
+      <div class="install-hero">
+        <div class="install-logo"><img src="/assets/icons/logo.png" alt="ANICORE" width="56" height="56"></div>
+        <div class="install-sparkles" aria-hidden="true"></div>
+      </div>
+      <h2 id="installTitle">Watch ANICORE like an app</h2>
+      <p class="install-sub">Install for faster launch, fullscreen, and offline-ready browsing — free on your home screen.</p>
+      <ul class="install-perks">
+        <li><span>⚡</span> Instant open from home screen</li>
+        <li><span>📱</span> Fullscreen, no browser chrome</li>
+        <li><span>✨</span> Smooth app-like experience</li>
+      </ul>
+      <div class="install-actions">
+        <button type="button" class="primary install-cta" id="installBtn">
+          ${canNative ? "Install App" : (isIOS ? "How to Install" : "Install App")}
+        </button>
+        <button type="button" class="outline install-later" id="installLater">Not now</button>
+      </div>
+      <p class="install-ios-help hidden" id="installIosHelp">
+        On iPhone: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
+      </p>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add("install-in"));
+
+  const close = () => {
+    dismissInstallPopup(7);
+    closeInstallPopup();
+  };
+
+  $("installDismiss")?.addEventListener("click", close);
+  $("installLater")?.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+
+  $("installBtn")?.addEventListener("click", async () => {
+    if (state.deferredInstall) {
+      try {
+        state.deferredInstall.prompt();
+        const choice = await state.deferredInstall.userChoice;
+        state.deferredInstall = null;
+        if (choice?.outcome === "accepted") {
+          dismissInstallPopup(365);
+        } else {
+          dismissInstallPopup(3);
+        }
+      } catch (e) {}
+      closeInstallPopup();
+      return;
+    }
+    if (isIOS) {
+      $("installIosHelp")?.classList.remove("hidden");
+      return;
+    }
+    // Desktop / unsupported — show tip then dismiss later
+    toast?.("Use your browser menu → Install App / Add to Home Screen");
+    dismissInstallPopup(3);
+    closeInstallPopup();
+  });
+}
+
 function wirePWA() {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
     state.deferredInstall = e;
-    if ($("installBanner")) return;
-    const bar = document.createElement("div");
-    bar.className = "install-banner";
-    bar.id = "installBanner";
-    bar.innerHTML = `
-      <span>Install ANICORE app</span>
-      <div>
-        <button type="button" class="primary small" id="installBtn">Add to Home Screen</button>
-        <button type="button" class="outline small" id="installDismiss">✕</button>
-      </div>
-    `;
-    document.body.appendChild(bar);
-    $("installBtn")?.addEventListener("click", async () => {
-      if (!state.deferredInstall) return;
-      state.deferredInstall.prompt();
-      await state.deferredInstall.userChoice;
-      state.deferredInstall = null;
-      bar.remove();
-    });
-    $("installDismiss")?.addEventListener("click", () => bar.remove());
   });
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   }
+
+  // Crunchyroll-style: show shortly after open (not while already installed)
+  if (!isStandaloneApp()) {
+    setTimeout(() => {
+      showInstallPopup();
+    }, 1800);
+  }
 }
+
 
 
 
