@@ -844,7 +844,7 @@ function updateAuthUI() {
 async function checkUser() {
   try {
     const res = await api('/api/auth/me');
-    state.user = res.authenticated ? { email: res.email, role: res.role || 'user' } : null;
+    state.user = res.authenticated ? { email: res.email, role: res.role || 'user', display_name: res.display_name || '', avatar: (res.prefs || {}).avatar || '' } : null;
     applyBackground(res.authenticated ? (res.prefs || {}).bg_image : '');
   } catch { state.user = null; }
   updateAuthUI();
@@ -937,6 +937,146 @@ $('sideLogout')?.addEventListener('click', doLogout);
 
 // --- Profile ---
 
+// --- Profile card (avatar + display name, Crunchyroll style) ---
+
+function profileName(u = state.user) {
+  return (u?.display_name || '').trim() || (u?.email || '').split('@')[0] || 'User';
+}
+
+function safeAvatar(url) {
+  return typeof url === 'string' && /^(https:\/\/|\/api\/users\/me\/avatar)/.test(url) ? url : '';
+}
+
+function avatarHtml(u = state.user, cls = '') {
+  const src = safeAvatar(u?.avatar);
+  const initial = esc(profileName(u).charAt(0).toUpperCase());
+  return src
+    ? `<div class="profile-avatar has-img ${cls}"><img src="${esc(src)}" alt="" loading="lazy"></div>`
+    : `<div class="profile-avatar ${cls}">${initial}</div>`;
+}
+
+function renderProfileCard(editing = false) {
+  const info = $('profileInfo');
+  const u = state.user;
+  if (!info || !u) return;
+  const isAdmin = u.role === 'admin';
+  info.innerHTML = `
+    <div class="panel profile-panel profile-card">
+      <button type="button" class="profile-avatar-btn" id="avatarPick" aria-label="Change profile picture">
+        ${avatarHtml(u, 'big')}
+        <span class="avatar-edit-badge">✎</span>
+      </button>
+      <input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp" hidden>
+      <h3 class="profile-name">${esc(profileName(u))}${isAdmin ? ' <span class="role-badge">Admin</span>' : ''}</h3>
+      <p class="muted profile-email">${esc(u.email)}</p>
+      ${editing ? `
+        <form id="profileEditForm" class="profile-edit stack">
+          <label>Display name
+            <input id="profileNameInput" maxlength="30" placeholder="Your name" value="${esc(u.display_name || '')}" autocomplete="nickname">
+          </label>
+          <label>Profile picture link
+            <input id="avatarUrlInput" type="url" placeholder="https://..." value="${esc((u.avatar || '').startsWith('https://') ? u.avatar : '')}" autocomplete="off">
+          </label>
+          <div class="bg-actions">
+            <button type="submit" class="primary small">Save</button>
+            <button type="button" class="outline small" id="avatarUpload">Upload photo</button>
+            <button type="button" class="outline small" id="avatarRemove">Remove photo</button>
+            <button type="button" class="outline small" id="profileCancel">Cancel</button>
+          </div>
+          <p id="profileMsg" class="hint"></p>
+        </form>`
+      : `<button type="button" class="outline small" id="profileEditBtn">Edit profile</button>`}
+    </div>`;
+  $('avatarPick')?.addEventListener('click', () => $('avatarFile')?.click());
+  $('profileEditBtn')?.addEventListener('click', () => renderProfileCard(true));
+  $('profileCancel')?.addEventListener('click', () => renderProfileCard(false));
+  $('avatarUpload')?.addEventListener('click', () => $('avatarFile')?.click());
+  $('avatarFile')?.addEventListener('change', onAvatarFile);
+  $('avatarRemove')?.addEventListener('click', removeAvatar);
+  $('profileEditForm')?.addEventListener('submit', saveProfileForm);
+}
+
+function setProfileMsg(text, isError = false) {
+  const el = $('profileMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = isError ? '#ff6b8a' : '';
+}
+
+// Center-crop an uploaded picture to a small square JPEG.
+function imageFileToAvatar(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Choose a JPG, PNG or WebP image.'));
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const size = 320;
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth - side) / 2;
+      const sy = (img.naturalHeight - side) / 2;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      let quality = 0.85;
+      let out = canvas.toDataURL('image/jpeg', quality);
+      while (out.length > 380_000 && quality > 0.4) { quality -= 0.15; out = canvas.toDataURL('image/jpeg', quality); }
+      if (out.length > 380_000) return reject(new Error('That image is too large. Try a smaller one.'));
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('That image could not be read.')); };
+    img.src = objectUrl;
+  });
+}
+
+async function saveAvatar(body) {
+  const res = await api('/api/users/me/avatar', { method: 'PUT', body: JSON.stringify(body) });
+  state.user.avatar = res.avatar || '';
+  return res;
+}
+
+async function onAvatarFile(e) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file || !state.user) return;
+  try {
+    toast('Uploading…');
+    await saveAvatar({ data: await imageFileToAvatar(file) });
+    renderProfileCard(!!$('profileEditForm'));
+    toast('Profile picture updated');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function removeAvatar() {
+  try {
+    await api('/api/users/me/avatar', { method: 'DELETE' });
+    state.user.avatar = '';
+    renderProfileCard(true);
+    toast('Profile picture removed');
+  } catch (err) { setProfileMsg(err.message, true); }
+}
+
+async function saveProfileForm(e) {
+  e.preventDefault();
+  const name = $('profileNameInput').value.trim();
+  const url = $('avatarUrlInput').value.trim();
+  try {
+    if (url && url !== state.user.avatar) {
+      await new Promise((ok, fail) => {
+        const probe = new Image();
+        probe.onload = ok;
+        probe.onerror = () => fail(new Error('That link did not load as an image.'));
+        probe.src = url;
+      });
+      await saveAvatar({ url });
+    }
+    const res = await api('/api/users/me/profile', { method: 'PUT', body: JSON.stringify({ display_name: name }) });
+    state.user.display_name = res.display_name || '';
+    renderProfileCard(false);
+    toast('Profile saved');
+  } catch (err) { setProfileMsg(err.message, true); }
+}
+
 async function loadProfile() {
   const info = $('profileInfo');
   const member = $('profileMember');
@@ -948,12 +1088,7 @@ async function loadProfile() {
     return;
   }
 
-  info.innerHTML = `
-    <div class="panel profile-panel">
-      <div class="profile-avatar">${esc(state.user.email.charAt(0).toUpperCase())}</div>
-      <h3>${esc(state.user.email)}</h3>
-      <p class="muted">Role: ${esc(state.user.role)}</p>
-    </div>`;
+  renderProfileCard();
   member?.classList.remove('hidden');
 
   try {
