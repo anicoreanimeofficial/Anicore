@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v30';
+const APP_JS_VERSION = 'v31';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -317,9 +317,47 @@ function saveNavState() {
     if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
       h = '#/detail/' + state.detailType + '/' + state.detailId;
     }
-    if (location.hash !== h) history.replaceState(null, '', location.pathname + location.search + h);
+    const key = (state.page === 'detail' || state.page === 'video')
+      ? `${state.page}:${state.detailType}:${state.detailId}` : state.page;
+    const idx = (history.state && history.state.idx) || 0; // how many in-app pages sit behind this one
+    const entry = { key, idx, page: state.page, detailType: state.detailType, detailId: state.detailId };
+    const url = location.pathname + location.search + h;
+    // Each page the user opens gets its own history entry so the phone's Back button steps back
+    // through the app instead of leaving the site. Back/forward itself must not add entries.
+    if (navFromHistory || !history.state || !history.state.key) {
+      history.replaceState(entry, '', url);
+    } else if (history.state.key !== key) {
+      entry.idx = idx + 1;
+      history.pushState(entry, '', url);
+    }
   } catch (e) {}
 }
+
+let navFromHistory = false;
+
+function navigateFromHistory() {
+  let st = history.state;
+  if (!st || !st.key) {
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const pg = location.hash.match(/^#\/([a-z]+)$/);
+    st = d ? { page: 'detail', detailType: d[1], detailId: d[2] } : { page: pg ? pg[1] : 'home' };
+  }
+  navFromHistory = true;
+  try {
+    document.querySelectorAll('.modal:not(.hidden)').forEach((m) => m.classList.add('hidden'));
+    if ((st.page === 'detail' || st.page === 'video') && st.detailId && st.detailType) {
+      // A video can't be rebuilt from history alone, so Back/Forward land on its details page.
+      openDetail(st.detailType, st.detailId);
+    } else if (PAGE_ORDER.includes(st.page) && st.page !== 'detail' && st.page !== 'video') {
+      showPage(st.page);
+    } else {
+      showPage('home');
+    }
+  } finally {
+    navFromHistory = false;
+  }
+}
+window.addEventListener('popstate', navigateFromHistory);
 
 function restoreNavState() {
   try {
@@ -342,6 +380,8 @@ function showPage(page) {
     clearPlayer();
     videoContext = null;
   }
+  if (page === 'video') hideResumeBar();
+  else if (state.page === 'video' && state.user) setTimeout(loadContinueWatching, 400);
 
   const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
@@ -585,10 +625,63 @@ async function loadContinueWatching() {
     if (!items.length) { section?.classList.add('hidden'); return; }
     renderContinue(items);
     section?.classList.remove('hidden');
+    showResumeBar(items[0]);
   } catch {
     section?.classList.add('hidden');
+    hideResumeBar();
   }
 }
+
+// --- Floating resume bar (latest title, sits above the nav) ---
+
+let resumeItem = null;
+
+function durationMinutes(text) {
+  const t = String(text || '').toLowerCase();
+  const h = (t.match(/(\d+)\s*h/) || [])[1];
+  const m = (t.match(/(\d+)\s*m/) || [])[1] || (!h && (t.match(/^\d+$/) || [])[0]);
+  const total = (Number(h) || 0) * 60 + (Number(m) || 0);
+  return total || 0;
+}
+
+function resumeDismissKey(item) {
+  return `anicore-resume-dismissed:${item.content_id}:${item.season}:${item.episode}`;
+}
+
+function hideResumeBar() {
+  resumeItem = null;
+  $('resumeBar')?.classList.add('hidden');
+}
+
+function showResumeBar(item) {
+  const bar = $('resumeBar');
+  if (!bar || !item || state.page === 'video') { hideResumeBar(); return; }
+  try { if (sessionStorage.getItem(resumeDismissKey(item))) { hideResumeBar(); return; } } catch (e) { /* noop */ }
+  resumeItem = item;
+
+  const pct = Math.round(continueProgress(item));
+  const epPct = Number(item.progress_percent) || 0;
+  const mins = durationMinutes(item.duration);
+  $('resumeEp').textContent = `EP ${item.episode || 1}`;
+  $('resumeLeft').textContent = mins
+    ? `${Math.max(1, Math.round(mins * (1 - epPct / 100)))} min left`
+    : (item.up_next ? 'Up next' : 'Resume');
+  $('resumeTitle').textContent = item.title || 'Untitled';
+  $('resumeFill').style.width = `${Math.max(pct, 3)}%`;
+  $('resumePct').textContent = `${pct}%`;
+  const img = $('resumeImg');
+  img.onerror = () => { img.onerror = null; img.src = PLACEHOLDER; };
+  img.src = safeUrl(item.poster) || safeUrl(item.thumbnail) || safeUrl(item.banner) || PLACEHOLDER;
+  bar.classList.remove('hidden');
+}
+
+$('resumeMain')?.addEventListener('click', () => {
+  if (resumeItem) resumeWatching({ ...resumeItem, _id: resumeItem.content_id, _type: resumeItem.content_type });
+});
+$('resumeClose')?.addEventListener('click', () => {
+  if (resumeItem) { try { sessionStorage.setItem(resumeDismissKey(resumeItem), '1'); } catch (e) { /* noop */ } }
+  hideResumeBar();
+});
 
 async function loadList(type, reset = false) {
   const l = LISTS[type];
@@ -846,6 +939,7 @@ async function doLogout() {
     await api('/api/auth/logout', { method: 'POST' });
     state.user = null;
     applyBackground('');
+    hideResumeBar();
     updateAuthUI();
     showPage('home');
     toast('Signed out');
@@ -1151,7 +1245,6 @@ function bindDetailEvents(type, item, container) {
 async function openDetail(type, id, preview) {
   state.detailId = id;
   state.detailType = type;
-  saveNavState();
 
   showPage('detail');
   const contentEl = $('detailPageContent');
@@ -1179,7 +1272,9 @@ async function openDetail(type, id, preview) {
   }
 }
 
-$('detailBack')?.addEventListener('click', () => showPage('home'));
+$('detailBack')?.addEventListener('click', () => {
+  if (history.state && history.state.idx > 0) history.back(); else showPage('home');
+});
 
 // --- Video Player ---
 
@@ -1484,6 +1579,7 @@ $('videoNext')?.addEventListener('click', () => {
 });
 
 $('videoBack')?.addEventListener('click', () => {
+  if (history.state && history.state.page === 'video') { history.back(); return; }
   clearPlayer();
   const backType = videoContext?.type || state.detailType;
   const backId = videoContext?.contentId || state.detailId;
@@ -2056,6 +2152,16 @@ function bindHero(root) {
 wireSeriesPage();
 
 (async function init() {
+  // Mark the page we landed on as the first history entry, so Back can return to it.
+  try {
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const pg = location.hash.match(/^#\/([a-z]+)$/);
+    const page = d ? 'detail' : (pg && PAGE_ORDER.includes(pg[1]) ? pg[1] : 'home');
+    history.replaceState({
+      key: d ? `detail:${d[1]}:${d[2]}` : page, idx: 0, page,
+      detailType: d ? d[1] : null, detailId: d ? d[2] : null,
+    }, '', location.href);
+  } catch (e) { /* noop */ }
   applyTheme(state.theme);
   applyAccent(state.accent);
   applyLanguage(state.language);
