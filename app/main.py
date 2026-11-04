@@ -1,3 +1,4 @@
+from pathlib import Path
 import base64
 import binascii
 import re
@@ -9,7 +10,9 @@ from typing import List, Literal, Optional
 import aiohttp
 from bson import ObjectId
 from bson.errors import InvalidId
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import (
+    BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile,
+)
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
@@ -300,9 +303,10 @@ def valid_url(url: str) -> str:
     url = (url or "").strip()
     if not url:
         return ""
-    if not url.startswith("https://"):
-        raise HTTPException(status_code=400, detail="Poster and banner URLs must start with https://")
-    return url
+    # Allow absolute https and local uploaded assets
+    if url.startswith("https://") or url.startswith("/assets/"):
+        return url
+    raise HTTPException(status_code=400, detail="URL must start with https:// or /assets/")
 
 
 def valid_video_url(url: str) -> str:
@@ -865,6 +869,8 @@ def add_movie(data: MovieData, admin=Depends(require_uploader)):
 def add_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    if ep.get("thumbnail"):
+        ep["thumbnail"] = valid_url(ep.get("thumbnail") or "") or ep.get("thumbnail") or ""
     ep["subtitles"] = clean_subtitles(ep.get("subtitles"))
     cleaned_links = {}
     for k, v in (ep.get("quality_links") or {}).items():
@@ -886,6 +892,8 @@ def add_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=D
 def add_tv_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    if ep.get("thumbnail"):
+        ep["thumbnail"] = valid_url(ep.get("thumbnail") or "") or ep.get("thumbnail") or ""
     ep["subtitles"] = clean_subtitles(ep.get("subtitles"))
     cleaned_links = {}
     for k, v in (ep.get("quality_links") or {}).items():
@@ -927,6 +935,8 @@ def update_episode(
             updates = data.model_dump(exclude_unset=True)
             if "video_url" in updates:
                 updates["video_url"] = valid_video_url(updates["video_url"])
+            if "thumbnail" in updates and updates["thumbnail"]:
+                updates["thumbnail"] = valid_url(updates["thumbnail"]) or updates["thumbnail"]
             if "subtitles" in updates:
                 updates["subtitles"] = clean_subtitles(updates["subtitles"])
             if "quality_links" in updates and updates["quality_links"]:
@@ -2054,6 +2064,166 @@ def manifest():
 @app.get("/sw.js")
 def service_worker():
     return FileResponse("public/sw.js")
+
+
+
+
+# ---------- Image upload + metadata helpers ----------
+
+UPLOAD_DIR = Path("public/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+ALLOWED_IMAGE = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif"}
+
+
+@app.post("/api/upload/image")
+async def upload_image(request: Request, file: UploadFile = File(...)):
+    """Admin/uploader image upload for posters, banners, thumbnails."""
+    user = get_current_user(request)
+    if not user or user.get("role") not in ("admin", "uploader"):
+        raise HTTPException(status_code=403, detail="Uploaders only")
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in ALLOWED_IMAGE:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP or GIF allowed")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File must be under 8MB")
+    import uuid
+    name = f"{uuid.uuid4().hex}{ALLOWED_IMAGE[content_type]}"
+    path = UPLOAD_DIR / name
+    path.write_bytes(data)
+    return {"url": f"/assets/uploads/{name}", "message": "Uploaded"}
+
+
+@app.post("/api/admin/{type}/{id}/season-thumbnail")
+def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_uploader)):
+    """Store a season-level thumbnail and apply to episodes in that season missing one."""
+    if type not in ("anime", "tv_show"):
+        raise HTTPException(status_code=400, detail="Only series support seasons")
+    season = int(data.get("season") or 1)
+    thumb = valid_url(data.get("thumbnail") or "")
+    if not thumb:
+        raise HTTPException(status_code=400, detail="Valid thumbnail URL required")
+    coll = get_collection(type)
+    oid = object_id(id)
+    doc = coll.find_one({"_id": oid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    season_map = dict(doc.get("season_thumbnails") or {})
+    season_map[str(season)] = thumb
+    episodes = doc.get("episodes") or []
+    for ep in episodes:
+        if int(ep.get("season") or 1) == season and not (ep.get("thumbnail") or "").strip():
+            ep["thumbnail"] = thumb
+    coll.update_one(
+        {"_id": oid},
+        {"$set": {"season_thumbnails": season_map, "episodes": episodes, "updated_at": utc_now()}},
+    )
+    return {"message": "Season thumbnail saved", "season_thumbnails": season_map}
+
+
+@app.get("/api/meta/anime")
+async def meta_anime(q: str = ""):
+    """Auto-fetch anime title, description, poster from Jikan (MyAnimeList)."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        raise HTTPException(status_code=400, detail="Enter at least 2 characters")
+    import aiohttp
+    url = f"https://api.jikan.moe/v4/anime?q={q}&limit=1"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+                if resp.status != 200:
+                    raise HTTPException(status_code=502, detail="Metadata service unavailable")
+                payload = await resp.json()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Fetch failed: {exc}")
+    data = (payload.get("data") or [None])[0]
+    if not data:
+        raise HTTPException(status_code=404, detail="No match found")
+    images = data.get("images") or {}
+    jpg = images.get("jpg") or {}
+    webp = images.get("webp") or {}
+    poster = jpg.get("large_image_url") or jpg.get("image_url") or webp.get("large_image_url") or ""
+    trailer = ((data.get("trailer") or {}).get("images") or {}).get("maximum_image_url") or ""
+    genres = ", ".join(g.get("name", "") for g in (data.get("genres") or []) if g.get("name"))
+    duration = data.get("duration") or ""
+    return {
+        "mal_id": data.get("mal_id"),
+        "title": data.get("title_english") or data.get("title") or q,
+        "description": (data.get("synopsis") or "")[:5000],
+        "poster": poster,
+        "banner": trailer or poster,
+        "year": (data.get("year") or (data.get("aired") or {}).get("prop", {}).get("from", {}).get("year")),
+        "genres": genres,
+        "rating": str(data.get("score") or ""),
+        "duration": duration,
+        "episodes": data.get("episodes"),
+    }
+
+
+@app.get("/api/meta/episode")
+async def meta_episode(title: str = "", episode: int = 1, season: int = 1, mal_id: int = 0):
+    """Auto-fetch episode title / duration / synopsis from Jikan."""
+    import aiohttp
+    mid = int(mal_id or 0)
+    try:
+        async with aiohttp.ClientSession() as session:
+            if not mid and title.strip():
+                async with session.get(
+                    f"https://api.jikan.moe/v4/anime?q={title.strip()}&limit=1",
+                    timeout=aiohttp.ClientTimeout(total=12),
+                ) as resp:
+                    if resp.status == 200:
+                        payload = await resp.json()
+                        row = (payload.get("data") or [None])[0]
+                        if row:
+                            mid = int(row.get("mal_id") or 0)
+            if not mid:
+                raise HTTPException(status_code=404, detail="Anime not found for metadata")
+            # Jikan episode endpoint (title + synopsis)
+            async with session.get(
+                f"https://api.jikan.moe/v4/anime/{mid}/episodes/{int(episode)}",
+                timeout=aiohttp.ClientTimeout(total=12),
+            ) as resp:
+                ep = {}
+                if resp.status == 200:
+                    body = await resp.json()
+                    ep = body.get("data") or {}
+            # Full anime for duration fallback + image
+            async with session.get(
+                f"https://api.jikan.moe/v4/anime/{mid}/full",
+                timeout=aiohttp.ClientTimeout(total=12),
+            ) as resp:
+                anime = {}
+                if resp.status == 200:
+                    anime = (await resp.json()).get("data") or {}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Fetch failed: {exc}")
+
+    images = anime.get("images") or {}
+    jpg = images.get("jpg") or {}
+    poster = jpg.get("large_image_url") or jpg.get("image_url") or ""
+    duration = anime.get("duration") or ""
+    # normalize "24 min per ep" -> "24m"
+    if duration and "min" in duration.lower():
+        import re as _re
+        m = _re.search(r"(\d+)\s*min", duration.lower())
+        if m:
+            duration = f"{m.group(1)}m"
+
+    return {
+        "mal_id": mid,
+        "title": ep.get("title") or ep.get("title_romanji") or f"Episode {episode}",
+        "description": (ep.get("synopsis") or "")[:5000],
+        "duration": duration,
+        "thumbnail": poster,
+        "season": season,
+        "episode": episode,
+    }
 
 
 app.mount("/assets", StaticFiles(directory="public"), name="assets")
