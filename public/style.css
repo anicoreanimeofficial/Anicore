@@ -2610,3 +2610,10 @@ body {
 }
 .profile-edit { text-align: left; margin-top: 14px; }
 .profile-edit label { display: block; margin-bottom: 12px; }
+
+/* Hero backdrop runs up under the transparent header so the top strip matches the rest */
+.hero {
+  margin-top: calc(-1 * var(--header-h, 68px));
+  padding-top: calc(18px + var(--header-h, 68px));
+}
+.nav-icon { font-style: normal; line-height: 1; }
