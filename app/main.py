@@ -162,6 +162,11 @@ class ProfileData(BaseModel):
     display_name: str = Field(default="", max_length=30)
 
 
+class UploaderRoleData(BaseModel):
+    email: str = Field(max_length=254)
+    role: Literal["uploader", "user"]
+
+
 class AnilistImport(BaseModel):
     anilist_id: Optional[int] = None
     search: Optional[str] = None
@@ -286,6 +291,12 @@ def require_admin(user=Depends(require_user)):
     return user
 
 
+def require_uploader(user=Depends(require_user)):
+    if user.get("role") not in ("admin", "uploader"):
+        raise HTTPException(status_code=403, detail="Uploader access required")
+    return user
+
+
 async def send_webhook(message: str):
     if WEBHOOK_URL:
         try:
@@ -324,7 +335,7 @@ def is_admin_request(request: Request, flag: bool) -> bool:
     if not flag:
         return False
     user = get_current_user(request)
-    return bool(user and user.get("role") == "admin")
+    return bool(user and user.get("role") in ("admin", "uploader"))
 
 
 def parse_schedule_time(value: Optional[str]):
@@ -648,26 +659,26 @@ async def get_content(type: str, id: str, request: Request):
 
 
 @app.post("/api/admin/anime")
-def add_anime(data: AnimeData, background: BackgroundTasks, admin=Depends(require_admin)):
+def add_anime(data: AnimeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     item = insert_content(db.anime, data, with_episodes=True)
     background.add_task(send_webhook, f"New Anime Added: {item['title']}")
     return {"message": "Anime added", "id": str(item.get("_id", ""))}
 
 
 @app.post("/api/admin/tvshows")
-def add_tvshow(data: TvShowData, admin=Depends(require_admin)):
+def add_tvshow(data: TvShowData, admin=Depends(require_uploader)):
     item = insert_content(db.tv_shows, data, with_episodes=True)
     return {"message": "TV show added", "id": str(item.get("_id", ""))}
 
 
 @app.post("/api/admin/movies")
-def add_movie(data: MovieData, admin=Depends(require_admin)):
+def add_movie(data: MovieData, admin=Depends(require_uploader)):
     item = insert_content(db.movies, data, with_episodes=False)
     return {"message": "Movie added", "id": str(item.get("_id", ""))}
 
 
 @app.post("/api/admin/anime/{id}/episodes")
-def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
+def add_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
     cleaned_links = {}
@@ -681,7 +692,7 @@ def add_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
 
 
 @app.post("/api/admin/tvshows/{id}/episodes")
-def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_admin)):
+def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
     cleaned_links = {}
@@ -701,7 +712,7 @@ def update_episode(
     season: int,
     episode: int,
     data: EpisodeUpdate,
-    admin=Depends(require_admin),
+    admin=Depends(require_uploader),
 ):
     if type not in ("anime", "tv_show"):
         raise HTTPException(status_code=400, detail="Only anime and tv_show have episodes")
@@ -748,7 +759,7 @@ def delete_episode(type: str, id: str, season: int, episode: int, admin=Depends(
 
 
 @app.put("/api/admin/content/{type}/{id}")
-def update_content(type: str, id: str, data: MovieData, admin=Depends(require_admin)):
+def update_content(type: str, id: str, data: MovieData, admin=Depends(require_uploader)):
     coll = get_collection(type)
     fields = data.model_dump(exclude_unset=True)
     for key in ("poster", "banner"):
@@ -779,7 +790,7 @@ def delete_content(type: str, id: str, admin=Depends(require_admin)):
 
 
 @app.post("/api/admin/bulk-import")
-def bulk_import(items: List[BulkImportItem], admin=Depends(require_admin)):
+def bulk_import(items: List[BulkImportItem], admin=Depends(require_uploader)):
     added = 0
     for item in items[:100]:
         coll = get_collection(item.content_type)
@@ -1173,7 +1184,7 @@ def save_prefs(data: PrefsData, user=Depends(require_user)):
 
 
 @app.post("/api/admin/import/anilist")
-async def import_anilist(data: AnilistImport, admin=Depends(require_admin)):
+async def import_anilist(data: AnilistImport, admin=Depends(require_uploader)):
     if data.anilist_id:
         gql = """
         query ($id: Int) {
@@ -1271,7 +1282,7 @@ async def import_anilist(data: AnilistImport, admin=Depends(require_admin)):
 
 
 @app.post("/api/admin/bulk-episodes")
-def bulk_add_episodes(data: BulkEpisodesData, admin=Depends(require_admin)):
+def bulk_add_episodes(data: BulkEpisodesData, admin=Depends(require_uploader)):
     coll = get_collection(data.content_type)
     doc = coll.find_one({"_id": object_id(data.content_id)})
     if not doc:
@@ -1518,6 +1529,47 @@ def get_avatar(user=Depends(require_user)):
 def clear_avatar(user=Depends(require_user)):
     db.users.update_one({"_id": user["_id"]}, {"$unset": {"prefs.avatar": "", "avatar_data": ""}})
     return {"message": "Profile picture removed"}
+
+
+# --- Uploader role management (admin only) ---
+
+
+@app.post("/api/admin/uploaders")
+def create_uploader(data: RegisterData, admin=Depends(require_admin)):
+    email = data.email.lower().strip()
+    if db.users.find_one({"email": email}):
+        raise HTTPException(
+            status_code=409,
+            detail="That email already has an account. Use \"Give access to existing user\" instead.",
+        )
+    db.users.insert_one(
+        {
+            "email": email,
+            "password_hash": hash_password(data.password),
+            "role": "uploader",
+            "created_at": utc_now(),
+        }
+    )
+    return {"message": f"Uploader account created for {email}", "email": email, "role": "uploader"}
+
+
+@app.get("/api/admin/uploaders")
+def list_uploaders(admin=Depends(require_admin)):
+    rows = db.users.find({"role": "uploader"}, {"email": 1, "display_name": 1}).sort("email", 1).limit(200)
+    return [{"email": r["email"], "display_name": r.get("display_name", "")} for r in rows]
+
+
+@app.put("/api/admin/users/role")
+def set_user_role(data: UploaderRoleData, admin=Depends(require_admin)):
+    email = data.email.strip().lower()
+    target = db.users.find_one({"email": email})
+    if not target:
+        raise HTTPException(status_code=404, detail="No account with that email. They need to sign up first.")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="That account is an admin already.")
+    db.users.update_one({"_id": target["_id"]}, {"$set": {"role": data.role}})
+    verb = "can now upload" if data.role == "uploader" else "is a regular user again"
+    return {"message": f"{email} {verb}", "email": email, "role": data.role}
 
 
 # --- Health Check ---
