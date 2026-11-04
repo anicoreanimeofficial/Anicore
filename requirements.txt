@@ -6,3 +6,4 @@ email-validator
 python-dotenv
 pyjwt
 aiohttp
+python-multipart
