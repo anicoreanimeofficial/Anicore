@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v31';
+const APP_JS_VERSION = 'v34';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -519,7 +519,51 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
   grid.appendChild(frag);
 }
 
+async function loadTopAiring() {
+  const section = $('topAiringSection');
+  const row = $('topAiringRow');
+  if (!section || !row) return;
+  try {
+    const [anime, tv] = await Promise.all([
+      api('/api/anime?page=1&limit=10&status=Ongoing&sort=views'),
+      api('/api/tvshows?page=1&limit=10&status=Ongoing&sort=views'),
+    ]);
+    const items = [
+      ...(anime.items || []).map((i) => ({ ...i, _type: 'anime' })),
+      ...(tv.items || []).map((i) => ({ ...i, _type: 'tv_show' })),
+    ].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10);
+    if (!items.length) { section.classList.add('hidden'); return; }
+    row.innerHTML = '';
+    items.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'top-item';
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+      el.innerHTML = `
+        <span class="top-rank" aria-hidden="true">${i + 1}</span>
+        <div class="top-poster"><img alt="" loading="lazy" decoding="async"><span class="top-tag">${item._type === 'anime' ? 'ANIME' : 'TV'}</span></div>
+        <div class="top-name"></div>`;
+      const img = el.querySelector('img');
+      img.src = safeUrl(item.poster) || PLACEHOLDER;
+      img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+      el.querySelector('.top-name').textContent = item.title || 'Untitled';
+      el.setAttribute('aria-label', `Number ${i + 1}: ${item.title || 'Untitled'}`);
+      const open = () => {
+        el.classList.add('card-press');
+        requestAnimationFrame(() => { el.classList.remove('card-press'); openDetail(item._type, item._id, item); });
+      };
+      el.addEventListener('click', open);
+      el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      row.appendChild(el);
+    });
+    section.classList.remove('hidden');
+  } catch {
+    section.classList.add('hidden');
+  }
+}
+
 async function loadHome() {
+  loadTopAiring();
   showSkeleton('homeSeriesGrid', 8);
   showSkeleton('homeMovieGrid', 6);
 
@@ -563,71 +607,12 @@ function continueProgress(item) {
   return Number(item.progress_percent) || 0;
 }
 
-function renderContinue(items) {
-  const row = $('continueGrid');
-  row.innerHTML = '';
-  items.forEach((item) => {
-    const card = document.createElement('div');
-    card.className = 'continue-card';
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
-
-    const pct = Math.round(continueProgress(item));
-    const epPct = Math.round(Number(item.progress_percent) || 0);
-    const label = `S${item.season || 1} · E${item.episode || 1}`
-      + (item.total_episodes ? ` of ${item.total_episodes}` : '')
-      + (epPct > 0 && epPct < 95 ? ` · ${epPct}% watched` : '');
-    const art = safeUrl(item.thumbnail) || safeUrl(item.banner) || safeUrl(item.poster) || PLACEHOLDER;
-
-    card.innerHTML = `
-      <div class="continue-thumb">
-        <img alt="" loading="lazy" decoding="async">
-        ${item.up_next ? '<span class="continue-badge">Up next</span>' : ''}
-        <span class="continue-play" aria-hidden="true">&#9654;</span>
-        <div class="progress-bar"><span style="width:${Math.max(pct, 3)}%"></span></div>
-      </div>
-      <div class="continue-meta"><h3></h3><p></p></div>
-      <button type="button" class="continue-remove" aria-label="Remove from Continue Watching" title="Remove">&times;</button>`;
-
-    const img = card.querySelector('img');
-    img.src = art;
-    img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
-    card.querySelector('h3').textContent = item.title || 'Untitled';
-    card.querySelector('p').textContent = label;
-    card.setAttribute('aria-label', `Resume ${item.title || 'Untitled'}, ${label}`);
-
-    const open = () => {
-      card.classList.add('card-press');
-      requestAnimationFrame(() => resumeWatching({ ...item, _id: item.content_id, _type: item.content_type }));
-    };
-    card.addEventListener('click', open);
-    card.addEventListener('keydown', (e) => {
-      if (e.target !== card) return;
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
-    });
-    card.querySelector('.continue-remove').addEventListener('click', async (e) => {
-      e.stopPropagation();
-      try {
-        await api(`/api/continue-watching/${item.content_type}/${item.content_id}`, { method: 'DELETE' });
-        card.remove();
-        if (!row.children.length) $('continueSection')?.classList.add('hidden');
-      } catch (err) { toast(err.message, 'error'); }
-    });
-    row.appendChild(card);
-  });
-}
-
 async function loadContinueWatching() {
-  const section = $('continueSection');
-  if (!state.user) { section?.classList.add('hidden'); return; }
+  if (!state.user) { hideResumeBar(); return; }
   try {
     const items = await api('/api/continue-watching');
-    if (!items.length) { section?.classList.add('hidden'); return; }
-    renderContinue(items);
-    section?.classList.remove('hidden');
-    showResumeBar(items[0]);
+    if (items.length) showResumeBar(items[0]); else hideResumeBar();
   } catch {
-    section?.classList.add('hidden');
     hideResumeBar();
   }
 }
