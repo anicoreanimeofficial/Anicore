@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v28';
+const APP_JS_VERSION = 'v30';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -33,7 +33,7 @@ const state = {
 // videoContext = { type, contentId, contentTitle, episodes: [...], currentIndex: 0 }
 let videoContext = null;
 
-const PAGE_ORDER = ['home', 'search', 'series', 'movies', 'profile', 'admin', 'detail', 'video'];
+const PAGE_ORDER = ['home', 'search', 'series', 'movies', 'schedule', 'profile', 'admin', 'detail', 'video'];
 
 const LISTS = {
   anime: {
@@ -164,13 +164,13 @@ const I18N = {
   en: {
     home: "Home", search: "Search", series: "Series", anime: "Anime", tv: "TV Shows", movies: "Movies",
     profile: "Profile", admin: "Admin", recommended: "Recommended for You",
-    continue: "Continue Watching", activity: "Your Activity", preferences: "Preferences",
+    continue: "Continue Watching", schedule: "Schedule", activity: "Your Activity", preferences: "Preferences",
     signIn: "Sign In", logout: "Logout", save: "Save Preferences",
   },
   hi: {
     home: "होम", search: "खोजें", series: "सीरीज़", anime: "एनिमे", tv: "टीवी शो", movies: "फ़िल्में",
     profile: "प्रोफ़ाइल", admin: "एडमिन", recommended: "आपके लिए सुझाव",
-    continue: "देखना जारी रखें", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
+    continue: "देखना जारी रखें", schedule: "शेड्यूल", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
     signIn: "साइन इन", logout: "लॉग आउट", save: "सेव करें",
   },
 };
@@ -369,10 +369,12 @@ function showPage(page) {
   }
   const type = PAGE_TYPES[page];
   if (type && !LISTS[type].page) loadList(type, true);
-  if (page === 'home' && loadRecommendations()) {
+  if (page === 'home') {
+    loadRecommendations();
     loadHome();
     loadContinueWatching();
   }
+  if (page === 'schedule') loadSchedule();
   if (page === 'profile') { loadProfileActivity(); } loadProfile();
   if (page === 'admin') {
     loadAdminRequests();
@@ -444,9 +446,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     const progress = item.progress_percent
       ? `<div class="progress-bar"><span style="width:${Math.min(100, item.progress_percent)}%"></span></div>`
       : '';
-    const sub = item._continue
-      ? `▶ Resume S${item.season || 1} · E${item.episode || 1}`
-      : (rating || (item.year ? String(item.year) : (item.status || '')));
+    const sub = rating || (item.year ? String(item.year) : (item.status || ''));
 
     card.innerHTML = `
       <div class="poster-wrap">
@@ -468,7 +468,6 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 
     const open = () => {
       card.classList.add('card-press');
-      if (item._continue) { requestAnimationFrame(() => resumeWatching(item)); return; }
       requestAnimationFrame(() => openDetail(item._type || type, item._id || item.content_id, item));
     };
     card.addEventListener('click', open);
@@ -516,17 +515,76 @@ async function loadHome() {
   if (!hero.items.length) $('hero')?.classList.add('hidden');
 }
 
+function continueProgress(item) {
+  // Overall progress through the series: finished episodes plus the part of the current one.
+  const total = Number(item.total_episodes) || 0;
+  const n = Number(item.episode_number) || 0;
+  if (total && n) return Math.min(100, (((n - 1) + (Number(item.progress_percent) || 0) / 100) / total) * 100);
+  return Number(item.progress_percent) || 0;
+}
+
+function renderContinue(items) {
+  const row = $('continueGrid');
+  row.innerHTML = '';
+  items.forEach((item) => {
+    const card = document.createElement('div');
+    card.className = 'continue-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+
+    const pct = Math.round(continueProgress(item));
+    const epPct = Math.round(Number(item.progress_percent) || 0);
+    const label = `S${item.season || 1} · E${item.episode || 1}`
+      + (item.total_episodes ? ` of ${item.total_episodes}` : '')
+      + (epPct > 0 && epPct < 95 ? ` · ${epPct}% watched` : '');
+    const art = safeUrl(item.thumbnail) || safeUrl(item.banner) || safeUrl(item.poster) || PLACEHOLDER;
+
+    card.innerHTML = `
+      <div class="continue-thumb">
+        <img alt="" loading="lazy" decoding="async">
+        ${item.up_next ? '<span class="continue-badge">Up next</span>' : ''}
+        <span class="continue-play" aria-hidden="true">&#9654;</span>
+        <div class="progress-bar"><span style="width:${Math.max(pct, 3)}%"></span></div>
+      </div>
+      <div class="continue-meta"><h3></h3><p></p></div>
+      <button type="button" class="continue-remove" aria-label="Remove from Continue Watching" title="Remove">&times;</button>`;
+
+    const img = card.querySelector('img');
+    img.src = art;
+    img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+    card.querySelector('h3').textContent = item.title || 'Untitled';
+    card.querySelector('p').textContent = label;
+    card.setAttribute('aria-label', `Resume ${item.title || 'Untitled'}, ${label}`);
+
+    const open = () => {
+      card.classList.add('card-press');
+      requestAnimationFrame(() => resumeWatching({ ...item, _id: item.content_id, _type: item.content_type }));
+    };
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', (e) => {
+      if (e.target !== card) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    card.querySelector('.continue-remove').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        await api(`/api/continue-watching/${item.content_type}/${item.content_id}`, { method: 'DELETE' });
+        card.remove();
+        if (!row.children.length) $('continueSection')?.classList.add('hidden');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    row.appendChild(card);
+  });
+}
+
 async function loadContinueWatching() {
   const section = $('continueSection');
   if (!state.user) { section?.classList.add('hidden'); return; }
   try {
     const items = await api('/api/continue-watching');
     if (!items.length) { section?.classList.add('hidden'); return; }
+    renderContinue(items);
     section?.classList.remove('hidden');
-    const mapped = items.map((i) => ({
-      ...i, _id: i.content_id, _type: i.content_type, progress_percent: i.progress_percent, _continue: true,
-    }));
-    renderGrid($('continueGrid'), mapped, 'anime');
   } catch {
     section?.classList.add('hidden');
   }
@@ -709,6 +767,7 @@ async function checkUser() {
   try {
     const res = await api('/api/auth/me');
     state.user = res.authenticated ? { email: res.email, role: res.role || 'user' } : null;
+    applyBackground(res.authenticated ? (res.prefs || {}).bg_image : '');
   } catch { state.user = null; }
   updateAuthUI();
   return state.user;
@@ -786,6 +845,7 @@ async function doLogout() {
   try {
     await api('/api/auth/logout', { method: 'POST' });
     state.user = null;
+    applyBackground('');
     updateAuthUI();
     showPage('home');
     toast('Signed out');
@@ -803,7 +863,7 @@ async function loadProfile() {
   const member = $('profileMember');
 
   if (!state.user) {
-    info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
+    info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist, and to set your own background image.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
     $('profileSignIn')?.addEventListener('click', () => openAuth('login'));
     member?.classList.add('hidden');
     return;
@@ -1179,7 +1239,7 @@ function clearPlayer() {
   wrap.innerHTML = '';
 }
 
-async function mountPlayer(url, posterSrc = '') {
+async function mountPlayer(url, posterSrc = '', startPercent = 0) {
   const wrap = $('playerWrap');
   if (!wrap) return;
 
@@ -1207,6 +1267,14 @@ async function mountPlayer(url, posterSrc = '') {
       saveWatchProgress(Math.round((video.currentTime / video.duration) * 100));
     });
     video.addEventListener('ended', () => saveWatchProgress(100));
+    video.addEventListener('pause', () => {
+      if (video.duration && !video.ended) saveWatchProgress(Math.round((video.currentTime / video.duration) * 100));
+    });
+    if (startPercent > 0 && startPercent < 95) {
+      video.addEventListener('loadedmetadata', () => {
+        if (video.duration) video.currentTime = (video.duration * startPercent) / 100;
+      }, { once: true });
+    }
     video.addEventListener('error', () => {
       fallback?.classList.remove('hidden');
     }, { once: true });
@@ -1257,7 +1325,7 @@ async function mountPlayer(url, posterSrc = '') {
   }
 }
 
-function openVideo(type, contentId, contentTitle, episodes, season, episode, poster) {
+function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0) {
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
   if (idx === -1) { toast('Episode not found', 'error'); return; }
@@ -1271,6 +1339,8 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
     episodes: sorted,
     currentIndex: idx,
     poster: poster || null,
+    // Only applies to the first episode loaded; lets a direct video pick up where it stopped.
+    resumePercent: Number(resumePercent) || 0,
   };
   loadVideoEpisode();
   showPage('video');
@@ -1304,12 +1374,10 @@ async function resumeWatching(item) {
     if (!eps.length) { openDetail(type, id, item); return; }
     let idx = eps.findIndex((e) => Number(e.season) === Number(item.season) && Number(e.episode) === Number(item.episode));
     if (idx === -1) idx = 0;
-    // Finished that episode? jump to the next one
-    if (Number(item.progress_percent) >= 95 && idx < eps.length - 1) idx += 1;
     const ep = eps[idx];
     state.detailId = id;
     state.detailType = type;
-    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster);
+    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, item.progress_percent);
   } catch (err) {
     toast(err.message || 'Could not resume', 'error');
   }
@@ -1347,9 +1415,11 @@ function loadVideoEpisode() {
   }
 
   const posterSrc = safeUrl(ep.thumbnail) || seasonThumb(videoContext.episodes, ep.season) || safeUrl(videoContext.poster) || '';
-  mountPlayer(ep.video_url, posterSrc);
+  const startPercent = videoContext.resumePercent || 0;
+  videoContext.resumePercent = 0;
+  mountPlayer(ep.video_url, posterSrc, startPercent);
   updateVideoNav();
-  saveWatchProgress(0);
+  saveWatchProgress(startPercent);
 }
 
 function updateVideoNav() {
@@ -1479,7 +1549,7 @@ async function loadLibrary(reset = false) {
   const q = $('libSearch').value.trim();
   const endpoint = type === 'anime' ? '/api/anime' : type === 'tv_show' ? '/api/tvshows' : '/api/movies';
   try {
-    const data = await api(`${endpoint}?page=${libPage + 1}&limit=20&q=${encodeURIComponent(q)}`);
+    const data = await api(`${endpoint}?page=${libPage + 1}&limit=20&include_hidden=true&q=${encodeURIComponent(q)}`);
     libPage += 1;
     const el = $('libList');
     if (reset) el.innerHTML = '';
@@ -1490,7 +1560,7 @@ async function loadLibrary(reset = false) {
         <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
         <div>
           <h4>${esc(item.title)}</h4>
-          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}</p>
+          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}${item.published === false && item.scheduled_at ? ` · ⏳ goes live ${esc(new Date(item.scheduled_at).toLocaleString())}` : ''}</p>
         </div>
         <div class="lib-actions">
           ${type !== 'movie' ? `<button type="button" class="outline ep-btn"
@@ -1512,6 +1582,7 @@ async function loadLibrary(reset = false) {
         $('aStatus').value = item.status || 'Ongoing';
         $('aPoster').value = item.poster || '';
         $('aBanner').value = item.banner || '';
+        fillScheduleFields(item);
         $('adminFormTitle').textContent = 'Edit Content';
         $('aSubmit').textContent = 'Update';
         $('aCancel').classList.remove('hidden');
@@ -1562,6 +1633,7 @@ $('adminForm')?.addEventListener('submit', async (e) => {
     status: $('aStatus').value,
     poster: $('aPoster').value.trim(),
     banner: $('aBanner').value.trim(),
+    ...readScheduleFields(),
   };
 
   const btn = $('aSubmit');
@@ -1982,19 +2054,6 @@ function bindHero(root) {
 
 // --- Init ---
 wireSeriesPage();
-
-// Background video
-(function initBgVideo() {
-  const v = document.getElementById("bgVideo");
-  if (!v) return;
-  v.muted = true;
-  v.playsInline = true;
-  const tryPlay = () => v.play().catch(() => {});
-  tryPlay();
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) tryPlay();
-  });
-})();
 
 (async function init() {
   applyTheme(state.theme);
@@ -2426,13 +2485,289 @@ function wirePWA() {
 }
 
 
+// ============================================================
+// v30: Background image (default + per-user), Schedule page,
+// admin release fields
+// ============================================================
 
+// --- Background -------------------------------------------------
 
-// Pause the background video when the tab is hidden (saves battery, smoother scrolling)
-document.addEventListener('visibilitychange', () => {
-  const bgv = $('bgVideo');
-  if (!bgv) return;
-  if (document.hidden) bgv.pause();
-  else bgv.play().catch(() => {});
+function applyBackground(url) {
+  const root = document.documentElement;
+  const clean = typeof url === 'string' && /^(https:\/\/|\/api\/users\/me\/background)/.test(url) ? url : '';
+  if (clean) root.style.setProperty('--user-bg', `url("${clean.replace(/["\\()\s]/g, (c) => encodeURIComponent(c))}")`);
+  else root.style.removeProperty('--user-bg');
+  try {
+    if (clean) localStorage.setItem('anicore-bg', clean);
+    else localStorage.removeItem('anicore-bg');
+  } catch (e) { /* storage unavailable */ }
+  const input = $('bgUrl');
+  if (input && document.activeElement !== input) input.value = clean && clean.startsWith('https://') ? clean : '';
+}
+
+// Paint the remembered background immediately (cleared again if the session turns out to be signed out).
+try { const saved = localStorage.getItem('anicore-bg'); if (saved) applyBackground(saved); } catch (e) { /* noop */ }
+
+function bgNeedsSignIn() {
+  if (state.user) return false;
+  toast('Sign in to customize your background', 'error');
+  openAuth('login');
+  return true;
+}
+
+function setBgMessage(text, isError = false) {
+  const el = $('bgMsg');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = isError ? '#ff6b8a' : '';
+}
+
+// Shrink an uploaded picture so it stays small enough to store (max 1600px wide, JPEG).
+function imageFileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Choose a JPG, PNG or WebP image.'));
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, 1600 / img.naturalWidth, 1600 / img.naturalHeight);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      let quality = 0.85;
+      let out = canvas.toDataURL('image/jpeg', quality);
+      while (out.length > 1_100_000 && quality > 0.4) { quality -= 0.15; out = canvas.toDataURL('image/jpeg', quality); }
+      if (out.length > 1_100_000) return reject(new Error('That image is too large. Try a smaller one.'));
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('That image could not be read.')); };
+    img.src = objectUrl;
+  });
+}
+
+async function saveBackground(body) {
+  const res = await api('/api/users/me/background', { method: 'PUT', body: JSON.stringify(body) });
+  applyBackground(res.bg_image);
+  setBgMessage('Background updated.');
+  toast('Background updated');
+}
+
+$('bgUrlForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (bgNeedsSignIn()) return;
+  const url = $('bgUrl').value.trim();
+  if (!url) return setBgMessage('Paste an image link first.', true);
+  try {
+    // Make sure the picture actually loads before saving it.
+    await new Promise((ok, fail) => {
+      const probe = new Image();
+      probe.onload = ok;
+      probe.onerror = () => fail(new Error('That link did not load as an image.'));
+      probe.src = url;
+    });
+    await saveBackground({ url });
+  } catch (err) { setBgMessage(err.message, true); }
 });
 
+$('bgFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (bgNeedsSignIn()) return;
+  try {
+    setBgMessage('Uploading…');
+    await saveBackground({ data: await imageFileToDataUrl(file) });
+  } catch (err) { setBgMessage(err.message, true); }
+});
+
+$('bgReset')?.addEventListener('click', async () => {
+  if (bgNeedsSignIn()) return;
+  try {
+    await api('/api/users/me/background', { method: 'DELETE' });
+    applyBackground('');
+    setBgMessage('Back to the default background.');
+    toast('Background reset');
+  } catch (err) { setBgMessage(err.message, true); }
+});
+
+// --- Time helpers (release slots are stored in UTC, shown in the viewer's local time) ---
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+function utcSlotToLocal(utcWeekday, hhmm) {
+  if (!/^\d{2}:\d{2}$/.test(hhmm || '')) return { day: utcWeekday, time: 'TBA', hhmm: '', minutes: 24 * 60 };
+  const [h, m] = hhmm.split(':').map(Number);
+  const now = new Date();
+  const weekStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - ((now.getUTCDay() + 6) % 7) * 864e5;
+  const d = new Date(weekStart + utcWeekday * 864e5 + (h * 60 + m) * 6e4);
+  return {
+    day: (d.getDay() + 6) % 7,
+    time: d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    hhmm: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+    minutes: d.getHours() * 60 + d.getMinutes(),
+  };
+}
+
+function localSlotToUtc(localWeekday, hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + localWeekday);
+  d.setHours(h, m);
+  return { weekday: (d.getUTCDay() + 6) % 7, time: `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}` };
+}
+
+// --- Schedule page ------------------------------------------------
+
+let scheduleData = null;
+let scheduleDay = (new Date().getDay() + 6) % 7;
+
+function weekDates() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+  return DAY_NAMES.map((_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
+}
+
+function countdownText(minutes) {
+  const now = new Date();
+  const diff = minutes - (now.getHours() * 60 + now.getMinutes());
+  if (diff <= 0) return 'Aired';
+  if (diff < 60) return `in ${diff}m`;
+  return `in ${Math.floor(diff / 60)}h ${diff % 60}m`;
+}
+
+function renderDayTabs() {
+  const tabs = $('dayTabs');
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  const busy = new Set((scheduleData?.weekly || []).map((i) => utcSlotToLocal(i.air_weekday, i.air_time).day));
+  tabs.innerHTML = '';
+  weekDates().forEach((date, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.className = 'day-tab' + (i === scheduleDay ? ' active' : '') + (i === todayIdx ? ' today' : '') + (busy.has(i) ? ' has-items' : '');
+    b.setAttribute('aria-selected', String(i === scheduleDay));
+    b.innerHTML = `<span>${i === todayIdx ? 'Today' : DAY_NAMES[i]}</span><strong>${date.getDate()}</strong><span class="dot"></span>`;
+    b.addEventListener('click', () => { scheduleDay = i; renderDayTabs(); renderScheduleList(); });
+    tabs.appendChild(b);
+  });
+  tabs.children[scheduleDay]?.scrollIntoView({ inline: 'center', block: 'nearest' });
+}
+
+function scheduleRow({ poster, title, timeHtml, sub, right, onClick }) {
+  const row = document.createElement('div');
+  row.className = 'schedule-item';
+  if (onClick) { row.tabIndex = 0; row.setAttribute('role', 'button'); } else { row.style.cursor = 'default'; }
+  row.innerHTML = `
+    ${timeHtml}
+    <img alt="" loading="lazy" decoding="async">
+    <div class="schedule-info"><h4></h4><p></p></div>
+    ${right || ''}`;
+  const img = row.querySelector('img');
+  img.src = safeUrl(poster) || PLACEHOLDER;
+  img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+  row.querySelector('h4').textContent = title || 'Untitled';
+  row.querySelector('p').textContent = sub;
+  if (onClick) {
+    row.addEventListener('click', onClick);
+    row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } });
+  }
+  return row;
+}
+
+function renderScheduleList() {
+  const list = $('scheduleList');
+  list.innerHTML = '';
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  const items = (scheduleData?.weekly || [])
+    .map((i) => ({ ...i, slot: utcSlotToLocal(i.air_weekday, i.air_time) }))
+    .filter((i) => i.slot.day === scheduleDay)
+    .sort((a, b) => a.slot.minutes - b.slot.minutes || a.title.localeCompare(b.title));
+
+  if (!items.length) {
+    list.innerHTML = '<p class="muted empty">Nothing scheduled for this day.</p>';
+    return;
+  }
+  items.forEach((i) => {
+    const timeHtml = `<div class="schedule-time">${esc(i.slot.time)}</div>`;
+    const sub = [i.status, ...(i.genres || [])].filter(Boolean).join(' · ');
+    const next = `<span class="schedule-next">EP ${(i.latest_episode || 0) + 1}</span>`;
+    const countdown = scheduleDay === todayIdx && i.slot.hhmm
+      ? `<span class="schedule-countdown">${esc(countdownText(i.slot.minutes))}</span>` : '';
+    list.appendChild(scheduleRow({
+      poster: i.poster, title: i.title, timeHtml, sub, right: next + countdown,
+      onClick: () => openDetail(i.content_type, i.content_id, i),
+    }));
+  });
+}
+
+function renderUpcoming() {
+  const section = $('upcomingSection');
+  const list = $('upcomingList');
+  const items = scheduleData?.upcoming || [];
+  list.innerHTML = '';
+  section.classList.toggle('hidden', !items.length);
+  items.forEach((i) => {
+    const when = new Date(i.scheduled_at);
+    const label = when.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+    const timeHtml = `<div class="schedule-time">${esc(label)}<small>${esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</small></div>`;
+    const typeLabel = { anime: 'Anime', tv_show: 'TV Show', movie: 'Movie' }[i.content_type] || '';
+    list.appendChild(scheduleRow({
+      poster: i.poster, title: i.title, timeHtml, sub: [typeLabel, ...(i.genres || [])].filter(Boolean).join(' · '),
+    }));
+  });
+}
+
+async function loadSchedule() {
+  let zone = '';
+  try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* noop */ }
+  $('scheduleTz').textContent = zone ? `Times shown in your time zone (${zone.replace(/_/g, ' ')}).` : 'Times shown in your local time.';
+  if (!scheduleData) $('scheduleList').innerHTML = '<p class="muted empty">Loading schedule…</p>';
+  try {
+    scheduleData = await api('/api/schedule');
+  } catch (err) {
+    $('scheduleList').innerHTML = `<p class="muted empty">${esc(err.message)}</p>`;
+    return;
+  }
+  renderDayTabs();
+  renderScheduleList();
+  renderUpcoming();
+}
+
+// --- Admin: release slot + publish time on the content form --------
+
+function fillScheduleFields(item) {
+  $('aAirDay').value = '';
+  $('aAirTime').value = '';
+  $('aPublishAt').value = '';
+  if (item.air_weekday !== null && item.air_weekday !== undefined) {
+    const slot = utcSlotToLocal(item.air_weekday, item.air_time);
+    $('aAirDay').value = String(slot.day);
+    $('aAirTime').value = slot.hhmm;
+  }
+  if (item.published === false && item.scheduled_at) {
+    const d = new Date(item.scheduled_at);
+    $('aPublishAt').value = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+}
+
+function readScheduleFields() {
+  const day = $('aAirDay').value;
+  const time = $('aAirTime').value;
+  const out = { air_weekday: null, air_time: '', scheduled_at: null };
+  if (day !== '') {
+    if (time) {
+      const slot = localSlotToUtc(Number(day), time);
+      out.air_weekday = slot.weekday;
+      out.air_time = slot.time;
+    } else {
+      out.air_weekday = Number(day); // no time given: nothing to convert, the day is shown as-is
+    }
+  }
+  const publishAt = $('aPublishAt').value;
+  if (publishAt) out.scheduled_at = new Date(publishAt).toISOString();
+  return out;
+}
