@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v34';
+const APP_JS_VERSION = 'v41';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -199,7 +199,10 @@ function esc(value) {
 }
 
 function safeUrl(url) {
-  return /^https?:\/\//i.test(url || '') ? url : '';
+  url = (url || '').trim();
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith('/assets/')) return url;
+  return '';
 }
 
 function fmtDate(iso) {
@@ -260,16 +263,16 @@ function applyLanguage(lang) {
 }
 
 
-function applyTheme(theme) {
-  state.theme = theme;
-  document.documentElement.setAttribute('data-theme', theme === 'light' ? 'light' : 'dark');
-  localStorage.setItem('anicore-theme', theme);
+function applyTheme(_theme) {
+  state.theme = 'dark';
+  document.documentElement.setAttribute('data-theme', 'dark');
+  localStorage.setItem('anicore-theme', 'dark');
   const meta = $('themeColorMeta');
-  if (meta) meta.content = theme === 'light' ? '#f4f2f8' : '#09090f';
+  if (meta) meta.content = '#09090f';
 }
 
 function toggleTheme() {
-  applyTheme(state.theme === 'dark' ? 'light' : 'dark');
+  /* light mode removed — dark only */
 }
 
 // --- Navigation ---
@@ -492,15 +495,11 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
     card.setAttribute('aria-label', item.title || 'Untitled');
 
     const rating = item.avg_rating ? `<span class="rating-badge">★ ${item.avg_rating}</span>` : '';
-    const progress = item.progress_percent
-      ? `<div class="progress-bar"><span style="width:${Math.min(100, item.progress_percent)}%"></span></div>`
-      : '';
     const sub = rating || (item.year ? String(item.year) : (item.status || ''));
 
     card.innerHTML = `
       <div class="poster-wrap">
         <img loading="lazy" alt="">
-        ${progress}
       </div>
       <div class="media-info">
         <h3></h3>
@@ -1147,7 +1146,10 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
-function seasonThumb(episodes, season) {
+function seasonThumb(episodes, season, content) {
+  const map = content?.season_thumbnails || videoContext?.season_thumbnails || {};
+  const fromMap = safeUrl(map[String(season)] || map[Number(season)]);
+  if (fromMap) return fromMap;
   const hit = (episodes || []).find((e) => Number(e.season) === Number(season) && safeUrl(e.thumbnail));
   return hit ? safeUrl(hit.thumbnail) : '';
 }
@@ -1258,7 +1260,7 @@ function bindDetailEvents(type, item, container) {
       const s = Number(btn.dataset.season);
       const e = Number(btn.dataset.episode);
       if (!item.episodes) return;
-      openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster);
+      openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster, 0, item.season_thumbnails || {});
     });
   });
 
@@ -1696,7 +1698,7 @@ function renderVideoEpList() {
   }
 }
 
-function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0) {
+function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0, seasonThumbnails = null) {
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
   if (idx === -1) { toast('Episode not found', 'error'); return; }
@@ -1710,6 +1712,7 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
     episodes: sorted,
     currentIndex: idx,
     poster: poster || null,
+    season_thumbnails: seasonThumbnails || {},
     air: airInfo[contentId] || null,
     epFilter: '',
     listSeason: null,
@@ -1752,7 +1755,7 @@ async function resumeWatching(item) {
     const ep = eps[idx];
     state.detailId = id;
     state.detailType = type;
-    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, item.progress_percent);
+    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, item.progress_percent, full.season_thumbnails || {});
   } catch (err) {
     toast(err.message || 'Could not resume', 'error');
   }
@@ -2115,6 +2118,7 @@ $('episodeList')?.addEventListener('click', async (e) => {
       $('epNumber').value = ep.episode;
       $('epTitle').value = ep.title || '';
       $('epDuration').value = ep.duration || '';
+      if ($('epThumb')) $('epThumb').value = ep.thumbnail || '';
       $('epVideo').value = ep.video_url || '';
       $('epDesc').value = ep.description || '';
       $('epIntroStart').value = fmtTimeInput(ep.intro_start);
@@ -2172,6 +2176,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     title: $('epTitle').value.trim(),
     duration: $('epDuration').value.trim(),
     description: $('epDesc').value.trim(),
+    thumbnail: ($('epThumb')?.value || '').trim(),
     video_url: rawVideo,
   };
 
@@ -2202,7 +2207,17 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
       await api(path, { method: 'POST', body: JSON.stringify(payload) });
       toast('Episode added');
     }
+    if ($('epSeasonThumb')?.checked && payload.thumbnail) {
+      try {
+        await applySeasonThumbnail(type, id, payload.season, payload.thumbnail);
+        toast('Season thumbnail saved');
+      } catch (err) {
+        toast(err.message || 'Season thumb failed', 'error');
+      }
+    }
     $('episodeForm').reset();
+    if ($('epThumb')) $('epThumb').value = '';
+    if ($('epSeasonThumb')) $('epSeasonThumb').checked = false;
     $('epId').value = '';
     $('epSeason').value = 1;
     $('epSubmit').textContent = 'Add Episode';
@@ -2231,44 +2246,102 @@ $('episodesModal')?.addEventListener('click', (e) => {
   }
 });
 
+
+// --- Image upload helper ---
+async function uploadImageFile(file) {
+  if (!file) throw new Error("No file selected");
+  if (file.size > 8 * 1024 * 1024) throw new Error("Image must be under 8MB");
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch("/api/upload/image", { method: "POST", body: fd, credentials: "same-origin" });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.message || "Upload failed");
+  return data.url;
+}
+
+function wireImageUpload(fileInputId, urlInputId) {
+  const fi = $(fileInputId);
+  const ui = $(urlInputId);
+  if (!fi || !ui) return;
+  fi.addEventListener("change", async () => {
+    const file = fi.files && fi.files[0];
+    if (!file) return;
+    try {
+      toast("Uploading…");
+      const url = await uploadImageFile(file);
+      ui.value = url;
+      toast("Uploaded");
+    } catch (err) {
+      toast(err.message || "Upload failed", "error");
+    } finally {
+      fi.value = "";
+    }
+  });
+}
+
+async function applySeasonThumbnail(type, id, season, thumbUrl) {
+  if (!thumbUrl) return;
+  await api(`/api/admin/${type}/${id}/season-thumbnail`, {
+    method: "POST",
+    body: JSON.stringify({ season: Number(season), thumbnail: thumbUrl }),
+  });
+}
+
+async function autoFetchAnimeMeta() {
+  const title = ($("aTitle")?.value || "").trim();
+  if (!title) return toast("Enter a title first", "error");
+  try {
+    toast("Fetching…");
+    const data = await api(`/api/meta/anime?q=${encodeURIComponent(title)}`);
+    if (data.title && $("aTitle")) $("aTitle").value = data.title;
+    if (data.description && $("aDesc")) $("aDesc").value = data.description;
+    if (data.poster && $("aPoster")) $("aPoster").value = data.poster;
+    if (data.banner && $("aBanner")) $("aBanner").value = data.banner;
+    if (data.year && $("aYear")) $("aYear").value = data.year;
+    if (data.genres && $("aGenres") && !$("aGenres").value) $("aGenres").value = data.genres;
+    if (data.rating && $("aRating") && !$("aRating").value) $("aRating").value = data.rating;
+    if (data.mal_id) state._lastMalId = data.mal_id;
+    toast("Filled from MyAnimeList");
+  } catch (err) {
+    toast(err.message || "Could not fetch", "error");
+  }
+}
+
+async function autoFetchEpisodeMeta() {
+  if (!currentEpisodeTarget) return toast("Open episodes from a title first", "error");
+  const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
+  const ep = Number($("epNumber")?.value) || 0;
+  const season = Number($("epSeason")?.value) || 1;
+  if (!ep) return toast("Enter episode number", "error");
+  try {
+    toast("Fetching episode…");
+    const q = new URLSearchParams({
+      title: title || "",
+      episode: String(ep),
+      season: String(season),
+    });
+    if (state._lastMalId) q.set("mal_id", String(state._lastMalId));
+    const data = await api(`/api/meta/episode?${q}`);
+    if (data.title && $("epTitle")) $("epTitle").value = data.title;
+    if (data.duration && $("epDuration")) $("epDuration").value = data.duration;
+    if (data.description && $("epDesc")) $("epDesc").value = data.description;
+    if (data.thumbnail && $("epThumb")) $("epThumb").value = data.thumbnail;
+    toast("Episode info filled");
+  } catch (err) {
+    toast(err.message || "Could not fetch episode", "error");
+  }
+}
+
+
 // --- Theme buttons ---
 $('themeToggle')?.addEventListener('click', toggleTheme);
 $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 
-// --- Snow ---
-(function snow() {
-  const canvas = $('snow');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let w, h, flakes = [];
-  function resize() {
-    w = canvas.width = window.innerWidth;
-    h = canvas.height = window.innerHeight;
-  }
-  function create() {
-    flakes = Array.from({ length: Math.min(60, Math.floor(w / 20)) }, () => ({
-      x: Math.random() * w, y: Math.random() * h,
-      r: Math.random() * 2 + 0.5, s: Math.random() * 1 + 0.3,
-    }));
-  }
-  function draw() {
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    flakes.forEach((f) => {
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-      ctx.fill();
-      f.y += f.s;
-      f.x += Math.sin(f.y * 0.01) * 0.3;
-      if (f.y > h) { f.y = -5; f.x = Math.random() * w; }
-    });
-    requestAnimationFrame(draw);
-  }
-  resize();
-  create();
-  draw();
-  window.addEventListener('resize', () => { resize(); create(); });
-})();
+// Media uploads + auto-fetch
+$("aAutoFetch")?.addEventListener("click", autoFetchAnimeMeta);
+$("epAutoFetch")?.addEventListener("click", autoFetchEpisodeMeta);
+
+
 
 
 // ===================== Hero banner =====================
@@ -2384,7 +2457,7 @@ async function heroWatch(item) {
     if (!ep) { openDetail(type, item._id, item); return; }
     state.detailId = item._id;
     state.detailType = type;
-    openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster);
+    openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
   } catch (err) {
     toast(err.message || 'Could not open', 'error');
   }
@@ -2462,7 +2535,7 @@ wireSeriesPage();
       detailType: d ? d[1] : null, detailId: d ? d[2] : null,
     }, '', location.href);
   } catch (e) { /* noop */ }
-  applyTheme(state.theme);
+  applyTheme('dark');
   applyAccent(state.accent);
   applyLanguage(state.language);
   if ($('yearNow')) $('yearNow').textContent = new Date().getFullYear();
@@ -2587,7 +2660,7 @@ async function loadProfileActivity() {
     }
     // Prefs
     const prefs = data.prefs || {};
-    if (prefs.theme) applyTheme(prefs.theme);
+    applyTheme('dark');
     if (prefs.accent) applyAccent(prefs.accent);
     if (prefs.language) applyLanguage(prefs.language);
   } catch { /* ignore */ }

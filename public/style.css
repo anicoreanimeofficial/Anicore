@@ -239,8 +239,7 @@ button, input, textarea, select, a { outline: none; }
 .poster-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .4s ease; }
 .media-card:hover .poster-wrap img { transform: scale(1.05); }
 
-.progress-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(0, 0, 0, .4); }
-.progress-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--pink), var(--purple)); border-radius: 0 2px 2px 0; }
+.progress-bar { display: none !important; }
 
 .media-info { padding: 12px; }
 .media-info h3 {
@@ -2796,3 +2795,46 @@ body.theater #page-video .player-wrap {
 .ep-next svg { opacity: .7; }
 .ep-next-date { opacity: .6; }
 .ep-none { text-align: center; padding: 12px 0; }
+
+
+/* Media upload fields */
+.media-upload-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.media-upload-block label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #b7b3c7);
+}
+.media-upload-block .file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.check-row {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+.check-row input { width: auto; }
+
+/* Dark only — kill light theme vars if any */
+html[data-theme="light"] {
+  color-scheme: dark;
+}

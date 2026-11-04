@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=46">
+  <link rel="stylesheet" href="/assets/style.css?v=41">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
@@ -42,7 +42,6 @@
     <div class="site-bg-overlay"></div>
   </div>
 
-  <canvas id="snow" aria-hidden="true"></canvas>
 
   <aside class="sidebar" id="sidebar" aria-label="Main navigation">
     <a class="brand" href="#" data-page="home"><span class="brand-text">ANICORE</span></a>
@@ -69,7 +68,6 @@
           <option value="orange">Orange</option>
         </select>
       </div>
-      <button type="button" id="themeToggle" class="outline small" aria-label="Toggle dark/light mode">🌓 Theme</button>
       <button type="button" id="sideSignIn" class="outline small">Sign In</button>
       <button type="button" id="sideLogout" class="outline small hidden">Logout</button>
     </div>
@@ -80,7 +78,6 @@
       <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
       <a class="brand mobile-brand" href="#" data-page="home"><span class="brand-text">ANICORE</span></a>
       <div class="header-actions">
-        <button id="themeToggleMobile" class="outline small" type="button" aria-label="Toggle theme">🌓</button>
         <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
         <button id="signInBtn" class="outline small" type="button">Sign In</button>
         <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
@@ -236,12 +233,6 @@
             <div class="panel">
               <h3 data-i18n="preferences">Preferences</h3>
               <div class="pref-controls">
-                <label>Theme
-                  <select id="profileTheme">
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                  </select>
-                </label>
                 <label>Accent
                   <select id="profileAccent">
                     <option value="pink">Pink</option>
@@ -387,6 +378,7 @@
               </label>
               <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
               <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
+              <button type="button" id="aAutoFetch" class="outline block">Auto-fetch title info (name, description, poster)</button>
               <button type="submit" id="aSubmit" class="primary block">Save</button>
               <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
             </form>
@@ -494,6 +486,9 @@
         <input id="epDuration" placeholder="Duration (e.g. 24m)">
         <input id="epVideo" type="text" placeholder="Video URL or <iframe src=&quot;...&quot;> HTML">
         <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
+        <input id="epThumb" type="url" placeholder="Episode / season thumbnail URL (https://...)">
+        <label class="check-row"><input type="checkbox" id="epSeasonThumb"> Use as season thumbnail (all eps in this season without their own)</label>
+        <button type="button" id="epAutoFetch" class="outline block">Auto-fetch ep name, duration and description</button>
         <details class="ep-extras">
           <summary>Player extras: skip intro/outro &amp; subtitles</summary>
           <div class="row">
@@ -533,7 +528,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=46"></script>
-  <script src="/assets/features.js?v=46"></script>
+  <script src="/assets/app.js?v=41"></script>
+  <script src="/assets/features.js?v=41"></script>
 </body>
 </html>
