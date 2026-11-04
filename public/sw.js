@@ -1,9 +1,9 @@
 /* ANICORE Service Worker — App Mode v10 */
-const CACHE = "anicore-v30";
+const CACHE = "anicore-v31";
 const ASSETS = [
   "/",
-  "/assets/style.css?v=30",
-  "/assets/app.js?v=30",
+  "/assets/style.css?v=31",
+  "/assets/app.js?v=31",
   "/manifest.json"
 ];
 
