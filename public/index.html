@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=36">
+  <link rel="stylesheet" href="/assets/style.css?v=39">
 </head>
 <body>
 
@@ -296,7 +296,7 @@
 
       <section class="page" id="page-admin" aria-label="Admin">
         <div class="section">
-          <h2>Admin Studio</h2>
+          <h2 id="adminTitle">Admin Studio</h2>
           
           <div class="panel">
             <h3>Import from Anilist</h3>
@@ -328,13 +328,13 @@
             </form>
             <p id="bulkEpMsg" class="hint"></p>
           </div>
-          <div class="panel" id="analyticsPanel">
+          <div class="panel admin-only" id="analyticsPanel">
             <h3>Analytics</h3>
             <div id="analyticsContent" class="stats-grid"></div>
             <div id="analyticsTop" class="analytics-top"></div>
           </div>
 
-          <div class="panel" id="adminStatsPanel">
+          <div class="panel admin-only" id="adminStatsPanel">
             <h3>Overview</h3>
             <div id="adminStats" class="stats-grid"></div>
           </div>
@@ -382,6 +382,22 @@
               <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
             </form>
           </div>
+          <div class="panel admin-only" id="uploadersPanel">
+            <h3>Uploaders</h3>
+            <p class="hint">Create an account for an uploader: you choose their email and password, then share them. Uploaders can add and edit posts, but can't delete or see analytics.</p>
+            <form id="uploaderCreateForm" class="stack">
+              <input id="uploaderNewEmail" type="email" placeholder="Uploader email" autocomplete="off" required>
+              <input id="uploaderNewPass" type="text" placeholder="Password (min 6 characters)" minlength="6" maxlength="128" autocomplete="off" required>
+              <button type="submit" class="primary block">Create uploader account</button>
+            </form>
+            <p class="hint" style="margin-top:16px">Or give access to someone who already has an account:</p>
+            <form id="uploaderForm" class="stack">
+              <input id="uploaderEmail" type="email" placeholder="Existing user's email" autocomplete="off" required>
+              <button type="submit" class="outline block">Give access to existing user</button>
+            </form>
+            <p id="uploaderMsg" class="hint"></p>
+            <div id="uploaderList"></div>
+          </div>
           <div class="panel">
             <h3>Manage Library</h3>
             <div class="lib-tools">
@@ -395,7 +411,7 @@
             <div id="libList"></div>
             <button id="libMore" class="outline block hidden" type="button">Load More</button>
           </div>
-          <div class="panel">
+          <div class="panel admin-only">
             <h3>Requests</h3>
             <div id="adminRequests"></div>
           </div>
@@ -495,6 +511,6 @@
     <button type="button" data-page="profile"><span class="nav-icon">👤</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=36"></script>
+  <script src="/assets/app.js?v=39"></script>
 </body>
 </html>
