@@ -2625,3 +2625,17 @@ body[data-role="uploader"] .admin-only { display: none !important; }
 /* Uploaders can edit but not delete */
 body[data-role="uploader"] .del-btn,
 body[data-role="uploader"] .ep-del { display: none !important; }
+
+/* Pencil-sketch nav icons */
+.sketch-ic {
+  width: 24px; height: 24px; display: block; margin: 0 auto;
+  fill: none; stroke: currentColor; stroke-width: 1.7;
+  stroke-linecap: round; stroke-linejoin: round;
+  filter: url(#pencil);
+  overflow: visible;
+}
+.sidebar .sketch-ic { width: 22px; height: 22px; display: inline-block; vertical-align: middle; margin: 0 6px 0 0; }
+.bottom-nav button .nav-icon { font-size: 0; line-height: 0; }
+
+/* Double-line pencil sketch (style 4) */
+.sketch-ic { filter: none !important; stroke-width: 1.2 !important; }
