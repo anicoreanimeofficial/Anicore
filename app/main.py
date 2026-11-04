@@ -2121,86 +2121,184 @@ def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_u
     return {"message": "Season thumbnail saved", "season_thumbnails": season_map}
 
 
+
 @app.get("/api/meta/anime")
-async def meta_anime(q: str = ""):
-    """Auto-fetch anime title, description, poster from Jikan (MyAnimeList)."""
+def meta_anime(q: str = ""):
+    """Auto-fetch anime metadata from Jikan (MyAnimeList)."""
+    import json
+    from urllib.parse import quote_plus
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError, URLError
+
     q = (q or "").strip()
     if len(q) < 2:
-        raise HTTPException(status_code=400, detail="Enter at least 2 characters")
-    import aiohttp
-    url = f"https://api.jikan.moe/v4/anime?q={q}&limit=1"
+        raise HTTPException(status_code=400, detail="Enter at least 2 characters of the title")
+
+    def jikan_get(path: str):
+        req = Request(
+            f"https://api.jikan.moe/v4{path}",
+            headers={"User-Agent": "Anicore/1.0", "Accept": "application/json"},
+            method="GET",
+        )
+        with urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=12)) as resp:
-                if resp.status != 200:
-                    raise HTTPException(status_code=502, detail="Metadata service unavailable")
-                payload = await resp.json()
-    except HTTPException:
-        raise
+        payload = jikan_get(f"/anime?q={quote_plus(q)}&limit=5")
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"MyAnimeList API error ({exc.code})")
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach metadata service: {exc.reason}")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Fetch failed: {exc}")
-    data = (payload.get("data") or [None])[0]
-    if not data:
-        raise HTTPException(status_code=404, detail="No match found")
+
+    rows = payload.get("data") or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="No anime found for that title")
+
+    # Prefer TV anime over movies/OVAs when title matches
+    data = rows[0]
+    q_low = q.lower()
+    for row in rows:
+        titles = [
+            (row.get("title") or ""),
+            (row.get("title_english") or ""),
+            (row.get("title_japanese") or ""),
+        ]
+        if any(q_low in t.lower() for t in titles if t):
+            data = row
+            if (row.get("type") or "").upper() == "TV":
+                break
+
     images = data.get("images") or {}
     jpg = images.get("jpg") or {}
     webp = images.get("webp") or {}
-    poster = jpg.get("large_image_url") or jpg.get("image_url") or webp.get("large_image_url") or ""
+    poster = (
+        jpg.get("large_image_url")
+        or webp.get("large_image_url")
+        or jpg.get("image_url")
+        or webp.get("image_url")
+        or ""
+    )
     trailer = ((data.get("trailer") or {}).get("images") or {}).get("maximum_image_url") or ""
     genres = ", ".join(g.get("name", "") for g in (data.get("genres") or []) if g.get("name"))
-    duration = data.get("duration") or ""
+    year = data.get("year")
+    if not year:
+        try:
+            year = (data.get("aired") or {}).get("prop", {}).get("from", {}).get("year")
+        except Exception:
+            year = None
+    score = data.get("score")
     return {
         "mal_id": data.get("mal_id"),
         "title": data.get("title_english") or data.get("title") or q,
-        "description": (data.get("synopsis") or "")[:5000],
+        "description": (data.get("synopsis") or "").strip()[:5000],
         "poster": poster,
         "banner": trailer or poster,
-        "year": (data.get("year") or (data.get("aired") or {}).get("prop", {}).get("from", {}).get("year")),
+        "year": year or "",
         "genres": genres,
-        "rating": str(data.get("score") or ""),
-        "duration": duration,
+        "rating": str(score) if score is not None else "",
+        "duration": data.get("duration") or "",
         "episodes": data.get("episodes"),
+        "status": data.get("status") or "",
+        "type": data.get("type") or "",
     }
 
 
 @app.get("/api/meta/episode")
-async def meta_episode(title: str = "", episode: int = 1, season: int = 1, mal_id: int = 0):
+def meta_episode(title: str = "", episode: int = 1, season: int = 1, mal_id: int = 0):
     """Auto-fetch episode title / duration / synopsis from Jikan."""
-    import aiohttp
+    import json
+    from urllib.parse import quote_plus
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError, URLError
+
+    episode = int(episode or 1)
+    season = int(season or 1)
     mid = int(mal_id or 0)
+
+    def jikan_get(path: str):
+        req = Request(
+            f"https://api.jikan.moe/v4{path}",
+            headers={"User-Agent": "Anicore/1.0", "Accept": "application/json"},
+            method="GET",
+        )
+        with urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8", errors="replace"))
+
     try:
-        async with aiohttp.ClientSession() as session:
-            if not mid and title.strip():
-                async with session.get(
-                    f"https://api.jikan.moe/v4/anime?q={title.strip()}&limit=1",
-                    timeout=aiohttp.ClientTimeout(total=12),
-                ) as resp:
-                    if resp.status == 200:
-                        payload = await resp.json()
-                        row = (payload.get("data") or [None])[0]
-                        if row:
-                            mid = int(row.get("mal_id") or 0)
-            if not mid:
-                raise HTTPException(status_code=404, detail="Anime not found for metadata")
-            # Jikan episode endpoint (title + synopsis)
-            async with session.get(
-                f"https://api.jikan.moe/v4/anime/{mid}/episodes/{int(episode)}",
-                timeout=aiohttp.ClientTimeout(total=12),
-            ) as resp:
-                ep = {}
-                if resp.status == 200:
-                    body = await resp.json()
-                    ep = body.get("data") or {}
-            # Full anime for duration fallback + image
-            async with session.get(
-                f"https://api.jikan.moe/v4/anime/{mid}/full",
-                timeout=aiohttp.ClientTimeout(total=12),
-            ) as resp:
+        if not mid and (title or "").strip():
+            payload = jikan_get(f"/anime?q={quote_plus(title.strip())}&limit=5")
+            rows = payload.get("data") or []
+            if rows:
+                mid = int(rows[0].get("mal_id") or 0)
+                for row in rows:
+                    if (row.get("type") or "").upper() == "TV":
+                        mid = int(row.get("mal_id") or 0)
+                        break
+        if not mid:
+            raise HTTPException(status_code=404, detail="Anime not found — type the series title or set episode after auto-fetch on the title")
+
+        # Anime details (duration + image)
+        anime = {}
+        try:
+            anime = (jikan_get(f"/anime/{mid}/full") or {}).get("data") or {}
+        except Exception:
+            try:
+                anime = (jikan_get(f"/anime/{mid}") or {}).get("data") or {}
+            except Exception:
                 anime = {}
-                if resp.status == 200:
-                    anime = (await resp.json()).get("data") or {}
+
+        # Episode list pages until we find the episode number
+        ep = {}
+        page = 1
+        while page <= 8 and not ep:
+            try:
+                body = jikan_get(f"/anime/{mid}/episodes?page={page}")
+            except Exception:
+                break
+            items = body.get("data") or []
+            if not items:
+                break
+            for row in items:
+                if int(row.get("mal_id") or row.get("episode") or 0) == episode or int(row.get("mal_id") or 0) == episode:
+                    # Jikan list uses "mal_id" as episode number in some responses; also check title fields
+                    pass
+                if int(row.get("mal_id") or 0) == episode or int(row.get("episode") or 0) == episode:
+                    ep = row
+                    break
+            # Prefer matching by order: episode N is often at index when sorted
+            if not ep:
+                for row in items:
+                    # field is typically the episode number in "mal_id" for this endpoint
+                    if int(row.get("mal_id") or 0) == episode:
+                        ep = row
+                        break
+            if not ep:
+                # try exact index if page contains continuous numbers
+                for row in items:
+                    if str(row.get("mal_id")) == str(episode):
+                        ep = row
+                        break
+            has_next = ((body.get("pagination") or {}).get("has_next_page"))
+            if not has_next:
+                break
+            page += 1
+
+        # Fallback single-episode endpoint
+        if not ep:
+            try:
+                body = jikan_get(f"/anime/{mid}/episodes/{episode}")
+                ep = body.get("data") or {}
+            except Exception:
+                ep = {}
+
     except HTTPException:
         raise
+    except HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"MyAnimeList API error ({exc.code})")
+    except URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach metadata service: {exc.reason}")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Fetch failed: {exc}")
 
@@ -2208,21 +2306,26 @@ async def meta_episode(title: str = "", episode: int = 1, season: int = 1, mal_i
     jpg = images.get("jpg") or {}
     poster = jpg.get("large_image_url") or jpg.get("image_url") or ""
     duration = anime.get("duration") or ""
-    # normalize "24 min per ep" -> "24m"
     if duration and "min" in duration.lower():
         import re as _re
         m = _re.search(r"(\d+)\s*min", duration.lower())
         if m:
             duration = f"{m.group(1)}m"
 
+    ep_title = (ep.get("title") or ep.get("title_romanji") or ep.get("title_japanese") or "").strip()
+    if not ep_title:
+        ep_title = f"Episode {episode}"
+    synopsis = (ep.get("synopsis") or "").strip()
+
     return {
         "mal_id": mid,
-        "title": ep.get("title") or ep.get("title_romanji") or f"Episode {episode}",
-        "description": (ep.get("synopsis") or "")[:5000],
+        "title": ep_title,
+        "description": synopsis[:5000],
         "duration": duration,
         "thumbnail": poster,
         "season": season,
         "episode": episode,
+        "found": bool(ep),
     }
 
 
