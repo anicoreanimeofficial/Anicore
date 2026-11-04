@@ -42,6 +42,7 @@ class _DB:
 db = _DB()
 
 MAX_BG_DATA_CHARS = 1_200_000  # ~900 KB image once base64-decoded
+MAX_AVATAR_DATA_CHARS = 400_000  # ~300 KB image once base64-decoded
 BG_URL_RE = re.compile(r'^https://[^\s"\'()<>\\]+$')
 BG_DATA_RE = re.compile(r'^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$')
 
@@ -150,6 +151,15 @@ class PrefsData(BaseModel):
 class BackgroundData(BaseModel):
     url: str = Field(default="", max_length=2000)
     data: str = Field(default="", max_length=MAX_BG_DATA_CHARS)
+
+
+class AvatarData(BaseModel):
+    url: str = Field(default="", max_length=2000)
+    data: str = Field(default="", max_length=MAX_AVATAR_DATA_CHARS)
+
+
+class ProfileData(BaseModel):
+    display_name: str = Field(default="", max_length=30)
 
 
 class AnilistImport(BaseModel):
@@ -502,6 +512,7 @@ def me(request: Request):
         "authenticated": True,
         "email": user["email"],
         "role": user.get("role", "user"),
+        "display_name": user.get("display_name") or "",
         "prefs": user.get("prefs") or {},
     }
 
@@ -1446,6 +1457,67 @@ def get_background(user=Depends(require_user)):
 def clear_background(user=Depends(require_user)):
     db.users.update_one({"_id": user["_id"]}, {"$unset": {"prefs.bg_image": "", "bg_data": ""}})
     return {"message": "Background reset"}
+
+
+# --- Profile: display name + avatar (signed-in users only) ---
+
+
+@app.put("/api/users/me/profile")
+def set_profile(data: ProfileData, user=Depends(require_user)):
+    name = re.sub(r"\s+", " ", data.display_name).strip()
+    if len(name) > 30:
+        raise HTTPException(status_code=400, detail="Name must be 30 characters or fewer.")
+    if name:
+        db.users.update_one({"_id": user["_id"]}, {"$set": {"display_name": name}})
+    else:
+        db.users.update_one({"_id": user["_id"]}, {"$unset": {"display_name": ""}})
+    return {"message": "Profile saved", "display_name": name}
+
+
+@app.put("/api/users/me/avatar")
+def set_avatar(data: AvatarData, user=Depends(require_user)):
+    url, raw = data.url.strip(), data.data.strip()
+    if bool(url) == bool(raw):
+        raise HTTPException(status_code=400, detail="Send either an image URL or an uploaded image.")
+
+    if url:
+        if not BG_URL_RE.match(url):
+            raise HTTPException(status_code=400, detail="Image URL must start with https:// and contain no spaces or quotes.")
+        updates = {"prefs.avatar": url, "avatar_data": None}
+    else:
+        match = BG_DATA_RE.match(raw)
+        if not match:
+            raise HTTPException(status_code=400, detail="Upload a JPG, PNG or WebP image.")
+        try:
+            base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(status_code=400, detail="That image could not be read.")
+        updates = {
+            "avatar_data": raw,
+            "prefs.avatar": f"/api/users/me/avatar?v={int(time.time())}",
+        }
+    db.users.update_one({"_id": user["_id"]}, {"$set": updates})
+    fresh = db.users.find_one({"_id": user["_id"]}) or {}
+    return {"message": "Profile picture saved", "avatar": (fresh.get("prefs") or {}).get("avatar", "")}
+
+
+@app.get("/api/users/me/avatar")
+def get_avatar(user=Depends(require_user)):
+    raw = user.get("avatar_data") or ""
+    match = BG_DATA_RE.match(raw)
+    if not match:
+        raise HTTPException(status_code=404, detail="No uploaded avatar")
+    return Response(
+        content=base64.b64decode(match.group(2)),
+        media_type=match.group(1),
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+
+@app.delete("/api/users/me/avatar")
+def clear_avatar(user=Depends(require_user)):
+    db.users.update_one({"_id": user["_id"]}, {"$unset": {"prefs.avatar": "", "avatar_data": ""}})
+    return {"message": "Profile picture removed"}
 
 
 # --- Health Check ---
