@@ -2584,3 +2584,29 @@ body {
   border-bottom: none !important;
   box-shadow: none !important;
 }
+
+/* Profile card (Crunchyroll style) */
+.profile-card { padding: 34px 18px 26px; }
+.profile-avatar.big { width: 120px; height: 120px; font-size: 52px; }
+.profile-avatar.has-img { background: none; overflow: hidden; }
+.profile-avatar.has-img img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+.profile-avatar-btn {
+  position: relative; display: block; margin: 0 auto; padding: 0;
+  background: none; border: 0; border-radius: 50%; cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.18), 0 10px 30px rgba(0,0,0,.35);
+}
+.avatar-edit-badge {
+  position: absolute; right: 2px; bottom: 2px; width: 34px; height: 34px;
+  display: grid; place-items: center; border-radius: 50%;
+  background: linear-gradient(130deg, var(--pink), var(--purple)); color: #fff;
+  font-size: 16px; border: 2px solid rgba(20,18,32,.9);
+}
+.profile-card .profile-name { margin: 16px 0 2px; font-size: 26px; font-weight: 800; }
+.profile-card .profile-email { margin: 0 0 16px; font-size: 14px; }
+.role-badge {
+  display: inline-block; vertical-align: middle; margin-left: 6px; padding: 2px 9px;
+  border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  background: linear-gradient(130deg, var(--pink), var(--purple)); color: #fff;
+}
+.profile-edit { text-align: left; margin-top: 14px; }
+.profile-edit label { display: block; margin-bottom: 12px; }
