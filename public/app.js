@@ -371,7 +371,7 @@ function restoreNavState() {
 
 
 function showPage(page) {
-  if (page === 'admin' && state.user?.role !== 'admin') page = 'home';
+  if (page === 'admin' && !['admin', 'uploader'].includes(state.user?.role)) page = 'home';
   const target = $(`page-${page}`);
   if (!target) return;
 
@@ -417,9 +417,15 @@ function showPage(page) {
   if (page === 'schedule') loadSchedule();
   if (page === 'profile') { loadProfileActivity(); } loadProfile();
   if (page === 'admin') {
-    loadAdminRequests();
+    const isAdminUser = state.user?.role === 'admin';
+    if ($('adminTitle')) $('adminTitle').textContent = isAdminUser ? 'Admin Studio' : 'Upload Studio';
+    populateBulkContentSelect();
     loadLibrary(true);
-    loadAdminStats();
+    if (isAdminUser) {
+      loadAdminRequests();
+      loadAdminStats();
+      loadUploaders();
+    }
   }
 
   window.scrollTo(0, 0);
@@ -835,10 +841,13 @@ function updateAuthUI() {
   const u = state.user;
   $('signInBtn')?.classList.toggle('hidden', !!u);
   $('logoutBtn')?.classList.toggle('hidden', !u);
-  $('adminBtn')?.classList.toggle('hidden', u?.role !== 'admin');
+  const canUpload = u?.role === 'admin' || u?.role === 'uploader';
+  document.body.dataset.role = u?.role || '';
+  $('adminBtn')?.classList.toggle('hidden', !canUpload);
+  if ($('adminBtn')) $('adminBtn').textContent = u?.role === 'uploader' ? 'Upload' : 'Admin';
   $('sideSignIn')?.classList.toggle('hidden', !!u);
   $('sideLogout')?.classList.toggle('hidden', !u);
-  $('sideAdminBtn')?.classList.toggle('hidden', u?.role !== 'admin');
+  $('sideAdminBtn')?.classList.toggle('hidden', !canUpload);
 }
 
 async function checkUser() {
@@ -967,7 +976,7 @@ function renderProfileCard(editing = false) {
         <span class="avatar-edit-badge">✎</span>
       </button>
       <input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp" hidden>
-      <h3 class="profile-name">${esc(profileName(u))}${isAdmin ? ' <span class="role-badge">Admin</span>' : ''}</h3>
+      <h3 class="profile-name">${esc(profileName(u))}${isAdmin ? ' <span class="role-badge">Admin</span>' : (u.role === 'uploader' ? ' <span class="role-badge">Uploader</span>' : '')}</h3>
       <p class="muted profile-email">${esc(u.email)}</p>
       ${editing ? `
         <form id="profileEditForm" class="profile-edit stack">
@@ -1714,6 +1723,7 @@ $('videoBack')?.addEventListener('click', () => {
 // --- Admin ---
 
 async function loadAdminStats() {
+  if (state.user?.role !== 'admin') return;
   try {
     const s = await api('/api/admin/stats');
     $('adminStats').innerHTML = `
@@ -1760,6 +1770,7 @@ async function loadAdminRequests() {
 
 let libPage = 0;
 async function loadLibrary(reset = false) {
+  if (!['admin', 'uploader'].includes(state.user?.role)) return;
   if (reset) libPage = 0;
   const type = $('libType').value;
   const q = $('libSearch').value.trim();
@@ -3009,3 +3020,62 @@ function readScheduleFields() {
   window.addEventListener('resize', set);
   window.addEventListener('load', set);
 })();
+
+
+// --- Uploader management (admin only) ---
+
+async function loadUploaders() {
+  const box = $('uploaderList');
+  if (!box || state.user?.role !== 'admin') return;
+  try {
+    const list = await api('/api/admin/uploaders');
+    box.innerHTML = list.length
+      ? list.map((u) => `<div class="activity-item uploader-row"><span>${esc(u.display_name || u.email)}${u.display_name ? ` <span class="muted">· ${esc(u.email)}</span>` : ''}</span><button type="button" class="outline small" data-remove-uploader="${esc(u.email)}">Remove</button></div>`).join('')
+      : '<p class="muted">No uploaders yet.</p>';
+  } catch (err) { box.innerHTML = `<p class="muted">${esc(err.message)}</p>`; }
+}
+
+async function setUploaderRole(email, role) {
+  const msg = $('uploaderMsg');
+  try {
+    const res = await api('/api/admin/users/role', { method: 'PUT', body: JSON.stringify({ email, role }) });
+    if (msg) msg.textContent = res.message;
+    toast(res.message);
+    loadUploaders();
+    return true;
+  } catch (err) {
+    if (msg) msg.textContent = err.message;
+    toast(err.message, 'error');
+    return false;
+  }
+}
+
+$('uploaderForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('uploaderEmail').value.trim();
+  if (email && await setUploaderRole(email, 'uploader')) $('uploaderEmail').value = '';
+});
+
+$('uploaderList')?.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove-uploader]');
+  if (btn) setUploaderRole(btn.dataset.removeUploader, 'user');
+});
+
+$('uploaderCreateForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = $('uploaderMsg');
+  const email = $('uploaderNewEmail').value.trim();
+  const password = $('uploaderNewPass').value;
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/admin/uploaders', { method: 'POST', body: JSON.stringify({ email, password }) });
+    if (msg) msg.textContent = `${res.message}. Share the email and password with them.`;
+    toast(res.message);
+    e.target.reset();
+    loadUploaders();
+  } catch (err) {
+    if (msg) msg.textContent = err.message;
+    toast(err.message, 'error');
+  } finally { btn.disabled = false; }
+});
