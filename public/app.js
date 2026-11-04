@@ -2642,7 +2642,7 @@ function showInstallPopup() {
     <div class="install-popup" role="dialog" aria-modal="true" aria-labelledby="installTitle">
       <button type="button" class="install-close" id="installDismiss" aria-label="Close">✕</button>
       <div class="install-hero">
-        <div class="install-logo"><img src="/assets/icons/logo.png" alt="ANICORE" width="56" height="56"></div>
+        <div class="install-logo"><img src="https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg" alt="ANICORE" width="72" height="72" style="width:100%;height:100%;border-radius:20px;object-fit:cover;display:block"></div>
         <div class="install-sparkles" aria-hidden="true"></div>
       </div>
       <h2 id="installTitle">Watch ANICORE like an app</h2>

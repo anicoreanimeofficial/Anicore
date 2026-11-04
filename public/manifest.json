@@ -9,27 +9,27 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/assets/icons/icon-192.png",
+      "src": "https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "any"
     },
     {
-      "src": "/assets/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/assets/icons/icon-192.png",
+      "src": "https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg",
       "sizes": "192x192",
-      "type": "image/png",
+      "type": "image/jpeg",
       "purpose": "maskable"
     },
     {
-      "src": "/assets/icons/icon-512.png",
+      "src": "https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
       "purpose": "maskable"
     }
   ]
