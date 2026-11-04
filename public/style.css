@@ -2617,3 +2617,11 @@ body {
   padding-top: calc(18px + var(--header-h, 68px));
 }
 .nav-icon { font-style: normal; line-height: 1; }
+
+/* Uploader role: hide admin-only panels */
+body[data-role="uploader"] .admin-only { display: none !important; }
+.uploader-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Uploaders can edit but not delete */
+body[data-role="uploader"] .del-btn,
+body[data-role="uploader"] .ep-del { display: none !important; }
