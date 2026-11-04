@@ -2997,3 +2997,15 @@ function readScheduleFields() {
   if (publishAt) out.scheduled_at = new Date(publishAt).toISOString();
   return out;
 }
+
+
+// Keep the hero backdrop flush under the (transparent) header.
+(function trackHeaderHeight() {
+  const set = () => {
+    const el = document.querySelector('.app-header');
+    if (el) document.documentElement.style.setProperty('--header-h', el.offsetHeight + 'px');
+  };
+  set();
+  window.addEventListener('resize', set);
+  window.addEventListener('load', set);
+})();
