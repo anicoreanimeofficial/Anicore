@@ -2773,3 +2773,26 @@ body[data-role="uploader"] .ep-del { display: none !important; }
 body.theater #page-video .player-wrap {
   width: 100vw; max-width: none; margin-left: calc(50% - 50vw); border-radius: 0;
 }
+
+
+/* ---- Watch page episode list ---- */
+.ep-list { margin-top: 18px; padding: 14px; border: 1px solid var(--border, rgba(255,255,255,.1)); border-radius: 22px; background: rgba(255,255,255,.03); }
+.ep-seasons { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 12px; padding-bottom: 2px; }
+.ep-season-btn { flex: 0 0 auto; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--border, rgba(255,255,255,.12)); background: transparent; color: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+.ep-season-btn.active { background: var(--pink, #ff3f82); border-color: var(--pink, #ff3f82); color: #fff; }
+.ep-filter { width: 100%; box-sizing: border-box; padding: 14px 16px; margin-bottom: 14px; border-radius: 14px; border: 1px solid var(--border, rgba(255,255,255,.12)); background: rgba(0,0,0,.35); color: inherit; font-size: 15px; }
+.ep-rows { display: grid; gap: 10px; max-height: 520px; overflow-y: auto; padding-right: 2px; }
+.ep-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 14px; text-align: left; color: inherit; font: inherit; cursor: pointer; border-radius: 18px; border: 1px solid var(--border, rgba(255,255,255,.1)); background: rgba(0,0,0,.35); transition: background .2s, border-color .2s; }
+.ep-row:hover { background: rgba(255,255,255,.06); }
+.ep-row.playing { border-color: #e5384f; background: linear-gradient(100deg, rgba(229,56,79,.28), rgba(229,56,79,.08)); }
+.ep-row.off { opacity: .45; cursor: not-allowed; }
+.ep-badge { flex: 0 0 auto; min-width: 64px; padding: 16px 10px; border-radius: 14px; text-align: center; font-weight: 900; font-size: 17px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.7); }
+.ep-row.playing .ep-badge { background: #e8374f; color: #fff; }
+.ep-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.ep-name { font-size: 18px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-dur { font-size: 12px; opacity: .6; }
+.ep-playing { flex: 0 0 auto; font-size: 13px; font-weight: 900; letter-spacing: .12em; color: #ff5a6e; }
+.ep-next { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border, rgba(255,255,255,.1)); font-size: 15px; }
+.ep-next svg { opacity: .7; }
+.ep-next-date { opacity: .6; }
+.ep-none { text-align: center; padding: 12px 0; }

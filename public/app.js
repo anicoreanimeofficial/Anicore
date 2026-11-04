@@ -1273,6 +1273,7 @@ function buildDetailHtml(type, item, comments, reviews) {
 }
 
 function bindDetailEvents(type, item, container) {
+  rememberAir(item);
   container.querySelector('.detail-banner')?.addEventListener('error', (e) => e.target.remove(), { once: true });
 
   const synBtn = container.querySelector('#synopsisToggle');
@@ -1552,6 +1553,109 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
   }
 }
 
+// --- Watch page: episode list (filter, EP badges, PLAYING, next-episode countdown) ---
+
+const airInfo = {};
+function rememberAir(item) {
+  if (!item || !item._id) return;
+  airInfo[item._id] = { air_weekday: item.air_weekday, air_time: item.air_time, status: item.status };
+}
+
+function nextAirDate(air) {
+  if (!air || air.air_weekday == null || !/^\d{2}:\d{2}$/.test(air.air_time || '')) return null;
+  if (String(air.status || '').toLowerCase() === 'completed') return null;
+  const [h, m] = air.air_time.split(':').map(Number);
+  const now = new Date();
+  const weekStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - ((now.getUTCDay() + 6) % 7) * 864e5;
+  let t = weekStart + Number(air.air_weekday) * 864e5 + (h * 60 + m) * 6e4;
+  while (t <= now.getTime()) t += 7 * 864e5;
+  return new Date(t);
+}
+
+function fmtCountdown(ms) {
+  const mins = Math.max(0, Math.floor(ms / 6e4));
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function renderVideoEpList() {
+  const box = $('videoEpList');
+  if (!box) return;
+  if (!videoContext || videoContext.type === 'movie' || videoContext.episodes.length < 2) {
+    box.innerHTML = '';
+    return;
+  }
+  const { episodes, currentIndex, air } = videoContext;
+  const cur = episodes[currentIndex];
+  const seasons = [...new Set(episodes.map((e) => e.season))];
+  if (videoContext.listSeason == null || !seasons.includes(videoContext.listSeason)) videoContext.listSeason = cur.season;
+
+  const nextAt = nextAirDate(air);
+  const nextNo = Number(episodes[episodes.length - 1].episode) + 1;
+  const bell = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 22a2.2 2.2 0 0 0 2.2-2.2h-4.4A2.2 2.2 0 0 0 12 22zm6.5-6.2V11c0-3.1-1.7-5.7-4.6-6.4V4a1.9 1.9 0 0 0-3.8 0v.6C7.2 5.3 5.5 7.9 5.5 11v4.8L3.5 17.8V19h17v-1.2z"/></svg>';
+
+  box.innerHTML = `
+    <div class="ep-list">
+      ${seasons.length > 1 ? `<div class="ep-seasons">${seasons.map((n) =>
+        `<button type="button" class="ep-season-btn ${n === videoContext.listSeason ? 'active' : ''}" data-season="${esc(n)}">Season ${esc(n)}</button>`).join('')}</div>` : ''}
+      <input type="search" id="epFilter" class="ep-filter" placeholder="Filter episodes..." autocomplete="off" value="${esc(videoContext.epFilter || '')}">
+      <div class="ep-rows" id="epRows"></div>
+      ${nextAt ? `<div class="ep-next">${bell}<span><strong>Episode ${esc(nextNo)}</strong> in <strong id="epNextIn">${fmtCountdown(nextAt - Date.now())}</strong> <span class="ep-next-date">· ${nextAt.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${pad2(nextAt.getHours())}:${pad2(nextAt.getMinutes())}</span></span></div>` : ''}
+    </div>`;
+
+  const fillRows = () => {
+    const q = (videoContext.epFilter || '').trim().toLowerCase();
+    const rows = $('epRows');
+    const html = episodes.map((ep, i) => {
+      if (ep.season !== videoContext.listSeason) return '';
+      const name = ep.title || `Episode ${ep.episode}`;
+      if (q && !(`episode ${ep.episode} ${ep.episode} ${name}`.toLowerCase().includes(q))) return '';
+      const playing = i === currentIndex;
+      const off = !ep.video_url;
+      return `
+        <button type="button" class="ep-row ${playing ? 'playing' : ''} ${off ? 'off' : ''}" data-idx="${i}" ${off ? 'disabled' : ''}>
+          <span class="ep-badge">EP ${esc(ep.episode)}</span>
+          <span class="ep-info"><span class="ep-name">${esc(name)}</span>${ep.duration ? `<span class="ep-dur">${esc(ep.duration)}</span>` : ''}</span>
+          ${playing ? '<span class="ep-playing">PLAYING</span>' : ''}
+        </button>`;
+    }).join('');
+    rows.innerHTML = html || '<p class="muted ep-none">No episodes found.</p>';
+  };
+  fillRows();
+
+  $('epFilter').addEventListener('input', (ev) => {
+    videoContext.epFilter = ev.target.value;
+    fillRows();
+  });
+  box.querySelectorAll('.ep-season-btn').forEach((b) => b.addEventListener('click', () => {
+    videoContext.listSeason = Number(b.dataset.season);
+    renderVideoEpList();
+  }));
+  $('epRows').addEventListener('click', (ev) => {
+    const row = ev.target.closest('.ep-row');
+    if (!row || row.disabled) return;
+    const idx = Number(row.dataset.idx);
+    if (idx === videoContext.currentIndex) return;
+    videoContext.currentIndex = idx;
+    loadVideoEpisode();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // keep the countdown live
+  clearInterval(renderVideoEpList._t);
+  if (nextAt) {
+    renderVideoEpList._t = setInterval(() => {
+      const el = $('epNextIn');
+      if (!el) { clearInterval(renderVideoEpList._t); return; }
+      el.textContent = fmtCountdown(nextAt - Date.now());
+    }, 30000);
+  }
+}
+
 function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0) {
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
@@ -1566,6 +1670,9 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
     episodes: sorted,
     currentIndex: idx,
     poster: poster || null,
+    air: airInfo[contentId] || null,
+    epFilter: '',
+    listSeason: null,
     // Only applies to the first episode loaded; lets a direct video pick up where it stopped.
     resumePercent: Number(resumePercent) || 0,
   };
@@ -1597,6 +1704,7 @@ async function resumeWatching(item) {
   const id = item._id || item.content_id;
   try {
     const full = await api(`/api/content/${type}/${id}`);
+    rememberAir(full);
     const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
     if (!eps.length) { openDetail(type, id, item); return; }
     let idx = eps.findIndex((e) => Number(e.season) === Number(item.season) && Number(e.episode) === Number(item.episode));
@@ -1646,6 +1754,7 @@ function loadVideoEpisode() {
   videoContext.resumePercent = 0;
   mountPlayer(ep.video_url, posterSrc, startPercent);
   updateVideoNav();
+  renderVideoEpList();
   saveWatchProgress(startPercent);
 }
 
