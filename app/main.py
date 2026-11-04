@@ -74,6 +74,9 @@ class ContentBase(BaseModel):
     air_time: str = Field(default="", pattern=r"^(\d{2}:\d{2})?$")
     # Hidden from the public until this ISO timestamp (UTC).
     scheduled_at: Optional[str] = None
+    # Browse filters
+    season: str = Field(default="", max_length=10)  # Winter | Spring | Summer | Fall
+    studio: str = Field(default="", max_length=80)
 
 
 class AnimeData(ContentBase):
@@ -88,6 +91,12 @@ class MovieData(ContentBase):
     quality_links: dict = {}
 
 
+class SubtitleTrack(BaseModel):
+    label: str = Field(max_length=40)
+    lang: str = Field(default="en", max_length=10)
+    url: str = Field(max_length=2000)
+
+
 class EpisodeData(BaseModel):
     season: int = 1
     episode: int
@@ -97,6 +106,11 @@ class EpisodeData(BaseModel):
     duration: str = ""
     video_url: str = ""
     quality_links: dict = {}
+    # Player upgrades (seconds). Used for the "Skip Intro" / "Skip Outro" buttons.
+    intro_start: Optional[int] = Field(default=None, ge=0)
+    intro_end: Optional[int] = Field(default=None, ge=0)
+    outro_start: Optional[int] = Field(default=None, ge=0)
+    subtitles: List[SubtitleTrack] = []
 
 
 class EpisodeUpdate(BaseModel):
@@ -108,6 +122,10 @@ class EpisodeUpdate(BaseModel):
     duration: Optional[str] = None
     video_url: Optional[str] = None
     quality_links: Optional[dict] = None
+    intro_start: Optional[int] = Field(default=None, ge=0)
+    intro_end: Optional[int] = Field(default=None, ge=0)
+    outro_start: Optional[int] = Field(default=None, ge=0)
+    subtitles: Optional[List[SubtitleTrack]] = None
 
 
 class CommentData(BaseModel):
@@ -146,6 +164,35 @@ class PrefsData(BaseModel):
     language: Optional[str] = None
     accent: Optional[str] = None
     theme: Optional[str] = None
+    notify_episodes: Optional[bool] = None
+    autoplay_next: Optional[bool] = None
+
+
+class ReadData(BaseModel):
+    ids: List[str] = []
+
+
+class ReportData(BaseModel):
+    reason: str = Field(default="", max_length=300)
+
+
+class ModerateData(BaseModel):
+    action: Literal["delete", "dismiss"]
+
+
+class BanData(BaseModel):
+    banned: bool
+    reason: str = Field(default="", max_length=300)
+
+
+class MuteData(BaseModel):
+    hours: int = Field(ge=0, le=24 * 365)  # 0 = unmute
+    reason: str = Field(default="", max_length=300)
+
+
+class AnnounceData(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    body: str = Field(default="", max_length=500)
 
 
 class BackgroundData(BaseModel):
@@ -273,9 +320,87 @@ def get_current_user(request: Request):
         return None
     try:
         data = decode_session_token(token)
-        return db.users.find_one({"_id": object_id(data["sub"])})
+        user = db.users.find_one({"_id": object_id(data["sub"])})
     except Exception:
         return None
+    # Banned accounts are treated as signed out everywhere.
+    if user and user.get("banned"):
+        return None
+    return user
+
+
+def mute_remaining(user) -> Optional[datetime]:
+    until = user.get("muted_until")
+    if until and as_utc(until) > utc_now():
+        return as_utc(until)
+    return None
+
+
+def ensure_not_muted(user):
+    until = mute_remaining(user)
+    if until:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You are muted until {until.strftime('%d %b %Y %H:%M')} UTC and can't post right now.",
+        )
+
+
+def log_mod(admin, action: str, target: str = "", detail: str = ""):
+    db.mod_log.insert_one(
+        {
+            "admin_id": admin["_id"],
+            "admin_email": admin["email"],
+            "action": action,
+            "target": target,
+            "detail": detail[:300],
+            "created_at": utc_now(),
+        }
+    )
+
+
+def clean_subtitles(tracks):
+    """Subtitle tracks must be https WebVTT/SRT links; drop blanks."""
+    out = []
+    for t in tracks or []:
+        t = t if isinstance(t, dict) else t.model_dump()
+        url = valid_video_url(t.get("url", ""))
+        if not url:
+            continue
+        out.append({"label": (t.get("label") or t.get("lang") or "Subtitles")[:40],
+                    "lang": (t.get("lang") or "en")[:10], "url": url})
+    return out[:12]
+
+
+def notify_user_ids(user_ids, kind: str, title: str, body: str = "", content_type: str = "",
+                    content_id: str = "", season=None, episode=None):
+    docs = [
+        {
+            "user_id": uid, "type": kind, "title": title, "body": body,
+            "content_type": content_type, "content_id": content_id,
+            "season": season, "episode": episode,
+            "read": False, "created_at": utc_now(),
+        }
+        for uid in user_ids
+    ]
+    for i in range(0, len(docs), 500):
+        db.notifications.insert_many(docs[i:i + 500])
+
+
+def notify_new_episodes(content_type: str, content_id: str, title: str, season: int, episode: int, count: int = 1):
+    """Tell everyone with this title on their watchlist (unless they opted out)."""
+    try:
+        ids = db.watchlist.distinct("user_id", {"content_type": content_type, "content_id": content_id})
+        if not ids:
+            return
+        users = db.users.find(
+            {"_id": {"$in": ids}, "banned": {"$ne": True}, "prefs.notify_episodes": {"$ne": False}},
+            {"_id": 1},
+        )
+        targets = [u["_id"] for u in users]
+        body = f"Season {season}, Episode {episode} is now available." if count == 1 else f"{count} new episodes were added."
+        notify_user_ids(targets, "episode", f"New episode: {title}", body, content_type, content_id, season, episode)
+    except Exception as exc:  # notifications must never break uploads
+        print(f"notify_new_episodes failed: {exc}")
 
 
 def require_user(request: Request):
@@ -366,6 +491,9 @@ def build_filter_query(
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
     include_hidden: bool = False,
+    genres: str = "",
+    season: str = "",
+    studio: str = "",
 ):
     query = {}
     q = (q or "").strip()
@@ -373,6 +501,18 @@ def build_filter_query(
         query["title"] = {"$regex": re.escape(q), "$options": "i"}
     if genre:
         query["genres"] = {"$regex": f"^{re.escape(genre)}$", "$options": "i"}
+    # Multi-genre: comma separated, title must have ALL of them.
+    wanted = [g.strip() for g in (genres or "").split(",") if g.strip()][:8]
+    if wanted:
+        clauses = [{"genres": {"$regex": f"^{re.escape(g)}$", "$options": "i"}} for g in wanted]
+        if genre:
+            clauses.append({"genres": {"$regex": f"^{re.escape(genre)}$", "$options": "i"}})
+            query.pop("genres", None)
+        query["$and"] = clauses
+    if season:
+        query["season"] = {"$regex": f"^{re.escape(season.strip())}$", "$options": "i"}
+    if studio:
+        query["studio"] = {"$regex": f"^{re.escape(studio.strip())}$", "$options": "i"}
     if status:
         query["status"] = {"$regex": f"^{re.escape(status)}$", "$options": "i"}
     if year_min is not None or year_max is not None:
@@ -399,10 +539,15 @@ def get_paginated(
     min_rating: Optional[float] = None,
     sort: str = "newest",
     include_hidden: bool = False,
+    genres: str = "",
+    season: str = "",
+    studio: str = "",
 ):
     page = max(page, 1)
     limit = min(max(limit, 1), 50)
-    query = build_filter_query(q, genre, status, year_min, year_max, min_rating, include_hidden)
+    query = build_filter_query(
+        q, genre, status, year_min, year_max, min_rating, include_hidden, genres, season, studio
+    )
 
     sort_map = {
         "newest": [("created_at", -1)],
@@ -508,6 +653,9 @@ def login(data: AuthData, response: Response):
     user = db.users.find_one({"email": email})
     if not user or not verify_password(data.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    if user.get("banned"):
+        reason = user.get("ban_reason") or ""
+        raise HTTPException(status_code=403, detail="This account has been suspended." + (f" Reason: {reason}" if reason else ""))
 
     token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
     response.set_cookie(**get_cookie_options(), value=token)
@@ -550,10 +698,13 @@ def get_anime(
     min_rating: Optional[float] = None,
     sort: str = "newest",
     include_hidden: bool = False,
+    genres: str = "",
+    season: str = "",
+    studio: str = "",
 ):
     items, total = get_paginated(
         db.anime, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
-        is_admin_request(request, include_hidden),
+        is_admin_request(request, include_hidden), genres, season, studio,
     )
     return {"items": items, "total": total}
 
@@ -571,10 +722,13 @@ def get_tvshows(
     min_rating: Optional[float] = None,
     sort: str = "newest",
     include_hidden: bool = False,
+    genres: str = "",
+    season: str = "",
+    studio: str = "",
 ):
     items, total = get_paginated(
         db.tv_shows, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
-        is_admin_request(request, include_hidden),
+        is_admin_request(request, include_hidden), genres, season, studio,
     )
     return {"items": items, "total": total}
 
@@ -592,10 +746,13 @@ def get_movies(
     min_rating: Optional[float] = None,
     sort: str = "newest",
     include_hidden: bool = False,
+    genres: str = "",
+    season: str = "",
+    studio: str = "",
 ):
     items, total = get_paginated(
         db.movies, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
-        is_admin_request(request, include_hidden),
+        is_admin_request(request, include_hidden), genres, season, studio,
     )
     return {"items": items, "total": total}
 
@@ -609,6 +766,33 @@ def get_genres():
                 if g and isinstance(g, str):
                     genres.add(g.strip())
     return sorted(genres, key=str.lower)
+
+
+@app.get("/api/filters/options")
+def filter_options(type: str = ""):
+    """Everything the browse filter panel needs: genres, years, seasons, studios."""
+    names = {"anime": ["anime"], "tv_show": ["tv_shows"], "movie": ["movies"], "series": ["anime", "tv_shows"]}
+    colls = names.get(type) or ["anime", "tv_shows", "movies"]
+    genres, studios, seasons, years = set(), set(), set(), []
+    for coll_name in colls:
+        for doc in db[coll_name].find(visible_query(), {"genres": 1, "studio": 1, "season": 1, "year": 1}):
+            for g in doc.get("genres") or []:
+                if g and isinstance(g, str):
+                    genres.add(g.strip())
+            if doc.get("studio"):
+                studios.add(str(doc["studio"]).strip())
+            if doc.get("season"):
+                seasons.add(str(doc["season"]).strip().title())
+            if isinstance(doc.get("year"), int):
+                years.append(doc["year"])
+    order = ["Winter", "Spring", "Summer", "Fall"]
+    return {
+        "genres": sorted(genres, key=str.lower),
+        "studios": sorted(studios, key=str.lower),
+        "seasons": [x for x in order if x in seasons] + sorted(x for x in seasons if x not in order),
+        "year_min": min(years) if years else None,
+        "year_max": max(years) if years else None,
+    }
 
 
 @app.get("/api/content/{type}/{id}")
@@ -678,9 +862,10 @@ def add_movie(data: MovieData, admin=Depends(require_uploader)):
 
 
 @app.post("/api/admin/anime/{id}/episodes")
-def add_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
+def add_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    ep["subtitles"] = clean_subtitles(ep.get("subtitles"))
     cleaned_links = {}
     for k, v in (ep.get("quality_links") or {}).items():
         cleaned_links[k] = valid_video_url(v)
@@ -688,13 +873,20 @@ def add_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
     result = db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Anime not found")
+    parent = db.anime.find_one({"_id": object_id(id)}, {"title": 1, "published": 1, "scheduled_at": 1}) or {}
+    released = parent.get("published") is not False or (
+        parent.get("scheduled_at") is not None and as_utc(parent["scheduled_at"]) <= utc_now()
+    )
+    if released and ep.get("video_url"):
+        background.add_task(notify_new_episodes, "anime", id, parent.get("title", "Anime"), ep["season"], ep["episode"])
     return {"message": "Episode added"}
 
 
 @app.post("/api/admin/tvshows/{id}/episodes")
-def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
+def add_tv_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     ep = data.model_dump()
     ep["video_url"] = valid_video_url(ep.get("video_url", ""))
+    ep["subtitles"] = clean_subtitles(ep.get("subtitles"))
     cleaned_links = {}
     for k, v in (ep.get("quality_links") or {}).items():
         cleaned_links[k] = valid_video_url(v)
@@ -702,6 +894,12 @@ def add_tv_episode(id: str, data: EpisodeData, admin=Depends(require_uploader)):
     result = db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="TV show not found")
+    parent = db.tv_shows.find_one({"_id": object_id(id)}, {"title": 1, "published": 1, "scheduled_at": 1}) or {}
+    released = parent.get("published") is not False or (
+        parent.get("scheduled_at") is not None and as_utc(parent["scheduled_at"]) <= utc_now()
+    )
+    if released and ep.get("video_url"):
+        background.add_task(notify_new_episodes, "tv_show", id, parent.get("title", "TV show"), ep["season"], ep["episode"])
     return {"message": "Episode added"}
 
 
@@ -729,6 +927,8 @@ def update_episode(
             updates = data.model_dump(exclude_unset=True)
             if "video_url" in updates:
                 updates["video_url"] = valid_video_url(updates["video_url"])
+            if "subtitles" in updates:
+                updates["subtitles"] = clean_subtitles(updates["subtitles"])
             if "quality_links" in updates and updates["quality_links"]:
                 updates["quality_links"] = {
                     k: valid_video_url(v) for k, v in updates["quality_links"].items()
@@ -819,6 +1019,8 @@ def admin_stats(admin=Depends(require_admin)):
         "movies": db.movies.count_documents({}),
         "users": db.users.count_documents({}),
         "requests_pending": db.requests.count_documents({"status": "Pending"}),
+        "reports_open": db.comments.count_documents({"report_count": {"$gt": 0}}),
+        "banned_users": db.users.count_documents({"banned": True}),
         "total_views": sum(
             (db[c].aggregate([{"$group": {"_id": None, "v": {"$sum": "$views"}}}]).next() or {}).get("v", 0)
             for c in ("anime", "tv_shows", "movies")
@@ -870,6 +1072,7 @@ def get_watchlist(user=Depends(require_user)):
 
 @app.post("/api/comments")
 def add_comment(data: CommentData, user=Depends(require_user)):
+    ensure_not_muted(user)
     get_collection(data.content_type)
     object_id(data.content_id)
     db.comments.insert_one(
@@ -891,6 +1094,7 @@ def get_comments(type: str, id: str):
     rows = db.comments.find({"content_type": type, "content_id": id}).sort("created_at", -1).limit(100)
     return [
         {
+            "_id": str(r["_id"]),
             "username": r.get("username", "user"),
             "text": r.get("text", ""),
             "created_at": serialize_value(r.get("created_at")),
@@ -1075,9 +1279,15 @@ def get_requests(admin=Depends(require_admin)):
 
 @app.patch("/api/admin/requests/{id}")
 def update_request(id: str, data: RequestStatus, admin=Depends(require_admin)):
-    result = db.requests.update_one({"_id": object_id(id)}, {"$set": {"status": data.status}})
-    if not result.matched_count:
+    row = db.requests.find_one_and_update({"_id": object_id(id)}, {"$set": {"status": data.status}})
+    if not row:
         raise HTTPException(status_code=404, detail="Request not found")
+    if row.get("status") != data.status and row.get("user_id"):
+        notify_user_ids(
+            [row["user_id"]], "request", f"Your request was {data.status.lower()}",
+            f"\"{row.get('title', '')}\" is now marked {data.status}.",
+        )
+    log_mod(admin, "request_status", row.get("title", ""), data.status)
     return {"message": "Request updated"}
 
 
@@ -1177,6 +1387,10 @@ def save_prefs(data: PrefsData, user=Depends(require_user)):
         updates["prefs.accent"] = data.accent
     if data.theme in ("dark", "light"):
         updates["prefs.theme"] = data.theme
+    if data.notify_episodes is not None:
+        updates["prefs.notify_episodes"] = bool(data.notify_episodes)
+    if data.autoplay_next is not None:
+        updates["prefs.autoplay_next"] = bool(data.autoplay_next)
     if updates:
         db.users.update_one({"_id": user["_id"]}, {"$set": updates})
     fresh = db.users.find_one({"_id": user["_id"]})
@@ -1192,6 +1406,8 @@ async def import_anilist(data: AnilistImport, admin=Depends(require_uploader)):
             id title { romaji english native }
             description(asHtml: false)
             genres averageScore startDate { year }
+            season seasonYear
+            studios(isMain: true) { nodes { name } }
             coverImage { large extraLarge }
             bannerImage status
           }
@@ -1205,6 +1421,8 @@ async def import_anilist(data: AnilistImport, admin=Depends(require_uploader)):
             id title { romaji english native }
             description(asHtml: false)
             genres averageScore startDate { year }
+            season seasonYear
+            studios(isMain: true) { nodes { name } }
             coverImage { large extraLarge }
             bannerImage status
           }
@@ -1257,6 +1475,8 @@ async def import_anilist(data: AnilistImport, admin=Depends(require_uploader)):
         or (media.get("coverImage") or {}).get("large")
         or "",
         "banner": media.get("bannerImage") or "",
+        "season": (media.get("season") or "").title(),
+        "studio": (((media.get("studios") or {}).get("nodes") or [{}])[0] or {}).get("name", ""),
         "status": status_map.get(media.get("status"), "Ongoing"),
         "poster_tag": "NEW",
         "dubbed_on": [],
@@ -1282,13 +1502,14 @@ async def import_anilist(data: AnilistImport, admin=Depends(require_uploader)):
 
 
 @app.post("/api/admin/bulk-episodes")
-def bulk_add_episodes(data: BulkEpisodesData, admin=Depends(require_uploader)):
+def bulk_add_episodes(data: BulkEpisodesData, background: BackgroundTasks, admin=Depends(require_uploader)):
     coll = get_collection(data.content_type)
     doc = coll.find_one({"_id": object_id(data.content_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Content not found")
     existing = list(doc.get("episodes") or [])
     added = 0
+    newest = None
     for ep in data.episodes:
         if any(e.get("season") == ep.season and e.get("episode") == ep.episode for e in existing):
             continue
@@ -1303,8 +1524,18 @@ def bulk_add_episodes(data: BulkEpisodesData, admin=Depends(require_uploader)):
             "thumbnail": "",
         })
         added += 1
+        if ep.video_url and (newest is None or (ep.season, ep.episode) > newest):
+            newest = (ep.season, ep.episode)
     existing.sort(key=lambda e: (e.get("season", 1), e.get("episode", 0)))
     coll.update_one({"_id": doc["_id"]}, {"$set": {"episodes": existing}})
+    released = doc.get("published") is not False or (
+        doc.get("scheduled_at") is not None and as_utc(doc["scheduled_at"]) <= utc_now()
+    )
+    if added and newest and released:
+        background.add_task(
+            notify_new_episodes, data.content_type, data.content_id, doc.get("title", ""),
+            newest[0], newest[1], added,
+        )
     return {"message": f"Added {added} episodes", "total": len(existing)}
 
 
@@ -1570,6 +1801,233 @@ def set_user_role(data: UploaderRoleData, admin=Depends(require_admin)):
     db.users.update_one({"_id": target["_id"]}, {"$set": {"role": data.role}})
     verb = "can now upload" if data.role == "uploader" else "is a regular user again"
     return {"message": f"{email} {verb}", "email": email, "role": data.role}
+
+
+# ============================================================
+# Notifications
+# ============================================================
+
+
+@app.get("/api/notifications")
+def list_notifications(limit: int = 30, user=Depends(require_user)):
+    limit = min(max(limit, 1), 100)
+    rows = db.notifications.find({"user_id": user["_id"]}).sort("created_at", -1).limit(limit)
+    items = []
+    for r in rows:
+        d = serialize_doc(r)
+        d.pop("user_id", None)
+        items.append(d)
+    return {
+        "items": items,
+        "unread": db.notifications.count_documents({"user_id": user["_id"], "read": False}),
+    }
+
+
+@app.get("/api/notifications/unread-count")
+def unread_count(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return {"unread": 0}
+    return {"unread": db.notifications.count_documents({"user_id": user["_id"], "read": False})}
+
+
+@app.post("/api/notifications/read")
+def mark_notifications_read(data: Optional[ReadData] = None, user=Depends(require_user)):
+    query = {"user_id": user["_id"], "read": False}
+    if data and data.ids:
+        query["_id"] = {"$in": [object_id(i) for i in data.ids[:200]]}
+    db.notifications.update_many(query, {"$set": {"read": True}})
+    return {"unread": db.notifications.count_documents({"user_id": user["_id"], "read": False})}
+
+
+@app.delete("/api/notifications/{id}")
+def delete_notification(id: str, user=Depends(require_user)):
+    db.notifications.delete_one({"_id": object_id(id), "user_id": user["_id"]})
+    return {"message": "Deleted"}
+
+
+@app.delete("/api/notifications")
+def clear_notifications(user=Depends(require_user)):
+    db.notifications.delete_many({"user_id": user["_id"]})
+    return {"message": "Cleared"}
+
+
+# ============================================================
+# Moderation & admin tools
+# ============================================================
+
+
+@app.post("/api/comments/{id}/report")
+def report_comment(id: str, data: ReportData, user=Depends(require_user)):
+    oid = object_id(id)
+    comment = db.comments.find_one({"_id": oid})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if comment.get("user_id") == user["_id"]:
+        raise HTTPException(status_code=400, detail="You can't report your own comment.")
+    if any(r.get("user_id") == user["_id"] for r in comment.get("reports") or []):
+        raise HTTPException(status_code=409, detail="You already reported this comment.")
+    db.comments.update_one(
+        {"_id": oid},
+        {
+            "$push": {"reports": {"user_id": user["_id"], "reason": data.reason.strip(), "at": utc_now()}},
+            "$inc": {"report_count": 1},
+        },
+    )
+    return {"message": "Thanks, a moderator will take a look."}
+
+
+@app.get("/api/admin/reports")
+def report_queue(admin=Depends(require_admin)):
+    rows = db.comments.find({"report_count": {"$gt": 0}}).sort("report_count", -1).limit(100)
+    out = []
+    for c in rows:
+        title = ""
+        try:
+            doc = get_collection(c.get("content_type", "")).find_one(
+                {"_id": ObjectId(c.get("content_id", ""))}, {"title": 1}
+            )
+            title = (doc or {}).get("title", "")
+        except Exception:
+            pass
+        out.append(
+            {
+                "_id": str(c["_id"]),
+                "username": c.get("username", "user"),
+                "author_id": str(c.get("user_id", "")),
+                "text": c.get("text", ""),
+                "content_title": title,
+                "report_count": c.get("report_count", 0),
+                "reasons": [r.get("reason", "") for r in c.get("reports") or [] if r.get("reason")][:5],
+                "created_at": serialize_value(c.get("created_at")),
+            }
+        )
+    return out
+
+
+@app.post("/api/admin/comments/{id}/moderate")
+def moderate_comment(id: str, data: ModerateData, admin=Depends(require_admin)):
+    oid = object_id(id)
+    comment = db.comments.find_one({"_id": oid})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if data.action == "delete":
+        db.comments.delete_one({"_id": oid})
+        if comment.get("user_id"):
+            notify_user_ids(
+                [comment["user_id"]], "moderation", "A comment of yours was removed",
+                "It was reported and removed by a moderator for breaking the community rules.",
+            )
+        log_mod(admin, "comment_deleted", comment.get("username", ""), comment.get("text", "")[:120])
+        return {"message": "Comment deleted"}
+    db.comments.update_one({"_id": oid}, {"$set": {"reports": [], "report_count": 0}})
+    log_mod(admin, "report_dismissed", comment.get("username", ""), comment.get("text", "")[:120])
+    return {"message": "Reports dismissed"}
+
+
+@app.delete("/api/admin/comments/{id}")
+def admin_delete_comment(id: str, admin=Depends(require_admin)):
+    comment = db.comments.find_one_and_delete({"_id": object_id(id)})
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    log_mod(admin, "comment_deleted", comment.get("username", ""), comment.get("text", "")[:120])
+    return {"message": "Comment deleted"}
+
+
+def _user_row(u):
+    muted = mute_remaining(u)
+    return {
+        "_id": str(u["_id"]),
+        "email": u.get("email", ""),
+        "display_name": u.get("display_name", ""),
+        "role": u.get("role", "user"),
+        "banned": bool(u.get("banned")),
+        "ban_reason": u.get("ban_reason", ""),
+        "muted_until": muted.isoformat() if muted else None,
+        "created_at": serialize_value(u.get("created_at")),
+    }
+
+
+@app.get("/api/admin/users")
+def admin_users(q: str = "", page: int = 1, limit: int = 20, filter: str = "", admin=Depends(require_admin)):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 50)
+    query = {}
+    q = (q or "").strip()
+    if q:
+        query["$or"] = [
+            {"email": {"$regex": re.escape(q), "$options": "i"}},
+            {"display_name": {"$regex": re.escape(q), "$options": "i"}},
+        ]
+    if filter == "banned":
+        query["banned"] = True
+    elif filter == "muted":
+        query["muted_until"] = {"$gt": utc_now()}
+    total = db.users.count_documents(query)
+    rows = db.users.find(query, {"password_hash": 0, "prefs": 0}).sort("created_at", -1).skip((page - 1) * limit).limit(limit)
+    return {"items": [_user_row(u) for u in rows], "total": total}
+
+
+def _moderation_target(id: str, admin):
+    target = db.users.find_one({"_id": object_id(id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target["_id"] == admin["_id"]:
+        raise HTTPException(status_code=400, detail="You can't do that to your own account.")
+    if target.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="Admin accounts can't be banned or muted.")
+    return target
+
+
+@app.put("/api/admin/users/{id}/ban")
+def ban_user(id: str, data: BanData, admin=Depends(require_admin)):
+    target = _moderation_target(id, admin)
+    if data.banned:
+        db.users.update_one({"_id": target["_id"]}, {"$set": {"banned": True, "ban_reason": data.reason.strip()}})
+    else:
+        db.users.update_one({"_id": target["_id"]}, {"$unset": {"banned": "", "ban_reason": ""}})
+    log_mod(admin, "ban" if data.banned else "unban", target["email"], data.reason)
+    return {"message": f"{target['email']} {'banned' if data.banned else 'unbanned'}"}
+
+
+@app.put("/api/admin/users/{id}/mute")
+def mute_user(id: str, data: MuteData, admin=Depends(require_admin)):
+    target = _moderation_target(id, admin)
+    if data.hours:
+        until = utc_now() + timedelta(hours=data.hours)
+        db.users.update_one({"_id": target["_id"]}, {"$set": {"muted_until": until}})
+        notify_user_ids(
+            [target["_id"]], "moderation", "You have been muted",
+            f"You can't post comments until {until.strftime('%d %b %Y %H:%M')} UTC." + (f" Reason: {data.reason.strip()}" if data.reason.strip() else ""),
+        )
+        log_mod(admin, "mute", target["email"], f"{data.hours}h. {data.reason}")
+        return {"message": f"{target['email']} muted for {data.hours}h"}
+    db.users.update_one({"_id": target["_id"]}, {"$unset": {"muted_until": ""}})
+    log_mod(admin, "unmute", target["email"])
+    return {"message": f"{target['email']} unmuted"}
+
+
+@app.get("/api/admin/mod-log")
+def mod_log(limit: int = 50, admin=Depends(require_admin)):
+    rows = db.mod_log.find().sort("created_at", -1).limit(min(max(limit, 1), 200))
+    return [
+        {
+            "admin": r.get("admin_email", ""),
+            "action": r.get("action", ""),
+            "target": r.get("target", ""),
+            "detail": r.get("detail", ""),
+            "created_at": serialize_value(r.get("created_at")),
+        }
+        for r in rows
+    ]
+
+
+@app.post("/api/admin/announce")
+def announce(data: AnnounceData, admin=Depends(require_admin)):
+    ids = [u["_id"] for u in db.users.find({"banned": {"$ne": True}}, {"_id": 1})]
+    notify_user_ids(ids, "announcement", data.title.strip(), data.body.strip())
+    log_mod(admin, "announcement", f"{len(ids)} users", data.title.strip())
+    return {"message": f"Announcement sent to {len(ids)} users"}
 
 
 # --- Health Check ---

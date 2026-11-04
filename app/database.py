@@ -55,6 +55,21 @@ def connect_database():
     )
     db.ratings.create_index([("content_type", ASCENDING), ("content_id", ASCENDING)])
 
+    # Notifications (auto-expire after 90 days)
+    db.notifications.create_index([("user_id", ASCENDING), ("created_at", DESCENDING)])
+    db.notifications.create_index([("user_id", ASCENDING), ("read", ASCENDING)])
+    db.notifications.create_index("created_at", expireAfterSeconds=60 * 60 * 24 * 90)
+    db.watchlist.create_index([("content_type", ASCENDING), ("content_id", ASCENDING)])
+
+    # Moderation
+    db.comments.create_index([("report_count", DESCENDING)])
+    db.mod_log.create_index([("created_at", DESCENDING)])
+
+    # Browse filters
+    for coll_name in ("anime", "tv_shows", "movies"):
+        db[coll_name].create_index([("season", ASCENDING)])
+        db[coll_name].create_index([("studio", ASCENDING)])
+
     # Seed admin
     admin_email = (ADMIN_EMAIL or "").strip().lower()
     if admin_email and ADMIN_PASSWORD and not db.users.find_one({"email": admin_email}):
