@@ -916,7 +916,7 @@ def continue_watching(user=Depends(require_user), limit: int = 12):
             doc = get_collection(row["content_type"]).find_one(
                 {"$and": [{"_id": ObjectId(row["content_id"])}, visible_query()]},
                 {"title": 1, "poster": 1, "banner": 1, "episodes.season": 1, "episodes.episode": 1,
-                 "episodes.title": 1, "episodes.thumbnail": 1},
+                 "episodes.title": 1, "episodes.thumbnail": 1, "episodes.duration": 1},
             )
         except Exception:
             doc = None
@@ -952,6 +952,7 @@ def continue_watching(user=Depends(require_user), limit: int = 12):
                 "banner": doc.get("banner", ""),
                 "thumbnail": current.get("thumbnail", ""),
                 "episode_title": current.get("title", ""),
+                "duration": current.get("duration", ""),
                 "season": season,
                 "episode": episode,
                 "progress_percent": percent,
