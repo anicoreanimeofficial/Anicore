@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v41';
+const APP_JS_VERSION = 'v42';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -2057,7 +2057,7 @@ $('aCancel')?.addEventListener('click', () => {
 let currentEpisodeTarget = null;
 
 function openEpisodesModal(type, id, title) {
-  currentEpisodeTarget = { type, id, title };
+  currentEpisodeTarget = { type, id, title, mal_id: state._lastMalId || null };
   $('episodesTitle').textContent = `Episodes — ${title}`;
   $('episodeForm').reset();
   $('epId').value = '';
@@ -2290,45 +2290,67 @@ async function applySeasonThumbnail(type, id, season, thumbUrl) {
 async function autoFetchAnimeMeta() {
   const title = ($("aTitle")?.value || "").trim();
   if (!title) return toast("Enter a title first", "error");
+  const btn = $("aAutoFetch");
+  if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
   try {
-    toast("Fetching…");
+    toast("Fetching from MyAnimeList…");
     const data = await api(`/api/meta/anime?q=${encodeURIComponent(title)}`);
     if (data.title && $("aTitle")) $("aTitle").value = data.title;
-    if (data.description && $("aDesc")) $("aDesc").value = data.description;
+    if (data.description != null && $("aDesc")) $("aDesc").value = data.description || "";
     if (data.poster && $("aPoster")) $("aPoster").value = data.poster;
     if (data.banner && $("aBanner")) $("aBanner").value = data.banner;
     if (data.year && $("aYear")) $("aYear").value = data.year;
-    if (data.genres && $("aGenres") && !$("aGenres").value) $("aGenres").value = data.genres;
-    if (data.rating && $("aRating") && !$("aRating").value) $("aRating").value = data.rating;
-    if (data.mal_id) state._lastMalId = data.mal_id;
-    toast("Filled from MyAnimeList");
+    if (data.genres && $("aGenres")) $("aGenres").value = data.genres;
+    if (data.rating && $("aRating")) $("aRating").value = data.rating;
+    if (data.mal_id) {
+      state._lastMalId = data.mal_id;
+      try { sessionStorage.setItem("anicore-mal-id", String(data.mal_id)); } catch (e) {}
+    }
+    toast(data.title ? `Found: ${data.title}` : "Filled from MyAnimeList");
   } catch (err) {
     toast(err.message || "Could not fetch", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Auto-fetch title info (name, description, poster)"; }
   }
 }
 
 async function autoFetchEpisodeMeta() {
-  if (!currentEpisodeTarget) return toast("Open episodes from a title first", "error");
+  if (!currentEpisodeTarget) return toast("Open Manage Episodes from a title first", "error");
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 0;
   const season = Number($("epSeason")?.value) || 1;
-  if (!ep) return toast("Enter episode number", "error");
+  if (!ep) return toast("Enter episode number first", "error");
+  const btn = $("epAutoFetch");
+  if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
   try {
-    toast("Fetching episode…");
+    toast("Fetching episode from MyAnimeList…");
+    let malId = state._lastMalId || currentEpisodeTarget.mal_id || 0;
+    if (!malId) {
+      try { malId = Number(sessionStorage.getItem("anicore-mal-id") || 0); } catch (e) {}
+    }
     const q = new URLSearchParams({
       title: title || "",
       episode: String(ep),
       season: String(season),
     });
-    if (state._lastMalId) q.set("mal_id", String(state._lastMalId));
+    if (malId) q.set("mal_id", String(malId));
     const data = await api(`/api/meta/episode?${q}`);
     if (data.title && $("epTitle")) $("epTitle").value = data.title;
     if (data.duration && $("epDuration")) $("epDuration").value = data.duration;
-    if (data.description && $("epDesc")) $("epDesc").value = data.description;
+    if (data.description != null && $("epDesc")) $("epDesc").value = data.description || "";
     if (data.thumbnail && $("epThumb")) $("epThumb").value = data.thumbnail;
-    toast("Episode info filled");
+    if (data.mal_id) {
+      state._lastMalId = data.mal_id;
+      currentEpisodeTarget.mal_id = data.mal_id;
+      try { sessionStorage.setItem("anicore-mal-id", String(data.mal_id)); } catch (e) {}
+    }
+    toast(data.found === false
+      ? `Title set to Episode ${ep} (MAL has no extra details)`
+      : "Episode info filled");
   } catch (err) {
     toast(err.message || "Could not fetch episode", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Auto-fetch ep name, duration and description"; }
   }
 }
 
