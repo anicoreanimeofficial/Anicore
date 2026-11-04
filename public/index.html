@@ -16,9 +16,24 @@
   <link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/icons/favicon-32.png">
   <title>ANICORE</title>
-  <link rel="stylesheet" href="/assets/style.css?v=28">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css?v=29">
 </head>
 <body>
+
+  <!-- AC intro animation -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <svg class="splash-svg" viewBox="0 0 350 300" xmlns="http://www.w3.org/2000/svg">
+      <g class="splash-letters">
+        <text class="sp-a" x="95" y="222" text-anchor="middle">A</text>
+        <text class="sp-c" x="258" y="222" text-anchor="middle">C</text>
+      </g>
+    </svg>
+    <button type="button" class="splash-skip" id="splashSkip">Skip</button>
+  </div>
+  <script>try{if(sessionStorage.getItem('anicore-splash')){document.getElementById('splash').remove();}}catch(e){}</script>
 
   <!-- Animated site background -->
   <div class="bg-video-wrap" aria-hidden="true">
@@ -74,9 +89,15 @@
 
     <main id="appMain">
       <section class="page active" id="page-home" aria-label="Home">
-        <div class="intro">
-          <h1>Discover Your Next Story</h1>
-          <p class="muted">Anime, TV Shows, and Movies.</p>
+        <h1 class="sr-only">ANICORE — Discover Anime, TV Shows and Movies</h1>
+        <div id="hero" class="hero loading" aria-label="Featured">
+          <div class="hero-stage"><div class="hero-skel-card"></div></div>
+          <div class="hero-info">
+            <div class="sk sk-title"></div>
+            <div class="sk-row"><span class="sk sk-chip"></span><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+            <div class="sk sk-line"></div>
+            <div class="sk sk-line short"></div>
+          </div>
         </div>
         <div id="continueSection" class="hidden">
           <h3 class="section-title">Continue Watching</h3>
@@ -417,6 +438,6 @@
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=28"></script>
+  <script src="/assets/app.js?v=29"></script>
 </body>
 </html>
