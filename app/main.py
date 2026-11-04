@@ -1,4 +1,7 @@
+import base64
+import binascii
 import re
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
 from typing import List, Literal, Optional
@@ -38,6 +41,10 @@ class _DB:
 
 db = _DB()
 
+MAX_BG_DATA_CHARS = 1_200_000  # ~900 KB image once base64-decoded
+BG_URL_RE = re.compile(r'^https://[^\s"\'()<>\\]+$')
+BG_DATA_RE = re.compile(r'^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$')
+
 # --- Models ---
 
 
@@ -61,6 +68,11 @@ class ContentBase(BaseModel):
     status: str = "Ongoing"
     poster_tag: str = "NEW"
     dubbed_on: List[str] = []
+    # Weekly release slot, stored in UTC: 0 = Monday ... 6 = Sunday, time as "HH:MM".
+    air_weekday: Optional[int] = Field(default=None, ge=0, le=6)
+    air_time: str = Field(default="", pattern=r"^(\d{2}:\d{2})?$")
+    # Hidden from the public until this ISO timestamp (UTC).
+    scheduled_at: Optional[str] = None
 
 
 class AnimeData(ContentBase):
@@ -135,6 +147,11 @@ class PrefsData(BaseModel):
     theme: Optional[str] = None
 
 
+class BackgroundData(BaseModel):
+    url: str = Field(default="", max_length=2000)
+    data: str = Field(default="", max_length=MAX_BG_DATA_CHARS)
+
+
 class AnilistImport(BaseModel):
     anilist_id: Optional[int] = None
     search: Optional[str] = None
@@ -194,6 +211,11 @@ def get_collection(content_type: str):
     if not name:
         raise HTTPException(status_code=400, detail="Invalid content type.")
     return getattr(db, name)
+
+
+def as_utc(value: datetime) -> datetime:
+    # PyMongo hands back naive UTC datetimes unless tz_aware is set.
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 def serialize_value(value):
@@ -277,6 +299,44 @@ async def generate_ai_recap(description: str):
     return f"AI Recap: {summary}"
 
 
+def visible_query():
+    """Content is public unless it is unpublished AND its release time has not arrived yet."""
+    return {"$or": [{"published": {"$ne": False}}, {"scheduled_at": {"$lte": utc_now()}}]}
+
+
+def with_visibility(query: dict, include_hidden: bool = False):
+    if include_hidden:
+        return query
+    return {"$and": [query, visible_query()]} if query else visible_query()
+
+
+def is_admin_request(request: Request, flag: bool) -> bool:
+    if not flag:
+        return False
+    user = get_current_user(request)
+    return bool(user and user.get("role") == "admin")
+
+
+def parse_schedule_time(value: Optional[str]):
+    value = (value or "").strip()
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid release time (use ISO format)")
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+
+def apply_schedule_fields(fields: dict):
+    """Turn the scheduled_at string from the API into a datetime plus the published flag."""
+    if "scheduled_at" not in fields:
+        return
+    when = parse_schedule_time(fields["scheduled_at"])
+    fields["scheduled_at"] = when
+    fields["published"] = not (when and when > utc_now())
+
+
 def build_filter_query(
     q: str = "",
     genre: str = "",
@@ -284,6 +344,7 @@ def build_filter_query(
     year_min: Optional[int] = None,
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
+    include_hidden: bool = False,
 ):
     query = {}
     q = (q or "").strip()
@@ -302,7 +363,7 @@ def build_filter_query(
         query["year"] = year_q
     if min_rating is not None:
         query["avg_rating"] = {"$gte": min_rating}
-    return query
+    return with_visibility(query, include_hidden)
 
 
 def get_paginated(
@@ -316,10 +377,11 @@ def get_paginated(
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
     sort: str = "newest",
+    include_hidden: bool = False,
 ):
     page = max(page, 1)
     limit = min(max(limit, 1), 50)
-    query = build_filter_query(q, genre, status, year_min, year_max, min_rating)
+    query = build_filter_query(q, genre, status, year_min, year_max, min_rating, include_hidden)
 
     sort_map = {
         "newest": [("created_at", -1)],
@@ -340,6 +402,8 @@ def insert_content(collection, data: ContentBase, with_episodes: bool):
     item = data.model_dump()
     item["poster"] = valid_url(item["poster"])
     item["banner"] = valid_url(item["banner"])
+    item["published"] = True
+    apply_schedule_fields(item)
     item["created_at"] = utc_now()
     item["views"] = 0
     item["avg_rating"] = 0
@@ -434,7 +498,12 @@ def me(request: Request):
     user = get_current_user(request)
     if not user:
         return {"authenticated": False}
-    return {"authenticated": True, "email": user["email"], "role": user.get("role", "user")}
+    return {
+        "authenticated": True,
+        "email": user["email"],
+        "role": user.get("role", "user"),
+        "prefs": user.get("prefs") or {},
+    }
 
 
 @app.post("/api/auth/logout")
@@ -448,6 +517,7 @@ def logout(response: Response):
 
 @app.get("/api/anime")
 def get_anime(
+    request: Request,
     page: int = 1,
     limit: int = 20,
     q: str = "",
@@ -457,15 +527,18 @@ def get_anime(
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
     sort: str = "newest",
+    include_hidden: bool = False,
 ):
     items, total = get_paginated(
-        db.anime, page, limit, q, genre, status, year_min, year_max, min_rating, sort
+        db.anime, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
+        is_admin_request(request, include_hidden),
     )
     return {"items": items, "total": total}
 
 
 @app.get("/api/tvshows")
 def get_tvshows(
+    request: Request,
     page: int = 1,
     limit: int = 20,
     q: str = "",
@@ -475,15 +548,18 @@ def get_tvshows(
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
     sort: str = "newest",
+    include_hidden: bool = False,
 ):
     items, total = get_paginated(
-        db.tv_shows, page, limit, q, genre, status, year_min, year_max, min_rating, sort
+        db.tv_shows, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
+        is_admin_request(request, include_hidden),
     )
     return {"items": items, "total": total}
 
 
 @app.get("/api/movies")
 def get_movies(
+    request: Request,
     page: int = 1,
     limit: int = 20,
     q: str = "",
@@ -493,9 +569,11 @@ def get_movies(
     year_max: Optional[int] = None,
     min_rating: Optional[float] = None,
     sort: str = "newest",
+    include_hidden: bool = False,
 ):
     items, total = get_paginated(
-        db.movies, page, limit, q, genre, status, year_min, year_max, min_rating, sort
+        db.movies, page, limit, q, genre, status, year_min, year_max, min_rating, sort,
+        is_admin_request(request, include_hidden),
     )
     return {"items": items, "total": total}
 
@@ -504,7 +582,7 @@ def get_movies(
 def get_genres():
     genres = set()
     for coll_name in ("anime", "tv_shows", "movies"):
-        for doc in db[coll_name].find({}, {"genres": 1}):
+        for doc in db[coll_name].find(visible_query(), {"genres": 1}):
             for g in doc.get("genres") or []:
                 if g and isinstance(g, str):
                     genres.add(g.strip())
@@ -518,6 +596,14 @@ async def get_content(type: str, id: str, request: Request):
     if not item:
         raise HTTPException(status_code=404, detail="Not found")
 
+    user = get_current_user(request)
+    is_admin = bool(user and user.get("role") == "admin")
+    released = item.get("published") is not False or (
+        item.get("scheduled_at") is not None and as_utc(item["scheduled_at"]) <= utc_now()
+    )
+    if not released and not is_admin:
+        raise HTTPException(status_code=404, detail="Not found")
+
     coll.update_one({"_id": item["_id"]}, {"$inc": {"views": 1}})
     item["views"] = item.get("views", 0) + 1
 
@@ -526,7 +612,6 @@ async def get_content(type: str, id: str, request: Request):
         coll.update_one({"_id": item["_id"]}, {"$set": {"ai_recap": recap}})
         item["ai_recap"] = recap
 
-    user = get_current_user(request)
     item["in_watchlist"] = bool(
         user
         and db.watchlist.find_one(
@@ -660,6 +745,7 @@ def update_content(type: str, id: str, data: MovieData, admin=Depends(require_ad
             fields[key] = valid_url(fields[key])
     if type != "movie":
         fields.pop("quality_links", None)
+    apply_schedule_fields(fields)
     fields["updated_at"] = utc_now()
     result = coll.update_one({"_id": object_id(id)}, {"$set": fields})
     if not result.matched_count:
@@ -820,32 +906,69 @@ def continue_watching(user=Depends(require_user), limit: int = 12):
     rows = list(
         db.progress.find({"user_id": user["_id"]})
         .sort("updated_at", -1)
-        .limit(min(limit, 30))
+        .limit(min(max(limit, 1), 30) * 2)
     )
     result = []
     for row in rows:
+        if len(result) >= min(max(limit, 1), 30):
+            break
         try:
             doc = get_collection(row["content_type"]).find_one(
-                {"_id": ObjectId(row["content_id"])},
-                {"title": 1, "poster": 1, "episodes": 1},
+                {"$and": [{"_id": ObjectId(row["content_id"])}, visible_query()]},
+                {"title": 1, "poster": 1, "banner": 1, "episodes.season": 1, "episodes.episode": 1,
+                 "episodes.title": 1, "episodes.thumbnail": 1},
             )
         except Exception:
             doc = None
         if not doc:
             continue
+
+        episodes = sorted(
+            doc.get("episodes") or [], key=lambda e: (e.get("season", 1), e.get("episode", 0))
+        )
+        season, episode = row.get("season", 1), row.get("episode", 1)
+        percent = row.get("progress_percent", 0)
+        index = next(
+            (i for i, e in enumerate(episodes) if e.get("season") == season and e.get("episode") == episode),
+            None,
+        )
+        up_next = False
+        if percent >= 95:
+            if index is not None and index + 1 < len(episodes):
+                # Finished this episode: offer the next one instead.
+                index += 1
+                season, episode = episodes[index]["season"], episodes[index]["episode"]
+                percent, up_next = 0, True
+            else:
+                continue  # watched the last episode, nothing left to continue
+
+        current = episodes[index] if index is not None else {}
         result.append(
             {
                 "content_type": row["content_type"],
                 "content_id": row["content_id"],
                 "title": doc.get("title", ""),
                 "poster": doc.get("poster", ""),
-                "season": row.get("season", 1),
-                "episode": row.get("episode", 1),
-                "progress_percent": row.get("progress_percent", 0),
+                "banner": doc.get("banner", ""),
+                "thumbnail": current.get("thumbnail", ""),
+                "episode_title": current.get("title", ""),
+                "season": season,
+                "episode": episode,
+                "progress_percent": percent,
+                "episode_number": (index + 1) if index is not None else None,
+                "total_episodes": len(episodes),
+                "up_next": up_next,
                 "updated_at": serialize_value(row.get("updated_at")),
             }
         )
     return result
+
+
+@app.delete("/api/continue-watching/{type}/{id}")
+def remove_continue_watching(type: str, id: str, user=Depends(require_user)):
+    get_collection(type)
+    db.progress.delete_one({"user_id": user["_id"], "content_type": type, "content_id": id})
+    return {"message": "Removed"}
 
 
 # --- Ratings ---
@@ -992,6 +1115,7 @@ def recommendations(request: Request, limit: int = 12):
     query = {}
     if preferred_genres:
         query["genres"] = {"$in": list(preferred_genres)[:10]}
+    query = with_visibility(query)
     results = []
     for t in COLLECTIONS:
         coll = get_collection(t)
@@ -1221,9 +1345,106 @@ def similar_content(type: str, id: str, limit: int = 8):
     query = {"_id": {"$ne": doc["_id"]}}
     if genres:
         query["genres"] = {"$in": genres}
+    query = with_visibility(query)
     items = list(coll.find(query).sort([("avg_rating", -1), ("views", -1)]).limit(min(limit, 16)))
     return [serialize_doc(i) for i in items]
 
+
+
+# --- Release schedule ---
+
+
+def _schedule_card(doc, content_type):
+    episodes = doc.get("episodes") or []
+    latest = max((e.get("episode", 0) for e in episodes), default=0)
+    return {
+        "content_type": content_type,
+        "content_id": str(doc["_id"]),
+        "title": doc.get("title", ""),
+        "poster": doc.get("poster", ""),
+        "status": doc.get("status", ""),
+        "genres": (doc.get("genres") or [])[:3],
+        "air_weekday": doc.get("air_weekday"),
+        "air_time": doc.get("air_time", ""),
+        "latest_episode": latest,
+        "scheduled_at": serialize_value(doc.get("scheduled_at")),
+        "published": doc.get("published") is not False,
+    }
+
+
+@app.get("/api/schedule")
+def release_schedule():
+    """Weekly airing timetable (UTC) plus titles that are scheduled to go live soon."""
+    projection = {
+        "title": 1, "poster": 1, "status": 1, "genres": 1, "air_weekday": 1, "air_time": 1,
+        "scheduled_at": 1, "published": 1, "episodes.episode": 1,
+    }
+    weekly = []
+    for content_type in ("anime", "tv_show"):
+        query = with_visibility(
+            {"air_weekday": {"$in": list(range(7))}, "status": {"$ne": "Completed"}}
+        )
+        for doc in get_collection(content_type).find(query, projection):
+            weekly.append(_schedule_card(doc, content_type))
+    weekly.sort(key=lambda c: (c["air_weekday"], c["air_time"] or "99:99", c["title"].lower()))
+
+    upcoming = []
+    now = utc_now()
+    for content_type in COLLECTIONS:
+        query = {"published": False, "scheduled_at": {"$gt": now}}
+        for doc in get_collection(content_type).find(query, projection):
+            upcoming.append(_schedule_card(doc, content_type))
+    upcoming.sort(key=lambda c: c["scheduled_at"] or "")
+    return {"weekly": weekly, "upcoming": upcoming[:30], "now": now.isoformat()}
+
+
+# --- Custom background (signed-in users only) ---
+
+
+@app.put("/api/users/me/background")
+def set_background(data: BackgroundData, user=Depends(require_user)):
+    url, raw = data.url.strip(), data.data.strip()
+    if bool(url) == bool(raw):
+        raise HTTPException(status_code=400, detail="Send either an image URL or an uploaded image.")
+
+    if url:
+        if not BG_URL_RE.match(url):
+            raise HTTPException(status_code=400, detail="Image URL must start with https:// and contain no spaces or quotes.")
+        updates = {"prefs.bg_image": url, "bg_data": None}
+    else:
+        match = BG_DATA_RE.match(raw)
+        if not match:
+            raise HTTPException(status_code=400, detail="Upload a JPG, PNG or WebP image.")
+        try:
+            base64.b64decode(match.group(2), validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(status_code=400, detail="That image could not be read.")
+        updates = {
+            "bg_data": raw,
+            "prefs.bg_image": f"/api/users/me/background?v={int(time.time())}",
+        }
+    db.users.update_one({"_id": user["_id"]}, {"$set": updates})
+    fresh = db.users.find_one({"_id": user["_id"]}) or {}
+    return {"message": "Background saved", "bg_image": (fresh.get("prefs") or {}).get("bg_image", "")}
+
+
+@app.get("/api/users/me/background")
+def get_background(user=Depends(require_user)):
+    raw = user.get("bg_data") or ""
+    match = BG_DATA_RE.match(raw)
+    if not match:
+        raise HTTPException(status_code=404, detail="No uploaded background")
+    return Response(
+        content=base64.b64decode(match.group(2)),
+        media_type=match.group(1),
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+
+@app.delete("/api/users/me/background")
+def clear_background(user=Depends(require_user)):
+    db.users.update_one({"_id": user["_id"]}, {"$unset": {"prefs.bg_image": "", "bg_data": ""}})
+    return {"message": "Background reset"}
 
 
 # --- Health Check ---
