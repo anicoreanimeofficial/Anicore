@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=29">
+  <link rel="stylesheet" href="/assets/style.css?v=30">
 </head>
 <body>
 
@@ -35,12 +35,9 @@
   </div>
   <script>try{if(sessionStorage.getItem('anicore-splash')){document.getElementById('splash').remove();}}catch(e){}</script>
 
-  <!-- Animated site background -->
-  <div class="bg-video-wrap" aria-hidden="true">
-    <video id="bgVideo" autoplay muted loop playsinline preload="auto" poster="">
-      <source src="/assets/bg.mp4" type="video/mp4">
-    </video>
-    <div class="bg-video-overlay"></div>
+  <!-- Site background image (default, or the signed-in user's own) -->
+  <div class="site-bg" id="siteBg" aria-hidden="true">
+    <div class="site-bg-overlay"></div>
   </div>
 
   <canvas id="snow" aria-hidden="true"></canvas>
@@ -52,6 +49,7 @@
       <button type="button" data-page="search"><span class="nav-icon">⌕</span> Search</button>
       <button type="button" data-page="series"><span class="nav-icon">▣</span> Series</button>
       <button type="button" data-page="movies"><span class="nav-icon">▶</span> Movies</button>
+      <button type="button" data-page="schedule"><span class="nav-icon">◷</span> Schedule</button>
       <button type="button" data-page="profile"><span class="nav-icon">◉</span> Profile</button>
       <button type="button" id="sideAdminBtn" data-page="admin" class="hidden"><span class="nav-icon">⚙</span> Admin</button>
     </nav>
@@ -100,8 +98,8 @@
           </div>
         </div>
         <div id="continueSection" class="hidden">
-          <h3 class="section-title">Continue Watching</h3>
-          <div id="continueGrid" class="media-grid horizontal"></div>
+          <h3 class="section-title" data-i18n="continue">Continue Watching</h3>
+          <div id="continueGrid" class="continue-row" aria-label="Continue watching"></div>
         </div>
         <div id="recommendSection" class="hidden">
           <h3 class="section-title" data-i18n="recommended">Recommended for You</h3>
@@ -185,6 +183,19 @@
       </section>
 
       
+      <section class="page" id="page-schedule" aria-label="Release schedule">
+        <div class="section">
+          <h2 data-i18n="schedule">Schedule</h2>
+          <p class="muted schedule-tz" id="scheduleTz"></p>
+          <div class="day-tabs" id="dayTabs" role="tablist" aria-label="Day of the week"></div>
+          <div id="scheduleList" class="schedule-list"></div>
+          <div id="upcomingSection" class="hidden">
+            <h3 class="section-title">Coming Soon</h3>
+            <div id="upcomingList" class="schedule-list"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="page" id="page-search" aria-label="Search">
         <div class="section">
           <h2 data-i18n="search">Search</h2>
@@ -246,6 +257,22 @@
                 </label>
                 <button type="button" id="savePrefsBtn" class="primary small">Save Preferences</button>
               </div>
+            </div>
+            <div class="panel" id="bgPanel">
+              <h3>Customize Background</h3>
+              <p class="hint">Make ANICORE yours. Paste a link to an image or upload one from your device.</p>
+              <div class="bg-preview" id="bgPreview" aria-label="Background preview"></div>
+              <form id="bgUrlForm" class="stack">
+                <input id="bgUrl" type="url" placeholder="Image URL (https://...)" autocomplete="off">
+                <button type="submit" class="primary block">Use this link</button>
+              </form>
+              <div class="bg-actions">
+                <label class="outline small file-btn">Upload image
+                  <input type="file" id="bgFile" accept="image/jpeg,image/png,image/webp" hidden>
+                </label>
+                <button type="button" id="bgReset" class="outline small">Reset to default</button>
+              </div>
+              <p id="bgMsg" class="hint"></p>
             </div>
             <div class="panel">
               <h3>Request a Title</h3>
@@ -332,6 +359,23 @@
                 <option>Completed</option>
                 <option>Upcoming</option>
               </select>
+              <div class="sched-fields" id="aSchedFields">
+                <label>Airs every
+                  <select id="aAirDay" aria-label="Release weekday">
+                    <option value="">— not weekly —</option>
+                    <option value="0">Monday</option><option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option><option value="3">Thursday</option>
+                    <option value="4">Friday</option><option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                  </select>
+                </label>
+                <label>at (your local time)
+                  <input id="aAirTime" type="time">
+                </label>
+              </div>
+              <label class="sched-publish">Publish on (optional — hidden until then)
+                <input id="aPublishAt" type="datetime-local">
+              </label>
               <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
               <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
               <button type="submit" id="aSubmit" class="primary block">Save</button>
@@ -435,9 +479,10 @@
     <button type="button" data-page="search"><span class="nav-icon">⌕</span>Search</button>
     <button type="button" data-page="series"><span class="nav-icon">▣</span>Series</button>
     <button type="button" data-page="movies"><span class="nav-icon">▶</span>Movies</button>
+    <button type="button" data-page="schedule"><span class="nav-icon">◷</span>Schedule</button>
     <button type="button" data-page="profile"><span class="nav-icon">◉</span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=29"></script>
+  <script src="/assets/app.js?v=30"></script>
 </body>
 </html>
