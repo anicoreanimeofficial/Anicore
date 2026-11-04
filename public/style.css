@@ -2517,3 +2517,81 @@ body {
 .toast.error { background: #c0344f !important; }
 
 #upcomingSection .section-title { padding-left: 0; margin: 22px 0 10px; }
+
+
+/* =========================================================
+   HERO FADE-OUT + FLOATING RESUME BAR (v31)
+   ========================================================= */
+/* The hero used to end in a hard, tinted edge; now it dissolves into the page. */
+.hero {
+  padding-bottom: 64px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 110px), transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 110px), transparent 100%);
+}
+.hero::before {
+  background: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.1) 55%, transparent 100%);
+}
+
+.resume-bar {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: calc(96px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(94%, 520px);
+  display: flex; align-items: center;
+  border-radius: 20px;
+  background: rgba(18, 14, 28, .82);
+  border: 1px solid rgba(255, 255, 255, .14);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .5);
+  animation: resumeIn .35s cubic-bezier(.2, .9, .3, 1);
+  color: #fff;
+}
+.resume-bar.hidden { display: none !important; }
+@keyframes resumeIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (min-width: 900px) {
+  .resume-bar { bottom: 24px; left: calc(50% + 120px); }
+}
+.resume-main {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 6px 10px 10px;
+  background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.resume-thumb {
+  position: relative; flex: none;
+  width: 72px; height: 72px; border-radius: 14px; overflow: hidden; background: #17101e;
+}
+.resume-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.resume-play {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 34px; height: 34px; display: grid; place-items: center; padding-left: 2px;
+  border-radius: 50%; background: var(--pink); color: #fff; font-size: 13px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+}
+.resume-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.resume-top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.resume-ep {
+  padding: 2px 8px; border-radius: 6px;
+  background: color-mix(in srgb, var(--pink) 28%, transparent); color: var(--pink);
+  font-weight: 800; letter-spacing: .02em;
+}
+.resume-left { color: rgba(255, 255, 255, .7); white-space: nowrap; }
+.resume-title {
+  font-size: 15px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.resume-track {
+  position: relative; display: block; height: 4px; margin-right: 44px;
+  border-radius: 4px; background: rgba(255, 255, 255, .18);
+}
+.resume-fill { display: block; height: 100%; border-radius: 4px; background: var(--pink); }
+.resume-pct { position: absolute; right: -44px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 800; color: var(--pink); }
+.resume-close {
+  flex: none; align-self: flex-start; margin: 10px 10px 0 0;
+  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, .1); border: none; color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
+}
