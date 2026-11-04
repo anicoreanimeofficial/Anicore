@@ -1199,17 +1199,6 @@ function commentsHtml(comments) {
     </div>`).join('');
 }
 
-function reviewsHtml(reviews) {
-  if (!reviews?.length) return '<p class="muted">No reviews yet.</p>';
-  return reviews.map((r) => `
-    <div class="review-card">
-      <strong>${esc(r.username)}</strong>
-      <span class="stars-display">${'★'.repeat(Math.round(r.rating))}${'☆'.repeat(10 - Math.round(r.rating))} ${r.rating}/10</span>
-      <small class="muted"> · ${esc(fmtDate(r.updated_at || r.created_at))}</small>
-      ${r.review ? `<p>${esc(r.review)}</p>` : ''}
-    </div>`).join('');
-}
-
 function metaText(item) {
   if (!('description' in item)) return '';
   const parts = [
@@ -1224,23 +1213,7 @@ function recapHtml(item) {
   return item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : '';
 }
 
-function ratingWidget(item, type) {
-  if (!state.user) return '<p class="muted small-muted">Sign in to rate this title.</p>';
-  const current = item.my_rating?.rating || 0;
-  let stars = '';
-  for (let i = 1; i <= 10; i++) {
-    stars += `<button type="button" data-val="${i}" class="${i <= current ? 'active' : ''}" aria-label="Rate ${i}">★</button>`;
-  }
-  return `
-    <div class="rating-box">
-      <div class="rating-box-title">Your Rating</div>
-      <div class="stars stars-sm" id="ratingStars">${stars}</div>
-      <textarea id="reviewText" class="review-sm" rows="2" maxlength="2000" placeholder="Optional short review...">${esc(item.my_rating?.review || '')}</textarea>
-      <button type="button" class="outline small" id="saveRating">Save</button>
-    </div>`;
-}
-
-function buildDetailHtml(type, item, comments, reviews) {
+function buildDetailHtml(type, item, comments) {
   const banner = safeUrl(item.banner) || safeUrl(item.poster);
   const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
 
@@ -1262,9 +1235,6 @@ function buildDetailHtml(type, item, comments, reviews) {
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
     </div>
-    ${ratingWidget(item, type)}
-    <h3>Reviews</h3>
-    <div id="reviewList">${reviewsHtml(reviews)}</div>
     <h3>Comments</h3>
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
@@ -1327,37 +1297,6 @@ function bindDetailEvents(type, item, container) {
     });
   });
 
-  const stars = container.querySelector('#ratingStars');
-  let selected = item.my_rating?.rating || 0;
-  stars?.querySelectorAll('button').forEach((b) => {
-    b.addEventListener('click', () => {
-      selected = Number(b.dataset.val);
-      stars.querySelectorAll('button').forEach((s) => {
-        s.classList.toggle('active', Number(s.dataset.val) <= selected);
-      });
-    });
-  });
-
-  container.querySelector('#saveRating')?.addEventListener('click', async () => {
-    if (!selected) return toast('Select a rating first', 'error');
-    try {
-      const res = await api('/api/ratings', {
-        method: 'POST',
-        body: JSON.stringify({
-          content_type: type, content_id: item._id,
-          rating: selected,
-          review: container.querySelector('#reviewText')?.value || '',
-        }),
-      });
-      toast('Rating saved!');
-      const meta = container.querySelector('#dMeta');
-      if (meta) meta.textContent = metaText({ ...item, avg_rating: res.avg_rating, rating_count: res.rating_count, views: item.views });
-      const reviews = await api(`/api/ratings/${type}/${item._id}`);
-      const list = container.querySelector('#reviewList');
-      if (list) list.innerHTML = reviewsHtml(reviews.items);
-    } catch (err) { toast(err.message, 'error'); }
-  });
-
   container.querySelector('#commentForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = container.querySelector('#commentText').value.trim();
@@ -1383,20 +1322,19 @@ async function openDetail(type, id, preview) {
   const contentEl = $('detailPageContent');
 
   if (preview && contentEl) {
-    contentEl.innerHTML = buildDetailHtml(type, preview, null, null);
+    contentEl.innerHTML = buildDetailHtml(type, preview, null);
     bindDetailEvents(type, preview, contentEl);
   } else if (contentEl) {
     contentEl.innerHTML = '<p class="muted">Loading…</p>';
   }
 
   try {
-    const [item, comments, reviews] = await Promise.all([
+    const [item, comments] = await Promise.all([
       api(`/api/content/${type}/${id}`),
       api(`/api/comments/${type}/${id}`),
-      api(`/api/ratings/${type}/${id}?limit=10`),
     ]);
     if (state.detailId !== id) return;
-    contentEl.innerHTML = buildDetailHtml(type, item, comments, reviews.items);
+    contentEl.innerHTML = buildDetailHtml(type, item, comments);
     bindDetailEvents(type, item, contentEl);
   } catch (err) {
     if (state.detailId !== id) return;
@@ -1452,6 +1390,105 @@ async function ensureHls() {
     script.onload = () => resolve(window.Hls);
     script.onerror = reject;
     document.head.appendChild(script);
+  });
+}
+
+// --- Player prefs: auto skip intro / outro, autoplay next ---
+
+const playerPref = {
+  get(key) {
+    try { const v = localStorage.getItem('anicore_' + key); return v === null ? true : v === '1'; } catch { return true; }
+  },
+  set(key, on) {
+    try { localStorage.setItem('anicore_' + key, on ? '1' : '0'); } catch { /* noop */ }
+  },
+};
+
+// "1:30" / "01:02:03" / "90" -> seconds. Empty -> null. Invalid -> NaN.
+function parseTimeInput(v) {
+  const t = String(v || '').trim();
+  if (!t) return null;
+  if (!/^\d+(:\d{1,2}){0,2}$/.test(t)) return NaN;
+  return t.split(':').reduce((acc, n) => acc * 60 + Number(n), 0);
+}
+
+function fmtTimeInput(sec) {
+  if (sec == null || sec === '') return '';
+  const n = Math.max(0, Math.floor(Number(sec)));
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const ss = String(n % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+function nextPlayableIndex() {
+  if (!videoContext || !Array.isArray(videoContext.episodes)) return -1;
+  for (let i = videoContext.currentIndex + 1; i < videoContext.episodes.length; i++) {
+    if (videoContext.episodes[i].video_url) return i;
+  }
+  return -1;
+}
+
+function playNextEpisode() {
+  const idx = nextPlayableIndex();
+  if (idx === -1) return false;
+  videoContext.currentIndex = idx;
+  loadVideoEpisode();
+  return true;
+}
+
+function initPlayerTools() {
+  document.querySelectorAll('#playerTools input[data-pref]').forEach((cb) => {
+    cb.checked = playerPref.get(cb.dataset.pref);
+    cb.addEventListener('change', () => playerPref.set(cb.dataset.pref, cb.checked));
+  });
+}
+
+// Autoplay next: when a direct (<video>) episode ends, count down and play the next one.
+function attachPlayerAutomation(video, wrap) {
+  let advanced = false;
+
+  const goNext = () => {
+    if (advanced) return;
+    advanced = true;
+    if (!playNextEpisode()) advanced = false;
+  };
+
+  const showCountdown = () => {
+    const idx = nextPlayableIndex();
+    if (idx === -1 || advanced || wrap.querySelector('.player-next')) return;
+    const nextEp = videoContext.episodes[idx];
+    const box = document.createElement('div');
+    box.className = 'player-next';
+    box.innerHTML = `
+      <p>Up next</p>
+      <strong>S${esc(nextEp.season)} · E${esc(nextEp.episode)}${nextEp.title ? ' — ' + esc(nextEp.title) : ''}</strong>
+      <span class="player-next-count"></span>
+      <div class="player-next-actions">
+        <button type="button" class="outline small" data-act="cancel">Cancel</button>
+        <button type="button" class="primary small" data-act="now">Play now</button>
+      </div>`;
+    wrap.appendChild(box);
+    let left = 5;
+    const count = box.querySelector('.player-next-count');
+    const render = () => { count.textContent = `Playing in ${left}s`; };
+    render();
+    const timer = setInterval(() => {
+      if (!wrap.contains(box)) { clearInterval(timer); return; }
+      left -= 1;
+      if (left <= 0) { clearInterval(timer); box.remove(); goNext(); return; }
+      render();
+    }, 1000);
+    box.addEventListener('click', (e) => {
+      const act = e.target.closest('button')?.dataset.act;
+      if (act === 'cancel') { clearInterval(timer); box.remove(); }
+      if (act === 'now') { clearInterval(timer); box.remove(); goNext(); }
+    });
+  };
+
+  video.addEventListener('ended', () => {
+    if (advanced) return;
+    if (playerPref.get('autoplayNext')) showCountdown();
   });
 }
 
@@ -1527,6 +1564,9 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       video.src = url;
     }
     wrap.appendChild(video);
+    attachPlayerAutomation(video, wrap);
+    // Browsers can reject autoplay; the user can still press play.
+    video.play?.()?.catch?.(() => {});
   } else {
     const mountIframe = () => {
       wrap.innerHTML = '';
@@ -1538,7 +1578,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       wrap.appendChild(iframe);
     };
 
-    if (posterSrc) {
+    if (posterSrc && !playerPref.get('autoplayNext')) {
       const cover = document.createElement('button');
       cover.type = 'button';
       cover.className = 'player-cover';
@@ -1804,6 +1844,8 @@ function updateVideoNav() {
     nav.classList.toggle('only-prev', !!prevEp && !nextEp);
   }
 }
+
+initPlayerTools();
 
 $('videoPrev')?.addEventListener('click', () => {
   if (!videoContext || videoContext.currentIndex <= 0) return;
@@ -2075,6 +2117,13 @@ $('episodeList')?.addEventListener('click', async (e) => {
       $('epDuration').value = ep.duration || '';
       $('epVideo').value = ep.video_url || '';
       $('epDesc').value = ep.description || '';
+      $('epIntroStart').value = fmtTimeInput(ep.intro_start);
+      $('epIntroEnd').value = fmtTimeInput(ep.intro_end);
+      $('epOutroStart').value = fmtTimeInput(ep.outro_start);
+      if (ep.intro_start != null || ep.intro_end != null || ep.outro_start != null) {
+        const extras = document.querySelector('#episodeForm .ep-extras');
+        if (extras) extras.open = true;
+      }
       $('epId').value = `${s}_${en}`;
       $('epSubmit').textContent = 'Update Episode';
       $('epCancel').classList.remove('hidden');
@@ -2125,6 +2174,14 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     description: $('epDesc').value.trim(),
     video_url: rawVideo,
   };
+
+  const introStart = parseTimeInput($('epIntroStart')?.value);
+  const introEnd = parseTimeInput($('epIntroEnd')?.value);
+  const outroStart = parseTimeInput($('epOutroStart')?.value);
+  if ([introStart, introEnd, outroStart].some(Number.isNaN)) return toast('Use times like 1:30 or 90', 'error');
+  payload.intro_start = introStart;
+  payload.intro_end = introEnd;
+  payload.outro_start = outroStart;
 
   if (!payload.episode) return toast('Episode number required', 'error');
   if (!payload.video_url) return toast('Video URL required', 'error');
