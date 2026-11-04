@@ -496,6 +496,8 @@ async function loadHome() {
       .sort((a, b) => (b.views || 0) - (a.views || 0) || String(b.created_at || '').localeCompare(String(a.created_at || '')))
       .slice(0, 12);
     renderGrid($('homeSeriesGrid'), merged, 'anime');
+    heroSeriesItems = merged;
+    setHeroItems();
   } catch {
     const g = $('homeSeriesGrid');
     if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
@@ -505,10 +507,13 @@ async function loadHome() {
     const data = await api('/api/movies?page=1&limit=10&sort=views');
     const items = Array.isArray(data) ? data : data.items || [];
     renderGrid($('homeMovieGrid'), items, 'movie');
+    heroMovieItems = items.map((i) => ({ ...i, _type: 'movie' }));
+    setHeroItems();
   } catch {
     const g = $('homeMovieGrid');
     if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
   }
+  if (!hero.items.length) $('hero')?.classList.add('hidden');
 }
 
 async function loadContinueWatching() {
@@ -1795,6 +1800,184 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
   create();
   draw();
   window.addEventListener('resize', () => { resize(); create(); });
+})();
+
+
+// ===================== Hero banner =====================
+const hero = { items: [], index: 0, timer: null, bgFlip: false, swiped: false, sx: 0, sy: 0 };
+let heroSeriesItems = [];
+let heroMovieItems = [];
+
+function heroTypeLabel(t) {
+  return t === 'movie' ? 'Movie' : (t === 'tv_show' ? 'TV Show' : 'Anime');
+}
+
+function heroInfoHtml(item) {
+  const eps = Array.isArray(item.episodes) ? item.episodes : [];
+  const r = parseFloat(item.rating);
+  const chips = [];
+  if (r > 0) chips.push(`<span class="hero-chip gold">★ ${Math.round(r * 10)}%</span>`);
+  if (item.year) chips.push(`<span class="hero-chip">▦ ${esc(item.year)}</span>`);
+  if (eps.length) chips.push(`<span class="hero-chip">≣ ${eps.length} Eps</span>`);
+  if (eps[0]?.duration) chips.push(`<span class="hero-chip">◷ ${esc(eps[0].duration)}</span>`);
+  chips.push(`<span class="hero-chip">${esc(heroTypeLabel(item._type))}</span>`);
+  const genres = (item.genres || []).slice(0, 3).map((g) => `<span class="hero-chip ghost">${esc(g)}</span>`).join('');
+  return `
+    <h2 class="hero-title">${esc(item.title || '')}</h2>
+    <div class="hero-chips">${chips.join('')}</div>
+    ${genres ? `<div class="hero-chips">${genres}</div>` : ''}
+    ${item.description ? `<p class="hero-desc">${esc(item.description)}</p>` : ''}
+    <div class="hero-actions">
+      <button type="button" class="hero-watch" data-act="watch">▶ Watch</button>
+      <button type="button" class="hero-circle" data-act="info" aria-label="Details">ⓘ</button>
+    </div>`;
+}
+
+function setHeroItems() {
+  const pool = [...heroSeriesItems.slice(0, 4), ...heroMovieItems.slice(0, 2)]
+    .filter((i) => safeUrl(i.poster) || safeUrl(i.banner));
+  const root = $('hero');
+  if (!root) return;
+  if (!pool.length) {
+    if (!root.dataset.built) root.classList.add('hidden');
+    return;
+  }
+  hero.items = pool;
+  hero.index = Math.min(hero.index, pool.length - 1);
+  buildHero(root);
+}
+
+function buildHero(root) {
+  const items = hero.items;
+  root.classList.remove('loading', 'hidden');
+  root.dataset.built = '1';
+  root.innerHTML = `
+    <div class="hero-bg"></div><div class="hero-bg"></div>
+    <div class="hero-stage" id="heroStage">${items.map((it, i) => `
+      <button type="button" class="hero-slide" data-i="${i}" aria-label="${esc(it.title || '')}">
+        <img src="${esc(safeUrl(it.poster) || safeUrl(it.banner) || PLACEHOLDER)}" alt="" decoding="async" draggable="false" ${i === 0 ? 'fetchpriority="high"' : 'loading="lazy"'}>
+      </button>`).join('')}
+    </div>
+    <div class="hero-info" id="heroInfo"></div>
+    <div class="hero-dots" id="heroDots">${items.map((_, i) => `<button type="button" class="hero-dot" data-i="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}</div>`;
+  if (!root.dataset.bound) { root.dataset.bound = '1'; bindHero(root); }
+  heroShow(hero.index);
+  heroRestartTimer();
+}
+
+function heroShow(i) {
+  const n = hero.items.length;
+  if (!n) return;
+  hero.index = ((i % n) + n) % n;
+  const root = $('hero');
+  root.querySelectorAll('.hero-slide').forEach((el, k) => {
+    let d = k - hero.index;
+    if (d > n / 2) d -= n;
+    if (d < -n / 2) d += n;
+    el.className = 'hero-slide ' + (d === 0 ? 'is-active' : d === 1 ? 'is-next' : d === -1 ? 'is-prev' : 'is-far');
+  });
+  const item = hero.items[hero.index];
+  const bg = safeUrl(item.banner) || safeUrl(item.poster) || '';
+  const bgs = root.querySelectorAll('.hero-bg');
+  hero.bgFlip = !hero.bgFlip;
+  const on = bgs[hero.bgFlip ? 1 : 0];
+  const off = bgs[hero.bgFlip ? 0 : 1];
+  if (on && off) {
+    on.style.backgroundImage = bg ? `url("${bg.replace(/"/g, '%22')}")` : '';
+    on.classList.add('on');
+    off.classList.remove('on');
+  }
+  const info = $('heroInfo');
+  if (info) {
+    info.innerHTML = heroInfoHtml(item);
+    info.classList.remove('fade');
+    void info.offsetWidth;
+    info.classList.add('fade');
+  }
+  root.querySelectorAll('.hero-dot').forEach((d, k) => d.classList.toggle('active', k === hero.index));
+}
+
+function heroRestartTimer() {
+  clearInterval(hero.timer);
+  if (hero.items.length < 2) return;
+  hero.timer = setInterval(() => {
+    if (document.hidden || state.page !== 'home') return;
+    heroShow(hero.index + 1);
+  }, 6000);
+}
+
+async function heroWatch(item) {
+  const type = item._type;
+  if (type === 'movie') { openDetail(type, item._id, item); return; }
+  try {
+    const full = await api(`/api/content/${type}/${item._id}`);
+    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const ep = eps.find((e) => e.video_url);
+    if (!ep) { openDetail(type, item._id, item); return; }
+    state.detailId = item._id;
+    state.detailType = type;
+    openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster);
+  } catch (err) {
+    toast(err.message || 'Could not open', 'error');
+  }
+}
+
+function bindHero(root) {
+  root.addEventListener('click', (e) => {
+    const slide = e.target.closest('.hero-slide');
+    if (slide) {
+      if (hero.swiped) return;
+      const i = Number(slide.dataset.i);
+      if (i === hero.index) {
+        const it = hero.items[i];
+        openDetail(it._type, it._id, it);
+      } else {
+        heroShow(i);
+        heroRestartTimer();
+      }
+      return;
+    }
+    const dot = e.target.closest('.hero-dot');
+    if (dot) { heroShow(Number(dot.dataset.i)); heroRestartTimer(); return; }
+    const act = e.target.closest('[data-act]');
+    if (act) {
+      const it = hero.items[hero.index];
+      if (act.dataset.act === 'watch') heroWatch(it);
+      else openDetail(it._type, it._id, it);
+    }
+  });
+  root.addEventListener('touchstart', (e) => {
+    hero.sx = e.touches[0].clientX;
+    hero.sy = e.touches[0].clientY;
+  }, { passive: true });
+  root.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - hero.sx;
+    const dy = t.clientY - hero.sy;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {
+      heroShow(hero.index + (dx < 0 ? 1 : -1));
+      heroRestartTimer();
+      hero.swiped = true;
+      setTimeout(() => { hero.swiped = false; }, 350);
+    }
+  }, { passive: true });
+}
+
+// ===================== AC intro =====================
+(function initSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.remove(); return; }
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    try { sessionStorage.setItem('anicore-splash', '1'); } catch (e) {}
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 450);
+  };
+  document.getElementById('splashSkip')?.addEventListener('click', finish);
+  setTimeout(finish, 3300);
 })();
 
 // --- Init ---
