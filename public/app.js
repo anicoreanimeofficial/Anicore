@@ -30,6 +30,9 @@ const state = {
   deferredInstall: null,
 };
 
+// Install popup: start right away so a slow/failed API call can never block it
+try { wirePWA(); } catch (e) { console.warn('[pwa]', e); }
+
 // videoContext = { type, contentId, contentTitle, episodes: [...], currentIndex: 0 }
 let videoContext = null;
 
@@ -2322,7 +2325,6 @@ wireSeriesPage();
   loadHome();
   loadContinueWatching();
   requestAnimationFrame(() => { movePill(false); requestAnimationFrame(() => movePill(true)); });
-  wirePWA();
 })();
 
 
@@ -2613,8 +2615,10 @@ function dismissInstallPopup(days = 7) {
 }
 
 function canShowInstallPopup() {
-  if (isStandaloneApp()) return false;
+  const force = /[?&]install=1/.test(location.search);
+  if (!force && isStandaloneApp()) return false;
   if ($("installPopup")) return false;
+  if (force) return true;
   try {
     const until = Number(localStorage.getItem("anicore-install-dismissed") || 0);
     if (until && Date.now() < until) return false;
@@ -2667,7 +2671,7 @@ function showInstallPopup() {
   requestAnimationFrame(() => overlay.classList.add("install-in"));
 
   const close = () => {
-    dismissInstallPopup(7);
+    dismissInstallPopup(1);
     closeInstallPopup();
   };
 
@@ -2714,7 +2718,7 @@ function wirePWA() {
   }
 
   // Crunchyroll-style: show shortly after open (not while already installed)
-  if (!isStandaloneApp()) {
+  if (!isStandaloneApp() || /[?&]install=1/.test(location.search)) {
     setTimeout(() => {
       showInstallPopup();
     }, 1800);
