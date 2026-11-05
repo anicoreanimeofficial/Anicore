@@ -80,6 +80,11 @@ class ContentBase(BaseModel):
     # Browse filters
     season: str = Field(default="", max_length=10)  # Winter | Spring | Summer | Fall
     studio: str = Field(default="", max_length=80)
+    # Home page curation (admin picks what shows in the hero banner / Top Airing row)
+    hero: bool = False
+    hero_order: int = Field(default=0, ge=0, le=999)  # 1 = first, 0 = no preference
+    top_airing: bool = False
+    top_rank: int = Field(default=0, ge=0, le=999)  # 1 = first, 0 = no preference
 
 
 class AnimeData(ContentBase):
@@ -2046,6 +2051,31 @@ def announce(data: AnnounceData, admin=Depends(require_admin)):
 @app.get("/health")
 def health():
     return {"ok": True}
+
+
+
+# --- Home curation (hero banner + Top Airing) ---
+
+
+@app.get("/api/home-featured")
+def home_featured():
+    result = {"hero": [], "top_airing": []}
+    for flag, order_key, cap in (("hero", "hero_order", 8), ("top_airing", "top_rank", 10)):
+        rows = []
+        for type_name in ("anime", "tv_show", "movie"):
+            for doc in get_collection(type_name).find(with_visibility({flag: True}, False)).limit(50):
+                item = serialize_doc(doc)
+                item["_type"] = type_name
+                # keep the response small: the home page only needs episode count + length
+                item["episodes"] = [
+                    {"season": e.get("season"), "episode": e.get("episode"), "duration": e.get("duration", "")}
+                    for e in (doc.get("episodes") or [])
+                ]
+                rows.append(item)
+        rows.sort(key=lambda i: str(i.get("created_at") or ""), reverse=True)
+        rows.sort(key=lambda i: i.get(order_key) or 999)  # stable: ordered first, then newest
+        result[flag] = rows[:cap]
+    return result
 
 
 # --- Frontend Serving ---
