@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v44';
+const APP_JS_VERSION = 'v45';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -2321,6 +2321,131 @@ function stripHtml(html) {
   return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim();
 }
 
+
+// --- Wikipedia (no API key, CORS-friendly) ---
+async function wikiSearch(title) {
+  const q = new URLSearchParams({
+    action: "query",
+    list: "search",
+    srsearch: title,
+    srlimit: "5",
+    format: "json",
+    origin: "*",
+  });
+  const res = await fetch("https://en.wikipedia.org/w/api.php?" + q);
+  const data = await res.json();
+  return (data.query && data.query.search) || [];
+}
+
+async function wikiSummary(pageTitle) {
+  const url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(pageTitle.replace(/ /g, "_"));
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error("Wikipedia page not found");
+  return res.json();
+}
+
+function pickWikiAnimeResult(results, title) {
+  if (!results.length) return null;
+  const t = (title || "").toLowerCase();
+  const scored = results.map((r) => {
+    const rt = (r.title || "").toLowerCase();
+    let score = 0;
+    if (rt === t) score += 10;
+    if (rt.includes(t) || t.includes(rt.split("(")[0].trim())) score += 5;
+    if (/anime|manga|television|series|film|ova/.test((r.snippet || "").toLowerCase())) score += 3;
+    if (/\(tv series\)|\(anime\)|\(manga\)|\(film\)/i.test(r.title || "")) score += 2;
+    return { r, score };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0].r;
+}
+
+async function fetchWikipediaForTitle(title) {
+  const results = await wikiSearch(title + " anime");
+  let hit = pickWikiAnimeResult(results, title);
+  if (!hit) {
+    const results2 = await wikiSearch(title);
+    hit = pickWikiAnimeResult(results2, title) || results2[0];
+  }
+  if (!hit) throw new Error("No Wikipedia page found");
+  const sum = await wikiSummary(hit.title);
+  return {
+    title: sum.title || hit.title,
+    description: (sum.extract || "").trim(),
+    poster: (sum.thumbnail && sum.thumbnail.source) || (sum.originalimage && sum.originalimage.source) || "",
+    url: (sum.content_urls && sum.content_urls.desktop && sum.content_urls.desktop.page) || "",
+  };
+}
+
+async function fetchWikipediaEpisode(seriesTitle, season, episode) {
+  // Try common episode page patterns, then series page extract
+  const candidates = [
+    `${seriesTitle} (season ${season})`,
+    `${seriesTitle} season ${season}`,
+    `List of ${seriesTitle} episodes`,
+    `${seriesTitle} (TV series)`,
+    seriesTitle,
+  ];
+  let lastErr = null;
+  for (const c of candidates) {
+    try {
+      const results = await wikiSearch(c);
+      if (!results.length) continue;
+      const sum = await wikiSummary(results[0].title);
+      const extract = (sum.extract || "").trim();
+      if (!extract) continue;
+      // Prefer list pages for episode context
+      return {
+        title: `S${season}E${episode}`,
+        description: extract.slice(0, 2000),
+        poster: (sum.thumbnail && sum.thumbnail.source) || "",
+        source: sum.title,
+      };
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("No Wikipedia episode info found");
+}
+
+async function autoFetchWikipediaAnime() {
+  const title = ($("aTitle")?.value || "").trim();
+  if (!title) return toast("Enter a title first", "error");
+  const btn = $("aWikiFetch");
+  if (btn) { btn.disabled = true; btn.textContent = "Fetching Wikipedia…"; }
+  try {
+    toast("Fetching from Wikipedia…");
+    const data = await fetchWikipediaForTitle(title);
+    if (data.description && $("aDesc")) $("aDesc").value = data.description;
+    if (data.poster && $("aPoster") && !$("aPoster").value) $("aPoster").value = data.poster;
+    if (data.poster && $("aBanner") && !$("aBanner").value) $("aBanner").value = data.poster;
+    toast("Wikipedia: " + (data.title || "description filled"));
+  } catch (err) {
+    toast(err.message || "Wikipedia fetch failed", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Fetch description from Wikipedia"; }
+  }
+}
+
+async function autoFetchWikipediaEpisode() {
+  if (!currentEpisodeTarget) return toast("Open Manage Episodes first", "error");
+  const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
+  const ep = Number($("epNumber")?.value) || 1;
+  const season = Number($("epSeason")?.value) || 1;
+  const btn = $("epWikiFetch");
+  if (btn) { btn.disabled = true; btn.textContent = "Fetching Wikipedia…"; }
+  try {
+    toast("Fetching from Wikipedia…");
+    const data = await fetchWikipediaEpisode(title, season, ep);
+    if (data.description && $("epDesc")) $("epDesc").value = data.description;
+    if (data.poster && $("epThumb") && !$("epThumb").value) $("epThumb").value = data.poster;
+    toast("Wikipedia text filled" + (data.source ? " (" + data.source + ")" : ""));
+  } catch (err) {
+    toast(err.message || "Wikipedia fetch failed", "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Fetch ep text from Wikipedia"; }
+  }
+}
+
 async function autoFetchAnimeMeta() {
   const title = ($("aTitle")?.value || "").trim();
   if (!title) return toast("Enter a title first", "error");
@@ -2352,7 +2477,17 @@ async function autoFetchAnimeMeta() {
 
     const name = m.title.english || m.title.romaji || title;
     if ($("aTitle")) $("aTitle").value = name;
-    if ($("aDesc")) $("aDesc").value = stripHtml(m.description || "");
+    let desc = stripHtml(m.description || "");
+    if (!desc || desc.length < 80) {
+      try {
+        const wiki = await fetchWikipediaForTitle(name || title);
+        if (wiki.description) desc = wiki.description;
+        if (wiki.poster && !$("aPoster")?.value) {
+          if ($("aPoster")) $("aPoster").value = wiki.poster;
+        }
+      } catch (e) { /* optional */ }
+    }
+    if ($("aDesc")) $("aDesc").value = desc;
     const poster = (m.coverImage && (m.coverImage.extraLarge || m.coverImage.large)) || "";
     if (poster && $("aPoster")) $("aPoster").value = poster;
     if (m.bannerImage && $("aBanner")) $("aBanner").value = m.bannerImage;
@@ -2471,7 +2606,9 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 
 // Media uploads + auto-fetch
 $("aAutoFetch")?.addEventListener("click", autoFetchAnimeMeta);
+$("aWikiFetch")?.addEventListener("click", autoFetchWikipediaAnime);
 $("epAutoFetch")?.addEventListener("click", autoFetchEpisodeMeta);
+$("epWikiFetch")?.addEventListener("click", autoFetchWikipediaEpisode);
 (function wireMetaKey() {
   const input = $("metaApiKey");
   if (input) input.value = getTmdbKey();
