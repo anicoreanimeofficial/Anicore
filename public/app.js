@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v42';
+const APP_JS_VERSION = 'v43';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -2287,26 +2287,76 @@ async function applySeasonThumbnail(type, id, season, thumbUrl) {
   });
 }
 
+
+// --- Metadata: client-side Anilist (works even when Render can't reach MAL) ---
+async function anilistGraphQL(query, variables) {
+  const res = await fetch("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query, variables }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.errors) {
+    const msg = (data.errors && data.errors[0] && data.errors[0].message) || `Anilist error (${res.status})`;
+    throw new Error(msg);
+  }
+  return data.data;
+}
+
+function stripHtml(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html || "";
+  return (d.textContent || d.innerText || "").replace(/\s+/g, " ").trim();
+}
+
 async function autoFetchAnimeMeta() {
   const title = ($("aTitle")?.value || "").trim();
   if (!title) return toast("Enter a title first", "error");
   const btn = $("aAutoFetch");
   if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
   try {
-    toast("Fetching from MyAnimeList…");
-    const data = await api(`/api/meta/anime?q=${encodeURIComponent(title)}`);
-    if (data.title && $("aTitle")) $("aTitle").value = data.title;
-    if (data.description != null && $("aDesc")) $("aDesc").value = data.description || "";
-    if (data.poster && $("aPoster")) $("aPoster").value = data.poster;
-    if (data.banner && $("aBanner")) $("aBanner").value = data.banner;
-    if (data.year && $("aYear")) $("aYear").value = data.year;
-    if (data.genres && $("aGenres")) $("aGenres").value = data.genres;
-    if (data.rating && $("aRating")) $("aRating").value = data.rating;
-    if (data.mal_id) {
-      state._lastMalId = data.mal_id;
-      try { sessionStorage.setItem("anicore-mal-id", String(data.mal_id)); } catch (e) {}
+    toast("Fetching from Anilist…");
+    const query = `
+      query ($search: String) {
+        Media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+          id
+          title { romaji english native }
+          description(asHtml: false)
+          coverImage { large extraLarge }
+          bannerImage
+          seasonYear
+          startDate { year }
+          genres
+          averageScore
+          episodes
+          duration
+          status
+          format
+        }
+      }`;
+    const data = await anilistGraphQL(query, { search: title });
+    const m = data && data.Media;
+    if (!m) throw new Error("No anime found for that title");
+
+    const name = m.title.english || m.title.romaji || title;
+    if ($("aTitle")) $("aTitle").value = name;
+    if ($("aDesc")) $("aDesc").value = stripHtml(m.description || "");
+    const poster = (m.coverImage && (m.coverImage.extraLarge || m.coverImage.large)) || "";
+    if (poster && $("aPoster")) $("aPoster").value = poster;
+    if (m.bannerImage && $("aBanner")) $("aBanner").value = m.bannerImage;
+    else if (poster && $("aBanner") && !$("aBanner").value) $("aBanner").value = poster;
+    const year = m.seasonYear || (m.startDate && m.startDate.year) || "";
+    if (year && $("aYear")) $("aYear").value = year;
+    if (m.genres && m.genres.length && $("aGenres")) $("aGenres").value = m.genres.join(", ");
+    if (m.averageScore && $("aRating")) $("aRating").value = (m.averageScore / 10).toFixed(1);
+    if (m.status && $("aStatus")) {
+      const map = { RELEASING: "Ongoing", FINISHED: "Completed", NOT_YET_RELEASED: "Upcoming", CANCELLED: "Completed", HIATUS: "Ongoing" };
+      const st = map[m.status] || "";
+      if (st) $("aStatus").value = st;
     }
-    toast(data.title ? `Found: ${data.title}` : "Filled from MyAnimeList");
+    state._lastAnilistId = m.id;
+    try { sessionStorage.setItem("anicore-anilist-id", String(m.id)); } catch (e) {}
+    toast("Found: " + name);
   } catch (err) {
     toast(err.message || "Could not fetch", "error");
   } finally {
@@ -2318,35 +2368,66 @@ async function autoFetchEpisodeMeta() {
   if (!currentEpisodeTarget) return toast("Open Manage Episodes from a title first", "error");
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 0;
-  const season = Number($("epSeason")?.value) || 1;
   if (!ep) return toast("Enter episode number first", "error");
   const btn = $("epAutoFetch");
   if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
   try {
-    toast("Fetching episode from MyAnimeList…");
-    let malId = state._lastMalId || currentEpisodeTarget.mal_id || 0;
-    if (!malId) {
-      try { malId = Number(sessionStorage.getItem("anicore-mal-id") || 0); } catch (e) {}
+    toast("Fetching episode from Anilist…");
+    let anilistId = state._lastAnilistId || currentEpisodeTarget.anilist_id || 0;
+    if (!anilistId) {
+      try { anilistId = Number(sessionStorage.getItem("anicore-anilist-id") || 0); } catch (e) {}
     }
-    const q = new URLSearchParams({
-      title: title || "",
-      episode: String(ep),
-      season: String(season),
-    });
-    if (malId) q.set("mal_id", String(malId));
-    const data = await api(`/api/meta/episode?${q}`);
-    if (data.title && $("epTitle")) $("epTitle").value = data.title;
-    if (data.duration && $("epDuration")) $("epDuration").value = data.duration;
-    if (data.description != null && $("epDesc")) $("epDesc").value = data.description || "";
-    if (data.thumbnail && $("epThumb")) $("epThumb").value = data.thumbnail;
-    if (data.mal_id) {
-      state._lastMalId = data.mal_id;
-      currentEpisodeTarget.mal_id = data.mal_id;
-      try { sessionStorage.setItem("anicore-mal-id", String(data.mal_id)); } catch (e) {}
+
+    let m = null;
+    if (anilistId) {
+      const q = `
+        query ($id: Int) {
+          Media(id: $id, type: ANIME) {
+            id
+            title { romaji english }
+            duration
+            coverImage { large extraLarge }
+            streamingEpisodes { title thumbnail }
+          }
+        }`;
+      const data = await anilistGraphQL(q, { id: anilistId });
+      m = data && data.Media;
+    } else {
+      const q = `
+        query ($search: String) {
+          Media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+            id
+            title { romaji english }
+            duration
+            coverImage { large extraLarge }
+            streamingEpisodes { title thumbnail }
+          }
+        }`;
+      const data = await anilistGraphQL(q, { search: title || "" });
+      m = data && data.Media;
     }
-    toast(data.found === false
-      ? `Title set to Episode ${ep} (MAL has no extra details)`
-      : "Episode info filled");
+    if (!m) throw new Error("Anime not found on Anilist");
+
+    state._lastAnilistId = m.id;
+    currentEpisodeTarget.anilist_id = m.id;
+    try { sessionStorage.setItem("anicore-anilist-id", String(m.id)); } catch (e) {}
+
+    const streams = m.streamingEpisodes || [];
+    const hit = streams[ep - 1] || null;
+    const poster = (m.coverImage && (m.coverImage.extraLarge || m.coverImage.large)) || "";
+
+    if (hit && hit.title && $("epTitle")) $("epTitle").value = hit.title;
+    else if ($("epTitle") && !$("epTitle").value) $("epTitle").value = "Episode " + ep;
+
+    if (m.duration && $("epDuration")) $("epDuration").value = m.duration + "m";
+    if (hit && hit.thumbnail && $("epThumb")) $("epThumb").value = hit.thumbnail;
+    else if (poster && $("epThumb") && !$("epThumb").value) $("epThumb").value = poster;
+
+    if ($("epDesc") && !$("epDesc").value && hit && hit.title) {
+      $("epDesc").value = hit.title;
+    }
+
+    toast(hit ? ("Episode info: " + hit.title) : ("Duration set (no ep title on Anilist for #" + ep + ")"));
   } catch (err) {
     toast(err.message || "Could not fetch episode", "error");
   } finally {
