@@ -1192,12 +1192,12 @@ function seasonThumb(episodes, season, content) {
   return hit ? safeUrl(hit.thumbnail) : '';
 }
 
-function episodesHtml(episodes, type, contentId) {
+function episodesHtml(episodes, type, contentId, contentCtx) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const seasons = [...new Set(sorted.map((e) => e.season))];
   const epHtml = (ep) => {
-    const thumb = safeUrl(ep.thumbnail) || '';
+    const thumb = safeUrl(ep.thumbnail) || seasonThumb(sorted, ep.season, contentCtx) || '';
     return `
     <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
       ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy" decoding="async">` : ''}
@@ -1271,7 +1271,7 @@ function buildDetailHtml(type, item, comments) {
     ${genres ? `<p><span class="muted">Genres:</span> ${esc(genres)}</p>` : ''}
     <div id="dRecapSlot">${recapHtml(item)}</div><div id="similarSlot"></div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
-    ${episodesHtml(item.episodes, type, item._id)}
+    ${episodesHtml(item.episodes, type, item._id, item)}
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
     </div>
@@ -1831,7 +1831,7 @@ function loadVideoEpisode() {
     }
   }
   if (thumbEl) {
-    const src = safeUrl(ep.thumbnail) || safeUrl(videoContext.poster) || '';
+    const src = safeUrl(ep.thumbnail) || seasonThumb(videoContext.episodes, ep.season) || safeUrl(videoContext.poster) || '';
     if (src) {
       thumbEl.src = src;
       thumbEl.classList.remove('hidden');
@@ -2341,7 +2341,7 @@ async function applySeasonThumbnail(type, id, season, thumbUrl) {
   if (!thumbUrl) return;
   await api(`/api/admin/${type}/${id}/season-thumbnail`, {
     method: "POST",
-    body: JSON.stringify({ season: Number(season), thumbnail: thumbUrl }),
+    body: JSON.stringify({ season: Number(season), thumbnail: thumbUrl, overwrite: true }),
   });
 }
 
