@@ -527,19 +527,34 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
   grid.appendChild(frag);
 }
 
+let featuredPromise = null;
+let heroCurated = [];
+let heroCuratedReady = false;
+
+function loadFeatured() {
+  if (!featuredPromise) {
+    featuredPromise = api('/api/home-featured').catch(() => ({ hero: [], top_airing: [] }));
+  }
+  return featuredPromise;
+}
+
 async function loadTopAiring() {
   const section = $('topAiringSection');
   const row = $('topAiringRow');
   if (!section || !row) return;
   try {
-    const [anime, tv] = await Promise.all([
-      api('/api/anime?page=1&limit=10&status=Ongoing&sort=views'),
-      api('/api/tvshows?page=1&limit=10&status=Ongoing&sort=views'),
-    ]);
-    const items = [
-      ...(anime.items || []).map((i) => ({ ...i, _type: 'anime' })),
-      ...(tv.items || []).map((i) => ({ ...i, _type: 'tv_show' })),
-    ].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10);
+    const featured = await loadFeatured();
+    let items = (featured.top_airing || []).slice(0, 10);
+    if (!items.length) {
+      const [anime, tv] = await Promise.all([
+        api('/api/anime?page=1&limit=10&status=Ongoing&sort=views'),
+        api('/api/tvshows?page=1&limit=10&status=Ongoing&sort=views'),
+      ]);
+      items = [
+        ...(anime.items || []).map((i) => ({ ...i, _type: 'anime' })),
+        ...(tv.items || []).map((i) => ({ ...i, _type: 'tv_show' })),
+      ].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 10);
+    }
     if (!items.length) { section.classList.add('hidden'); return; }
     row.innerHTML = '';
     items.forEach((item, i) => {
@@ -549,7 +564,7 @@ async function loadTopAiring() {
       el.setAttribute('role', 'button');
       el.innerHTML = `
         <span class="top-rank" aria-hidden="true">${i + 1}</span>
-        <div class="top-poster"><img alt="" loading="lazy" decoding="async"><span class="top-tag">${item._type === 'anime' ? 'ANIME' : 'TV'}</span></div>
+        <div class="top-poster"><img alt="" loading="lazy" decoding="async"><span class="top-tag">${item._type === 'movie' ? 'MOVIE' : 'SERIES'}</span></div>
         <div class="top-name"></div>`;
       const img = el.querySelector('img');
       img.src = safeUrl(item.poster) || PLACEHOLDER;
@@ -571,8 +586,16 @@ async function loadTopAiring() {
 }
 
 async function loadHome() {
+  featuredPromise = null;
+  heroCuratedReady = false;
+  loadFeatured().then((f) => {
+    heroCurated = f.hero || [];
+    heroCuratedReady = true;
+    setHeroItems();
+  });
   loadTopAiring();
   showSkeleton('homeSeriesGrid', 8);
+  showSkeleton('homeAnimeGrid', 6);
   showSkeleton('homeMovieGrid', 6);
 
   // Merged anime + TV into Trending Series
@@ -591,6 +614,21 @@ async function loadHome() {
     setHeroItems();
   } catch {
     const g = $('homeSeriesGrid');
+    if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
+  }
+
+  try {
+    const [a, t] = await Promise.all([
+      api('/api/anime?page=1&limit=10&sort=newest'),
+      api('/api/tvshows?page=1&limit=10&sort=newest'),
+    ]);
+    const items = [
+      ...(Array.isArray(a) ? a : a.items || []).map((i) => ({ ...i, _type: 'anime' })),
+      ...(Array.isArray(t) ? t : t.items || []).map((i) => ({ ...i, _type: 'tv_show' })),
+    ].sort((x, y) => String(y.created_at || '').localeCompare(String(x.created_at || ''))).slice(0, 10);
+    renderGrid($('homeAnimeGrid'), items, 'anime');
+  } catch {
+    const g = $('homeAnimeGrid');
     if (g) g.innerHTML = '<p class="muted empty">Failed to load. Please refresh.</p>';
   }
 
@@ -1956,7 +1994,7 @@ async function loadLibrary(reset = false) {
         <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
         <div>
           <h4>${esc(item.title)}</h4>
-          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}${item.published === false && item.scheduled_at ? ` · ⏳ goes live ${esc(new Date(item.scheduled_at).toLocaleString())}` : ''}</p>
+          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}${item.hero ? ` · 🎬 Hero${item.hero_order ? ' #' + item.hero_order : ''}` : ''}${item.top_airing ? ` · 🔥 Top${item.top_rank ? ' #' + item.top_rank : ''}` : ''}${item.published === false && item.scheduled_at ? ` · ⏳ goes live ${esc(new Date(item.scheduled_at).toLocaleString())}` : ''}</p>
         </div>
         <div class="lib-actions">
           ${type !== 'movie' ? `<button type="button" class="outline ep-btn"
@@ -1979,6 +2017,10 @@ async function loadLibrary(reset = false) {
         $('aPoster').value = item.poster || '';
         $('aBanner').value = item.banner || '';
         fillScheduleFields(item);
+        $('aHero').checked = !!item.hero;
+        $('aHeroOrder').value = item.hero_order || '';
+        $('aTopAiring').checked = !!item.top_airing;
+        $('aTopRank').value = item.top_rank || '';
         $('adminFormTitle').textContent = 'Edit Content';
         $('aSubmit').textContent = 'Update';
         $('aCancel').classList.remove('hidden');
@@ -2030,6 +2072,10 @@ $('adminForm')?.addEventListener('submit', async (e) => {
     poster: $('aPoster').value.trim(),
     banner: $('aBanner').value.trim(),
     ...readScheduleFields(),
+    hero: $('aHero').checked,
+    hero_order: Number($('aHeroOrder').value) || 0,
+    top_airing: $('aTopAiring').checked,
+    top_rank: Number($('aTopRank').value) || 0,
   };
 
   const btn = $('aSubmit');
@@ -2376,35 +2422,143 @@ async function fetchWikipediaForTitle(title) {
   };
 }
 
-async function fetchWikipediaEpisode(seriesTitle, season, episode) {
-  // Try common episode page patterns, then series page extract
-  const candidates = [
-    `${seriesTitle} (season ${season})`,
-    `${seriesTitle} season ${season}`,
-    `List of ${seriesTitle} episodes`,
-    `${seriesTitle} (TV series)`,
-    seriesTitle,
-  ];
-  let lastErr = null;
-  for (const c of candidates) {
-    try {
-      const results = await wikiSearch(c);
-      if (!results.length) continue;
-      const sum = await wikiSummary(results[0].title);
-      const extract = (sum.extract || "").trim();
-      if (!extract) continue;
-      // Prefer list pages for episode context
-      return {
-        title: `S${season}E${episode}`,
-        description: extract.slice(0, 2000),
-        poster: (sum.thumbnail && sum.thumbnail.source) || "",
-        source: sum.title,
-      };
-    } catch (e) {
-      lastErr = e;
+// --- Wikipedia episode tables (reads the "Episodes" list on the page) ---
+const wikiEpisodeCache = {};
+
+async function wikiParsePage(pageTitle) {
+  const q = new URLSearchParams({
+    action: "parse",
+    page: pageTitle,
+    prop: "text",
+    format: "json",
+    formatversion: "2",
+    redirects: "1",
+    origin: "*",
+  });
+  const res = await fetch("https://en.wikipedia.org/w/api.php?" + q);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.info || "Wikipedia page not found");
+  return { title: data.parse.title, html: data.parse.text };
+}
+
+function wikiCleanText(node) {
+  const c = node.cloneNode(true);
+  c.querySelectorAll("sup, .reference, style, .mw-editsection").forEach((n) => n.remove());
+  return (c.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function wikiEnglishEpisodeTitle(raw) {
+  // Cell looks like: "English Title" Transliteration: "Romaji" (Japanese: ...)
+  const quoted = raw.match(/["\u201C]([^"\u201D]+)["\u201D]/);
+  if (quoted && quoted[1].trim()) return quoted[1].trim();
+  return raw.split(/\s*(?:Transliteration|\(Japanese|Japanese:|\()/)[0].replace(/^["\u201C]|["\u201D]$/g, "").trim();
+}
+
+function wikiSeasonForTable(table, fallback) {
+  let el = table;
+  for (let i = 0; i < 12 && el; i++) {
+    el = el.previousElementSibling;
+    if (!el) break;
+    const isHeading = /^H[2-6]$/.test(el.tagName) || el.classList.contains("mw-heading");
+    if (isHeading) {
+      const m = (el.textContent || "").match(/season\s*(\d+)/i);
+      if (m) return Number(m[1]);
+      if (/^H2$/.test(el.tagName) || el.classList.contains("mw-heading2")) break;
     }
   }
-  throw lastErr || new Error("No Wikipedia episode info found");
+  const cap = table.querySelector("caption");
+  const cm = cap && (cap.textContent || "").match(/season\s*(\d+)/i);
+  return cm ? Number(cm[1]) : fallback;
+}
+
+function parseWikiEpisodes(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const out = [];
+  let tableNo = 0;
+  doc.querySelectorAll("table.wikitable").forEach((table) => {
+    const rows = Array.from(table.querySelectorAll("tr"));
+    if (rows.length < 2) return;
+    const heads = Array.from(rows[0].children).map((c) => (c.textContent || "").trim().toLowerCase());
+    const titleIdx = heads.findIndex((h) => h.startsWith("title") || h.includes("episode title"));
+    if (titleIdx < 0) return;
+    tableNo += 1;
+    let numIdx = heads.findIndex((h) => /in season|in series|^no\.?\s*in/.test(h));
+    if (numIdx < 0) numIdx = heads.findIndex((h) => /^(no|#|ep)/.test(h));
+    if (numIdx < 0) numIdx = 0;
+    const dateIdx = heads.findIndex((h) => /(release|air|broadcast).*date|date/.test(h));
+    const season = wikiSeasonForTable(table, tableNo);
+
+    rows.slice(1).forEach((row, ri) => {
+      const cells = Array.from(row.children);
+      if (cells.length <= titleIdx) return;
+      const num = parseInt((cells[numIdx].textContent || "").replace(/[^\d]/g, ""), 10);
+      if (!num) return;
+      const title = wikiEnglishEpisodeTitle(wikiCleanText(cells[titleIdx]));
+      if (!title) return;
+      let airDate = "";
+      if (dateIdx >= 0 && cells[dateIdx]) {
+        const iso = cells[dateIdx].querySelector(".bday");
+        airDate = iso ? iso.textContent.trim() : wikiCleanText(cells[dateIdx]);
+      }
+      let description = "";
+      const next = rows[ri + 2];
+      if (next && (next.classList.contains("expand-child") || next.children.length === 1)) {
+        const d = next.querySelector("td.description, td");
+        if (d) description = wikiCleanText(d);
+      }
+      out.push({ season, episode: num, title, description, airDate });
+    });
+  });
+  return out;
+}
+
+async function getWikiEpisodes(pageTitle) {
+  if (wikiEpisodeCache[pageTitle]) return wikiEpisodeCache[pageTitle];
+  const page = await wikiParsePage(pageTitle);
+  const list = parseWikiEpisodes(page.html);
+  wikiEpisodeCache[pageTitle] = list;
+  return list;
+}
+
+function wikiTitleFromInput(value) {
+  const m = (value || "").trim().match(/wikipedia\.org\/wiki\/([^#?]+)/i);
+  return m ? decodeURIComponent(m[1]).replace(/_/g, " ") : "";
+}
+
+async function fetchWikipediaEpisode(seriesTitle, season, episode, wikiInput) {
+  const pages = [];
+  const direct = wikiTitleFromInput(wikiInput);
+  if (direct) {
+    pages.push(direct);
+  } else {
+    for (const name of [`List of ${seriesTitle} episodes`, seriesTitle]) {
+      try { (await wikiSearch(name)).slice(0, 3).forEach((r) => pages.push(r.title)); } catch (e) { /* try next */ }
+    }
+  }
+  const tried = new Set();
+  let lastErr = null;
+  let listed = 0;
+  for (const p of pages) {
+    if (tried.has(p)) continue;
+    tried.add(p);
+    try {
+      const list = await getWikiEpisodes(p);
+      if (!list.length) continue;
+      listed = Math.max(listed, list.length);
+      const seasons = new Set(list.map((e) => e.season));
+      const hit = list.find((e) => e.season === season && e.episode === episode)
+        || (seasons.size === 1 ? list.find((e) => e.episode === episode) : null);
+      if (hit) return { ...hit, source: p, total: list.length };
+    } catch (e) { lastErr = e; }
+  }
+  if (listed) {
+    throw new Error(`Season ${season} episode ${episode} isn't in that Wikipedia list (it lists ${listed} episodes).`);
+  }
+  throw lastErr || new Error(
+    direct
+      ? "No episode table with titles found on that Wikipedia page"
+      : "No episode list found. Paste the Wikipedia link in the box above the button."
+  );
 }
 
 async function autoFetchWikipediaAnime() {
@@ -2431,18 +2585,24 @@ async function autoFetchWikipediaEpisode() {
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 1;
   const season = Number($("epSeason")?.value) || 1;
+  const urlBox = $("epWikiUrl");
+  if (urlBox && !urlBox.value.trim()) {
+    try { urlBox.value = sessionStorage.getItem("anicore-wiki-url") || ""; } catch (e) {}
+  }
+  const wikiInput = (urlBox?.value || "").trim();
   const btn = $("epWikiFetch");
   if (btn) { btn.disabled = true; btn.textContent = "Fetching Wikipedia…"; }
   try {
     toast("Fetching from Wikipedia…");
-    const data = await fetchWikipediaEpisode(title, season, ep);
-    if (data.description && $("epDesc")) $("epDesc").value = data.description;
-    if (data.poster && $("epThumb") && !$("epThumb").value) $("epThumb").value = data.poster;
-    toast("Wikipedia text filled" + (data.source ? " (" + data.source + ")" : ""));
+    const data = await fetchWikipediaEpisode(title, season, ep, wikiInput);
+    if (wikiInput) { try { sessionStorage.setItem("anicore-wiki-url", wikiInput); } catch (e) {} }
+    if (data.title && $("epTitle")) $("epTitle").value = data.title;
+    if (data.description && $("epDesc")) $("epDesc").value = data.description.slice(0, 2000);
+    toast(`Episode ${ep}: ${data.title}`);
   } catch (err) {
     toast(err.message || "Wikipedia fetch failed", "error");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Fetch ep text from Wikipedia"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Fetch ep name from Wikipedia"; }
   }
 }
 
@@ -2627,7 +2787,7 @@ let heroSeriesItems = [];
 let heroMovieItems = [];
 
 function heroTypeLabel(t) {
-  return t === 'movie' ? 'Movie' : (t === 'tv_show' ? 'TV Show' : 'Anime');
+  return t === 'movie' ? 'Movie' : 'Series';
 }
 
 function heroInfoHtml(item) {
@@ -2652,7 +2812,9 @@ function heroInfoHtml(item) {
 }
 
 function setHeroItems() {
-  const pool = [...heroSeriesItems.slice(0, 4), ...heroMovieItems.slice(0, 2)]
+  if (!heroCuratedReady) return; // wait for the admin's picks so the banner doesn't flash the wrong titles
+  const auto = [...heroSeriesItems.slice(0, 4), ...heroMovieItems.slice(0, 2)];
+  const pool = (heroCurated.length ? heroCurated : auto)
     .filter((i) => safeUrl(i.poster) || safeUrl(i.banner));
   const root = $('hero');
   if (!root) return;
@@ -2884,11 +3046,29 @@ async function runGlobalSearch() {
     return;
   }
   try {
-    const params = new URLSearchParams({ q, sort, limit: "30" });
-    if (type) params.set("type", type);
-    if (genre) params.set("genre", genre);
-    const data = await api("/api/search?" + params.toString());
-    const items = data.items || [];
+    const base = new URLSearchParams({ q, sort, limit: "30" });
+    if (genre) base.set("genre", genre);
+    let items;
+    if (type === "series") {
+      const parts = await Promise.all(["anime", "tv_show"].map((tp) => {
+        const p = new URLSearchParams(base);
+        p.set("type", tp);
+        return api("/api/search?" + p.toString());
+      }));
+      items = parts.flatMap((d) => d.items || []);
+      const cmp = {
+        title: (a, b) => String(a.title || "").localeCompare(String(b.title || "")),
+        rating: (a, b) => (b.avg_rating || 0) - (a.avg_rating || 0),
+        views: (a, b) => (b.views || 0) - (a.views || 0),
+        year: (a, b) => (b.year || 0) - (a.year || 0),
+        oldest: (a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")),
+      }[sort] || ((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+      items = items.sort(cmp).slice(0, 30);
+    } else {
+      if (type) base.set("type", type);
+      const data = await api("/api/search?" + base.toString());
+      items = data.items || [];
+    }
     if (!items.length) {
       grid.innerHTML = "";
       if (empty) {
@@ -3471,7 +3651,7 @@ function renderUpcoming() {
     const when = new Date(i.scheduled_at);
     const label = when.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
     const timeHtml = `<div class="schedule-time">${esc(label)}<small>${esc(when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}</small></div>`;
-    const typeLabel = { anime: 'Anime', tv_show: 'TV Show', movie: 'Movie' }[i.content_type] || '';
+    const typeLabel = { anime: 'Series', tv_show: 'Series', movie: 'Movie' }[i.content_type] || '';
     list.appendChild(scheduleRow({
       poster: i.poster, title: i.title, timeHtml, sub: [typeLabel, ...(i.genres || [])].filter(Boolean).join(' · '),
     }));

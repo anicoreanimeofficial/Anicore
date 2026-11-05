@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=45">
+  <link rel="stylesheet" href="/assets/style.css?v=48">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
@@ -110,6 +110,11 @@
         </div>
         <div id="homeSeriesGrid" class="media-grid"></div>
         <div class="section-heading-row">
+          <h3 class="section-title">Latest Series</h3>
+          <button type="button" class="text-button" data-page="series">See all</button>
+        </div>
+        <div id="homeAnimeGrid" class="media-grid"></div>
+        <div class="section-heading-row">
           <h3 class="section-title">Latest Movies</h3>
           <button type="button" class="text-button" data-page="movies">See all</button>
         </div>
@@ -120,11 +125,6 @@
       <section class="page" id="page-series" aria-label="Series catalogue">
         <div class="section">
           <h2 data-i18n="series">Series</h2>
-          <div class="series-tabs" id="seriesTabs" role="tablist">
-            <button type="button" class="series-tab active" data-series-type="all" role="tab">All</button>
-            <button type="button" class="series-tab" data-series-type="anime" role="tab">Anime</button>
-            <button type="button" class="series-tab" data-series-type="tv_show" role="tab">TV Shows</button>
-          </div>
           <div class="filters" id="seriesFilters">
             <input type="search" id="seriesSearch" placeholder="Search series..." aria-label="Search series">
             <div class="filter-row">
@@ -199,12 +199,11 @@
         <div class="section">
           <h2 data-i18n="search">Search</h2>
           <div class="filters">
-            <input type="search" id="globalSearch" placeholder="Search anime, TV shows, movies..." aria-label="Global search" autofocus>
+            <input type="search" id="globalSearch" placeholder="Search series and movies..." aria-label="Global search" autofocus>
             <div class="filter-row">
               <select id="searchType" aria-label="Type">
                 <option value="">All types</option>
-                <option value="anime">Anime</option>
-                <option value="tv_show">TV Shows</option>
+                <option value="series">Series</option>
                 <option value="movie">Movies</option>
               </select>
               <select id="searchGenre" aria-label="Genre"><option value="">All Genres</option></select>
@@ -376,6 +375,12 @@
               <label class="sched-publish">Publish on (optional — hidden until then)
                 <input id="aPublishAt" type="datetime-local">
               </label>
+              <div class="feature-fields">
+                <label class="check-row"><input type="checkbox" id="aHero"> Show in hero banner</label>
+                <label>Hero order <input id="aHeroOrder" type="number" min="0" max="999" placeholder="1 = first"></label>
+                <label class="check-row"><input type="checkbox" id="aTopAiring"> Pin to Top Airing</label>
+                <label>Top Airing rank <input id="aTopRank" type="number" min="0" max="999" placeholder="1 = first"></label>
+              </div>
               <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
               <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
               <button type="button" id="aAutoFetch" class="outline block">Auto-fetch title info (Anilist + Wikipedia)</button>
@@ -495,7 +500,8 @@
         <input id="epThumb" type="url" placeholder="Episode / season thumbnail URL (https://...)">
         <label class="check-row"><input type="checkbox" id="epSeasonThumb"> Use as season thumbnail (all eps in this season without their own)</label>
         <button type="button" id="epAutoFetch" class="outline block">Auto-fetch ep name, duration and description</button>
-        <button type="button" id="epWikiFetch" class="outline block">Fetch ep text from Wikipedia</button>
+        <input id="epWikiUrl" type="url" placeholder="Wikipedia link with the episode list (optional)">
+        <button type="button" id="epWikiFetch" class="outline block">Fetch ep name from Wikipedia</button>
         <details class="ep-extras">
           <summary>Player extras: skip intro/outro &amp; subtitles</summary>
           <div class="row">
@@ -535,7 +541,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=45"></script>
-  <script src="/assets/features.js?v=45"></script>
+  <script src="/assets/app.js?v=48"></script>
+  <script src="/assets/features.js?v=48"></script>
 </body>
 </html>

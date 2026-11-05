@@ -2848,3 +2848,26 @@ html[data-theme="light"] {
 .meta-key-row input {
   flex: 1;
 }
+
+
+/* =========================================================
+   SECTION HEADINGS — same look as "Top Airing" (v47)
+   ========================================================= */
+#page-home .section-title { display: flex; align-items: center; gap: 12px; }
+#page-home .section-title::before {
+  content: ""; flex: none; width: 4px; height: 26px; border-radius: 2px; background: var(--pink);
+}
+#page-home .section-title::after {
+  content: "\25CF"; color: var(--pink); font-size: 11px; animation: topPulse 1.6s ease-in-out infinite;
+}
+/* Top Airing already draws its own bar + dot */
+#topAiringSection .section-title::before,
+#topAiringSection .section-title::after { display: none; }
+
+/* Admin: hero / top airing picks */
+.feature-fields {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; align-items: end;
+  padding: 12px; border: 1px solid var(--border, rgba(255,255,255,.14)); border-radius: 14px;
+}
+.feature-fields label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.feature-fields .check-row { flex-direction: row; align-items: center; gap: 8px; }
