@@ -2871,3 +2871,62 @@ html[data-theme="light"] {
 }
 .feature-fields label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
 .feature-fields .check-row { flex-direction: row; align-items: center; gap: 8px; }
+
+.thumb-scope { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; opacity: .9; }
+#thumbTools input, #thumbTools button { margin-top: 8px; }
+
+
+/* =========================================================
+   PERFORMANCE / SMOOTHNESS (keep this block last)
+   Blur on every card/row is the #1 cause of scroll lag on phones.
+   ========================================================= */
+.media-card,
+.ep-admin-row,
+.episode,
+.season-block,
+.panel {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* Skip rendering work for cards/episodes that are off-screen */
+.media-card,
+.episode,
+.ep-admin-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
+/* Lighter blur on the few fixed bars, and only the GPU-friendly kind */
+.app-header, .bottom-nav, .sidebar {
+  --glass-blur: blur(12px);
+  -webkit-backdrop-filter: blur(12px) !important;
+  backdrop-filter: blur(12px) !important;
+  transform: translateZ(0);
+}
+
+img { content-visibility: auto; }
+.poster-wrap img, .ep-thumb, .season-thumb { background: rgba(255,255,255,.04); }
+
+html { scroll-behavior: smooth; -webkit-tap-highlight-color: transparent; }
+body { overscroll-behavior-y: none; }
+button, a, .media-card, .episode { touch-action: manipulation; }
+
+@media (max-width: 820px) {
+  /* phones: drop heavy hover/entrance effects */
+  .media-card { animation: none !important; }
+  .media-card:hover { transform: none !important; }
+  .app-header, .bottom-nav, .sidebar {
+    -webkit-backdrop-filter: blur(8px) !important;
+    backdrop-filter: blur(8px) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

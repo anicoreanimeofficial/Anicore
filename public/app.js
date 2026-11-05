@@ -450,11 +450,18 @@ $('menuBtn')?.addEventListener('click', () => {
 });
 
 let lastScrollY = window.scrollY;
+let scrollTick = false;
 window.addEventListener('scroll', () => {
-  const y = window.scrollY;
-  if (Math.abs(y - lastScrollY) < 8) return;
-  $('bottomNav')?.classList.toggle('hidden-nav', y > lastScrollY && y > 100);
-  lastScrollY = y;
+  if (scrollTick) return;
+  scrollTick = true;
+  requestAnimationFrame(() => {
+    const y = window.scrollY;
+    if (Math.abs(y - lastScrollY) >= 8) {
+      $('bottomNav')?.classList.toggle('hidden-nav', y > lastScrollY && y > 100);
+      lastScrollY = y;
+    }
+    scrollTick = false;
+  });
 }, { passive: true });
 
 // --- Skeleton ---
@@ -499,7 +506,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 
     card.innerHTML = `
       <div class="poster-wrap">
-        <img loading="lazy" alt="">
+        <img loading="lazy" decoding="async" alt="">
       </div>
       <div class="media-info">
         <h3></h3>
@@ -1186,10 +1193,8 @@ function linkList(links) {
 
 function seasonThumb(episodes, season, content) {
   const map = content?.season_thumbnails || videoContext?.season_thumbnails || {};
-  const fromMap = safeUrl(map[String(season)] || map[Number(season)]);
-  if (fromMap) return fromMap;
-  const hit = (episodes || []).find((e) => Number(e.season) === Number(season) && safeUrl(e.thumbnail));
-  return hit ? safeUrl(hit.thumbnail) : '';
+  // season thumbnail first, then the whole-anime thumbnail (key "all")
+  return safeUrl(map[String(season)] || map[Number(season)]) || safeUrl(map.all) || '';
 }
 
 function episodesHtml(episodes, type, contentId, contentCtx) {
@@ -2265,17 +2270,18 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
       await api(path, { method: 'POST', body: JSON.stringify(payload) });
       toast('Episode added');
     }
-    if ($('epSeasonThumb')?.checked && payload.thumbnail) {
+    const thumbScope = $('epThumbScope')?.value || 'episode';
+    if (thumbScope !== 'episode' && payload.thumbnail) {
       try {
-        await applySeasonThumbnail(type, id, payload.season, payload.thumbnail);
-        toast('Season thumbnail saved');
+        await applySeasonThumbnail(type, id, thumbScope === 'all' ? 'all' : payload.season, payload.thumbnail);
+        toast(thumbScope === 'all' ? 'Thumbnail set on all episodes' : 'Season thumbnail saved');
       } catch (err) {
         toast(err.message || 'Season thumb failed', 'error');
       }
     }
     $('episodeForm').reset();
     if ($('epThumb')) $('epThumb').value = '';
-    if ($('epSeasonThumb')) $('epSeasonThumb').checked = false;
+    if ($('epThumbScope')) $('epThumbScope').value = 'episode';
     $('epId').value = '';
     $('epSeason').value = 1;
     $('epSubmit').textContent = 'Add Episode';
@@ -2341,9 +2347,24 @@ async function applySeasonThumbnail(type, id, season, thumbUrl) {
   if (!thumbUrl) return;
   await api(`/api/admin/${type}/${id}/season-thumbnail`, {
     method: "POST",
-    body: JSON.stringify({ season: Number(season), thumbnail: thumbUrl, overwrite: true }),
+    body: JSON.stringify({ season: season === 'all' ? 'all' : Number(season), thumbnail: thumbUrl, overwrite: true }),
   });
 }
+
+// Standalone thumbnail tools (no need to fill the episode form)
+async function runThumbTool(season, url) {
+  if (!currentEpisodeTarget) return toast('No content selected', 'error');
+  url = (url || '').trim();
+  if (!url.startsWith('https://') && !url.startsWith('/assets/')) return toast('Enter a valid thumbnail URL (https://...)', 'error');
+  try {
+    await applySeasonThumbnail(currentEpisodeTarget.type, currentEpisodeTarget.id, season, url);
+    toast(season === 'all' ? 'Thumbnail set on all episodes' : `Season ${season} thumbnail saved`);
+    await refreshEpisodeList();
+    loadLibrary(true);
+  } catch (err) { toast(err.message || 'Failed to set thumbnail', 'error'); }
+}
+$('thumbAllApply')?.addEventListener('click', () => runThumbTool('all', $('thumbAllUrl').value));
+$('thumbSeasonApply')?.addEventListener('click', () => runThumbTool(Number($('thumbSeasonNum').value) || 1, $('thumbSeasonUrl').value));
 
 
 // --- Metadata: client-side Anilist (works even when Render can't reach MAL) ---

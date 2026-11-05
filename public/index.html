@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=48">
+  <link rel="stylesheet" href="/assets/style.css?v=49">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
@@ -498,7 +498,23 @@
         <input id="epVideo" type="text" placeholder="Video URL or <iframe src=&quot;...&quot;> HTML">
         <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
         <input id="epThumb" type="url" placeholder="Episode / season thumbnail URL (https://...)">
-        <label class="check-row"><input type="checkbox" id="epSeasonThumb"> Set this thumbnail on ALL episodes of this season</label>
+        <label class="thumb-scope">Apply this thumbnail to
+          <select id="epThumbScope">
+            <option value="episode">This episode only</option>
+            <option value="season">All episodes of this season</option>
+            <option value="all">All episodes of the whole anime (every season)</option>
+          </select>
+        </label>
+        <details class="ep-extras" id="thumbTools">
+          <summary>Thumbnails: whole anime / per season</summary>
+          <input id="thumbAllUrl" type="url" placeholder="Anime thumbnail URL (all episodes, all seasons)">
+          <button type="button" id="thumbAllApply" class="outline block">Set on ALL episodes</button>
+          <div class="row">
+            <input id="thumbSeasonNum" type="number" min="1" value="1" placeholder="Season">
+            <input id="thumbSeasonUrl" type="url" placeholder="Season thumbnail URL">
+          </div>
+          <button type="button" id="thumbSeasonApply" class="outline block">Set on this season only</button>
+        </details>
         <button type="button" id="epAutoFetch" class="outline block">Auto-fetch ep name, duration and description</button>
         <input id="epWikiUrl" type="url" placeholder="Wikipedia link with the episode list (optional)">
         <button type="button" id="epWikiFetch" class="outline block">Fetch ep name from Wikipedia</button>
@@ -541,7 +557,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=48"></script>
-  <script src="/assets/features.js?v=48"></script>
+  <script src="/assets/app.js?v=49"></script>
+  <script src="/assets/features.js?v=49"></script>
 </body>
 </html>
