@@ -623,6 +623,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=APP_NAME, lifespan=lifespan)
 
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=800)  # compress JSON + js/css (much faster on mobile data)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -875,7 +878,9 @@ def _inherit_season_thumb(coll, id, ep):
     if (ep.get("thumbnail") or "").strip():
         return
     doc = coll.find_one({"_id": object_id(id)}, {"season_thumbnails": 1}) or {}
-    thumb = (doc.get("season_thumbnails") or {}).get(str(int(ep.get("season") or 1)))
+    smap = doc.get("season_thumbnails") or {}
+    # season thumbnail first, then the whole-anime ("all") thumbnail
+    thumb = smap.get(str(int(ep.get("season") or 1))) or smap.get("all")
     if thumb:
         ep["thumbnail"] = thumb
 
@@ -2138,10 +2143,18 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
 
 @app.post("/api/admin/{type}/{id}/season-thumbnail")
 def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_uploader)):
-    """Store a season-level thumbnail and apply it to every episode in that season (overwrite=false keeps episodes that already have their own)."""
+    """Set a thumbnail for one season, or for the whole show.
+
+    season = a number  -> applies to every episode of that season
+    season = "all"     -> applies to every episode of every season (whole anime)
+    overwrite=false keeps episodes that already have their own thumbnail.
+    Episodes added later inherit season thumbnail -> whole-show thumbnail.
+    """
     if type not in ("anime", "tv_show"):
         raise HTTPException(status_code=400, detail="Only series support seasons")
-    season = int(data.get("season") or 1)
+    raw_season = data.get("season")
+    apply_all = str(raw_season).strip().lower() == "all"
+    season = 1 if apply_all else int(raw_season or 1)
     thumb = valid_url(data.get("thumbnail") or "")
     if not thumb:
         raise HTTPException(status_code=400, detail="Valid thumbnail URL required")
@@ -2151,19 +2164,26 @@ def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_u
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
     season_map = dict(doc.get("season_thumbnails") or {})
-    season_map[str(season)] = thumb
     overwrite = data.get("overwrite", True) is not False
     episodes = doc.get("episodes") or []
+    if apply_all:
+        season_map["all"] = thumb
+        for ep in episodes:
+            season_map[str(int(ep.get("season") or 1))] = thumb
+    else:
+        season_map[str(season)] = thumb
+    count = 0
     for ep in episodes:
-        if int(ep.get("season") or 1) != season:
+        if not apply_all and int(ep.get("season") or 1) != season:
             continue
         if overwrite or not (ep.get("thumbnail") or "").strip():
             ep["thumbnail"] = thumb
+            count += 1
     coll.update_one(
         {"_id": oid},
         {"$set": {"season_thumbnails": season_map, "episodes": episodes, "updated_at": utc_now()}},
     )
-    return {"message": "Season thumbnail saved", "season_thumbnails": season_map}
+    return {"message": f"Thumbnail applied to {count} episode(s)", "season_thumbnails": season_map}
 
 
 
