@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=43">
+  <link rel="stylesheet" href="/assets/style.css?v=44">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
@@ -379,6 +379,11 @@
               <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
               <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
               <button type="button" id="aAutoFetch" class="outline block">Auto-fetch title info (name, description, poster)</button>
+              <div class="meta-key-row">
+                <input id="metaApiKey" type="password" placeholder="TMDB API key (for episode name & description)" autocomplete="off">
+                <button type="button" id="metaApiKeySave" class="outline small">Save key</button>
+              </div>
+              <p class="hint">Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>. Saved on this device only.</p>
               <button type="submit" id="aSubmit" class="primary block">Save</button>
               <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
             </form>
@@ -435,7 +440,7 @@
           </div>
           <div class="player-wrap" id="playerWrap"></div>
           <div class="player-tools" id="playerTools">
-            <label class="pt-item pt-check"><input type="checkbox" data-pref="autoplayNext"> Autoplay next</label>
+            
           </div>
           <div id="playerFallback" class="hidden">
             <p class="muted">This source may block embedding.
@@ -528,7 +533,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=43"></script>
-  <script src="/assets/features.js?v=43"></script>
+  <script src="/assets/app.js?v=44"></script>
+  <script src="/assets/features.js?v=44"></script>
 </body>
 </html>

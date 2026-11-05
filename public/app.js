@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v43';
+const APP_JS_VERSION = 'v44';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -1399,9 +1399,15 @@ async function ensureHls() {
 
 const playerPref = {
   get(key) {
+    // Autoplay next permanently disabled
+    if (key === 'autoplayNext') return false;
     try { const v = localStorage.getItem('anicore_' + key); return v === null ? true : v === '1'; } catch { return true; }
   },
   set(key, on) {
+    if (key === 'autoplayNext') {
+      try { localStorage.setItem('anicore_autoplayNext', '0'); } catch { /* noop */ }
+      return;
+    }
     try { localStorage.setItem('anicore_' + key, on ? '1' : '0'); } catch { /* noop */ }
   },
 };
@@ -1440,7 +1446,13 @@ function playNextEpisode() {
 }
 
 function initPlayerTools() {
+  try { localStorage.setItem('anicore_autoplayNext', '0'); } catch (e) {}
   document.querySelectorAll('#playerTools input[data-pref]').forEach((cb) => {
+    if (cb.dataset.pref === 'autoplayNext') {
+      cb.checked = false;
+      cb.closest('label')?.classList.add('hidden');
+      return;
+    }
     cb.checked = playerPref.get(cb.dataset.pref);
     cb.addEventListener('change', () => playerPref.set(cb.dataset.pref, cb.checked));
   });
@@ -1488,9 +1500,9 @@ function attachPlayerAutomation(video, wrap) {
     });
   };
 
+  // Autoplay next removed — episode ends and stays
   video.addEventListener('ended', () => {
-    if (advanced) return;
-    if (playerPref.get('autoplayNext')) showCountdown();
+    try { saveWatchProgress(100); } catch (e) { /* noop */ }
   });
 }
 
@@ -2364,77 +2376,94 @@ async function autoFetchAnimeMeta() {
   }
 }
 
+
+function getTmdbKey() {
+  try { return (localStorage.getItem("anicore_tmdb_key") || "").trim(); } catch (e) { return ""; }
+}
+
+function setTmdbKey(key) {
+  try { localStorage.setItem("anicore_tmdb_key", (key || "").trim()); } catch (e) {}
+}
+
+async function tmdbFetch(path, params = {}) {
+  const key = getTmdbKey();
+  if (!key) throw new Error("Add a TMDB API key first (Admin form → Save key)");
+  const q = new URLSearchParams({ api_key: key, language: "en-US", ...params });
+  const res = await fetch(`https://api.themoviedb.org/3${path}?${q}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.status_message || `TMDB error (${res.status})`);
+  }
+  return data;
+}
+
 async function autoFetchEpisodeMeta() {
   if (!currentEpisodeTarget) return toast("Open Manage Episodes from a title first", "error");
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 0;
+  const season = Number($("epSeason")?.value) || 1;
   if (!ep) return toast("Enter episode number first", "error");
   const btn = $("epAutoFetch");
   if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
+
   try {
-    toast("Fetching episode from Anilist…");
+    const key = getTmdbKey();
+    if (key) {
+      toast("Fetching episode from TMDB…");
+      // Search TV show
+      let tmdbId = currentEpisodeTarget.tmdb_id || state._lastTmdbId || 0;
+      if (!tmdbId) {
+        const search = await tmdbFetch("/search/tv", { query: title || "" });
+        const row = (search.results || [])[0];
+        if (!row) throw new Error("No TV show found on TMDB for that title");
+        tmdbId = row.id;
+      }
+      state._lastTmdbId = tmdbId;
+      currentEpisodeTarget.tmdb_id = tmdbId;
+
+      const data = await tmdbFetch(`/tv/${tmdbId}/season/${season}/episode/${ep}`);
+      if (data.name && $("epTitle")) $("epTitle").value = data.name;
+      if (data.overview && $("epDesc")) $("epDesc").value = data.overview;
+      if (data.runtime && $("epDuration")) $("epDuration").value = data.runtime + "m";
+      if (data.still_path && $("epThumb")) {
+        $("epThumb").value = "https://image.tmdb.org/t/p/w500" + data.still_path;
+      }
+      toast(data.name ? ("Episode: " + data.name) : "Episode details filled");
+      return;
+    }
+
+    // Fallback: Anilist (often has titles, rarely full descriptions)
+    toast("No TMDB key — trying Anilist (titles only)…");
     let anilistId = state._lastAnilistId || currentEpisodeTarget.anilist_id || 0;
     if (!anilistId) {
       try { anilistId = Number(sessionStorage.getItem("anicore-anilist-id") || 0); } catch (e) {}
     }
-
     let m = null;
     if (anilistId) {
-      const q = `
-        query ($id: Int) {
-          Media(id: $id, type: ANIME) {
-            id
-            title { romaji english }
-            duration
-            coverImage { large extraLarge }
-            streamingEpisodes { title thumbnail }
-          }
-        }`;
+      const q = `query ($id: Int) { Media(id: $id, type: ANIME) { id duration coverImage { large } streamingEpisodes { title thumbnail } } }`;
       const data = await anilistGraphQL(q, { id: anilistId });
       m = data && data.Media;
     } else {
-      const q = `
-        query ($search: String) {
-          Media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
-            id
-            title { romaji english }
-            duration
-            coverImage { large extraLarge }
-            streamingEpisodes { title thumbnail }
-          }
-        }`;
+      const q = `query ($search: String) { Media(search: $search, type: ANIME, sort: SEARCH_MATCH) { id duration coverImage { large } streamingEpisodes { title thumbnail } } }`;
       const data = await anilistGraphQL(q, { search: title || "" });
       m = data && data.Media;
     }
-    if (!m) throw new Error("Anime not found on Anilist");
-
+    if (!m) throw new Error("Not found. Add a free TMDB API key for episode name & description.");
     state._lastAnilistId = m.id;
-    currentEpisodeTarget.anilist_id = m.id;
-    try { sessionStorage.setItem("anicore-anilist-id", String(m.id)); } catch (e) {}
-
     const streams = m.streamingEpisodes || [];
     const hit = streams[ep - 1] || null;
-    const poster = (m.coverImage && (m.coverImage.extraLarge || m.coverImage.large)) || "";
-
     if (hit && hit.title && $("epTitle")) $("epTitle").value = hit.title;
-    else if ($("epTitle") && !$("epTitle").value) $("epTitle").value = "Episode " + ep;
-
     if (m.duration && $("epDuration")) $("epDuration").value = m.duration + "m";
     if (hit && hit.thumbnail && $("epThumb")) $("epThumb").value = hit.thumbnail;
-    else if (poster && $("epThumb") && !$("epThumb").value) $("epThumb").value = poster;
-
-    if ($("epDesc") && !$("epDesc").value && hit && hit.title) {
-      $("epDesc").value = hit.title;
-    }
-
-    toast(hit ? ("Episode info: " + hit.title) : ("Duration set (no ep title on Anilist for #" + ep + ")"));
+    toast(hit
+      ? ("Title only (Anilist). For description, add TMDB API key.")
+      : "Limited data. Add TMDB API key for full episode name & description.");
   } catch (err) {
     toast(err.message || "Could not fetch episode", "error");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Auto-fetch ep name, duration and description"; }
   }
 }
-
 
 // --- Theme buttons ---
 $('themeToggle')?.addEventListener('click', toggleTheme);
@@ -2443,6 +2472,14 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 // Media uploads + auto-fetch
 $("aAutoFetch")?.addEventListener("click", autoFetchAnimeMeta);
 $("epAutoFetch")?.addEventListener("click", autoFetchEpisodeMeta);
+(function wireMetaKey() {
+  const input = $("metaApiKey");
+  if (input) input.value = getTmdbKey();
+  $("metaApiKeySave")?.addEventListener("click", () => {
+    setTmdbKey(input?.value || "");
+    toast(getTmdbKey() ? "TMDB API key saved on this device" : "API key cleared");
+  });
+})();
 
 
 

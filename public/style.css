@@ -2838,3 +2838,13 @@ body.theater #page-video .player-wrap {
 html[data-theme="light"] {
   color-scheme: dark;
 }
+
+.meta-key-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+.meta-key-row input {
+  flex: 1;
+}
