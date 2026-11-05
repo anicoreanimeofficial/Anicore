@@ -870,6 +870,16 @@ def add_movie(data: MovieData, admin=Depends(require_uploader)):
     return {"message": "Movie added", "id": str(item.get("_id", ""))}
 
 
+def _inherit_season_thumb(coll, id, ep):
+    """New episode with no thumbnail of its own gets the season thumbnail, if one is set."""
+    if (ep.get("thumbnail") or "").strip():
+        return
+    doc = coll.find_one({"_id": object_id(id)}, {"season_thumbnails": 1}) or {}
+    thumb = (doc.get("season_thumbnails") or {}).get(str(int(ep.get("season") or 1)))
+    if thumb:
+        ep["thumbnail"] = thumb
+
+
 @app.post("/api/admin/anime/{id}/episodes")
 def add_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=Depends(require_uploader)):
     ep = data.model_dump()
@@ -881,6 +891,7 @@ def add_episode(id: str, data: EpisodeData, background: BackgroundTasks, admin=D
     for k, v in (ep.get("quality_links") or {}).items():
         cleaned_links[k] = valid_video_url(v)
     ep["quality_links"] = cleaned_links
+    _inherit_season_thumb(db.anime, id, ep)
     result = db.anime.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="Anime not found")
@@ -904,6 +915,7 @@ def add_tv_episode(id: str, data: EpisodeData, background: BackgroundTasks, admi
     for k, v in (ep.get("quality_links") or {}).items():
         cleaned_links[k] = valid_video_url(v)
     ep["quality_links"] = cleaned_links
+    _inherit_season_thumb(db.tv_shows, id, ep)
     result = db.tv_shows.update_one({"_id": object_id(id)}, {"$push": {"episodes": ep}})
     if not result.matched_count:
         raise HTTPException(status_code=404, detail="TV show not found")
@@ -2126,7 +2138,7 @@ async def upload_image(request: Request, file: UploadFile = File(...)):
 
 @app.post("/api/admin/{type}/{id}/season-thumbnail")
 def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_uploader)):
-    """Store a season-level thumbnail and apply to episodes in that season missing one."""
+    """Store a season-level thumbnail and apply it to every episode in that season (overwrite=false keeps episodes that already have their own)."""
     if type not in ("anime", "tv_show"):
         raise HTTPException(status_code=400, detail="Only series support seasons")
     season = int(data.get("season") or 1)
@@ -2140,9 +2152,12 @@ def set_season_thumbnail(type: str, id: str, data: dict, admin=Depends(require_u
         raise HTTPException(status_code=404, detail="Not found")
     season_map = dict(doc.get("season_thumbnails") or {})
     season_map[str(season)] = thumb
+    overwrite = data.get("overwrite", True) is not False
     episodes = doc.get("episodes") or []
     for ep in episodes:
-        if int(ep.get("season") or 1) == season and not (ep.get("thumbnail") or "").strip():
+        if int(ep.get("season") or 1) != season:
+            continue
+        if overwrite or not (ep.get("thumbnail") or "").strip():
             ep["thumbnail"] = thumb
     coll.update_one(
         {"_id": oid},
