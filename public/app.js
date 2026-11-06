@@ -1683,18 +1683,40 @@ function clearPlayer() {
 }
 
 
+function tgViewportSize() {
+  const vv = window.visualViewport;
+  const w = Math.round((vv && vv.width) || window.innerWidth);
+  const h = Math.round((TG && TG.isFullscreen ? window.innerHeight : 0) || (vv && vv.height) || window.innerHeight);
+  return { w, h };
+}
+
 function updateTgRotate() {
   // If the phone is still portrait while the player is "full", rotate the player 90deg
   // with CSS so the video really covers the whole screen (Telegram can't force landscape).
   const expanded = document.body.classList.contains("tg-player-expanded");
-  const portrait = window.innerHeight > window.innerWidth;
-  // Always lands in landscape, whatever the phone's auto-rotate / orientation lock is set to.
-  document.body.classList.toggle("tg-rotate", expanded && portrait);
+  const { w, h } = tgViewportSize();
+  // Exact pixel sizes (vh/dvh differ between Telegram clients and were leaving gaps)
+  const root = document.documentElement.style;
+  root.setProperty("--tg-fs-w", w + "px");
+  root.setProperty("--tg-fs-h", h + "px");
+  document.body.classList.toggle("tg-rotate", expanded && h > w);
+}
+
+function tgTryLockLandscape(on) {
+  // Real landscape when the WebView allows it; CSS rotate stays as the fallback.
+  try {
+    const so = screen.orientation;
+    if (!so) return;
+    if (on) { so.lock && so.lock("landscape").catch(() => {}); }
+    else { so.unlock && so.unlock(); }
+  } catch (e) {}
 }
 
 let tgRotateWired = false;
 function setTgPlayerExpanded(on) {
-  document.body.classList.toggle("tg-player-expanded", !!on);
+  on = !!on;
+  const was = document.body.classList.contains("tg-player-expanded");
+  document.body.classList.toggle("tg-player-expanded", on);
   let exit = document.getElementById("tgPlayerExit");
   if (on) {
     if (!exit) {
@@ -1706,17 +1728,22 @@ function setTgPlayerExpanded(on) {
       exit.addEventListener("click", () => setTgPlayerExpanded(false));
       document.body.appendChild(exit);
     }
-    try { if (TG && TG.requestFullscreen) TG.requestFullscreen(); } catch (e) {}
+    if (!was) {
+      try { if (TG && TG.requestFullscreen && !TG.isFullscreen) TG.requestFullscreen(); } catch (e) {}
+      tgTryLockLandscape(true);
+    }
     if (!tgRotateWired) {
       tgRotateWired = true;
       window.addEventListener("resize", updateTgRotate);
-      window.addEventListener("orientationchange", () => setTimeout(updateTgRotate, 250));
+      window.visualViewport && window.visualViewport.addEventListener("resize", updateTgRotate);
+      window.addEventListener("orientationchange", () => { setTimeout(updateTgRotate, 150); setTimeout(updateTgRotate, 500); });
     }
     updateTgRotate();
-    setTimeout(updateTgRotate, 350);
+    [100, 300, 700, 1200].forEach((ms) => setTimeout(updateTgRotate, ms));
   } else {
     exit?.remove();
     document.body.classList.remove("tg-rotate");
+    tgTryLockLandscape(false);
     try { if (TG && TG.exitFullscreen && TG.isFullscreen) TG.exitFullscreen(); } catch (e) {}
   }
 }
@@ -1834,8 +1861,8 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     const mountIframe = () => {
       wrap.innerHTML = '';
       const iframe = document.createElement('iframe');
-      iframe.allowFullscreen = !isTelegram;
-      iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write' + (isTelegram ? '' : '; fullscreen'));
+      iframe.allowFullscreen = true;
+      iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen');
       iframe.setAttribute('referrerpolicy', 'origin');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
@@ -3290,6 +3317,7 @@ function initTelegramWebApp() {
       try {
         const h = TG.viewportStableHeight || TG.viewportHeight || window.innerHeight;
         document.documentElement.style.setProperty("--tg-viewport-height", h + "px");
+        document.documentElement.style.setProperty("--tg-content-top", ((TG.safeAreaInset?.top || 0) + (TG.contentSafeAreaInset?.top || 0)) + "px");
         document.documentElement.style.setProperty("--tg-safe-top", (TG.safeAreaInset?.top || 0) + "px");
         document.documentElement.style.setProperty("--tg-safe-bottom", (TG.safeAreaInset?.bottom || TG.contentSafeAreaInset?.bottom || 0) + "px");
       } catch (e) {}
@@ -3298,9 +3326,15 @@ function initTelegramWebApp() {
     TG.onEvent && TG.onEvent("viewportChanged", applyVp);
     try {
       TG.onEvent && TG.onEvent("fullscreenChanged", () => {
-        if (TG.isFullscreen) document.body.classList.add("tg-player-expanded");
-        else document.body.classList.remove("tg-player-expanded");
+        // Telegram left fullscreen by itself (system back / swipe) -> leave player-expanded too
+        if (!TG.isFullscreen && document.body.classList.contains("tg-player-expanded")) {
+          setTgPlayerExpanded(false);
+        } else {
+          [50, 300, 800].forEach((ms) => setTimeout(updateTgRotate, ms));
+        }
       });
+      TG.onEvent && TG.onEvent("safeAreaChanged", applyVp);
+      TG.onEvent && TG.onEvent("contentSafeAreaChanged", applyVp);
     } catch (e) {}
 
     console.log("[anicore] Telegram WebApp", TG.platform, TG.version);
