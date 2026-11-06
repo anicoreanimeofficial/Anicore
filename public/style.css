@@ -2968,3 +2968,103 @@ body.tg-webapp .app-header {
 body.tg-webapp .splash {
   z-index: 20000;
 }
+
+.share-url-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  word-break: break-all;
+  opacity: 0.75;
+  cursor: pointer;
+}
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+
+/* ---- Telegram video: larger player + true expand ---- */
+body.tg-webapp #page-video .player-wrap {
+  width: 100vw;
+  max-width: none;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  aspect-ratio: 16 / 9;
+  max-height: none;
+}
+
+body.tg-webapp #page-video .video-header {
+  padding: 0 14px;
+}
+
+body.tg-webapp #page-video .video-nav,
+body.tg-webapp #page-video .ep-list,
+body.tg-webapp #page-video .player-tools {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+/* Full-screen cover mode inside Telegram */
+body.tg-webapp.tg-player-expanded {
+  overflow: hidden !important;
+}
+body.tg-webapp.tg-player-expanded .bottom-nav,
+body.tg-webapp.tg-player-expanded .app-header,
+body.tg-webapp.tg-player-expanded #sidebar,
+body.tg-webapp.tg-player-expanded .side-nav {
+  display: none !important;
+}
+body.tg-webapp.tg-player-expanded #page-video .video-header,
+body.tg-webapp.tg-player-expanded #page-video .video-nav,
+body.tg-webapp.tg-player-expanded #page-video .ep-list,
+body.tg-webapp.tg-player-expanded #page-video .player-tools,
+body.tg-webapp.tg-player-expanded #page-video #playerFallback {
+  display: none !important;
+}
+body.tg-webapp.tg-player-expanded #page-video {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+body.tg-webapp.tg-player-expanded #page-video .player-wrap {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: var(--tg-viewport-height, 100dvh) !important;
+  max-height: none !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  z-index: 12000 !important;
+  aspect-ratio: auto !important;
+  background: #000 !important;
+}
+body.tg-webapp.tg-player-expanded #page-video .player-wrap video,
+body.tg-webapp.tg-player-expanded #page-video .player-wrap iframe {
+  object-fit: contain;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Exit expand control */
+.tg-player-exit {
+  display: none;
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top, 0px));
+  right: 12px;
+  z-index: 12010;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 14px;
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  backdrop-filter: blur(10px);
+}
+body.tg-webapp.tg-player-expanded .tg-player-exit {
+  display: inline-flex;
+}

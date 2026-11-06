@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v50';
+const APP_JS_VERSION = 'v53';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -386,8 +386,10 @@ function showPage(page) {
 
   // Leaving video → cleanup
   if (state.page === 'video' && page !== 'video') {
+    setTgPlayerExpanded(false);
     clearPlayer();
     videoContext = null;
+    document.querySelectorAll('.tg-expand-btn').forEach((b) => b.remove());
   }
   if (page === 'video') hideResumeBar();
   else if (state.page === 'video' && state.user) setTimeout(loadContinueWatching, 400);
@@ -904,7 +906,14 @@ function updateAuthUI() {
 async function checkUser() {
   try {
     const res = await api('/api/auth/me');
-    state.user = res.authenticated ? { email: res.email, role: res.role || 'user', display_name: res.display_name || '', avatar: (res.prefs || {}).avatar || '' } : null;
+    state.user = res.authenticated ? {
+      email: res.email,
+      role: res.role || 'user',
+      display_name: res.display_name || '',
+      avatar: (res.prefs || {}).avatar || '',
+      telegram_id: res.telegram_id || '',
+      telegram_username: res.telegram_username || '',
+    } : null;
     applyBackground(res.authenticated ? (res.prefs || {}).bg_image : '');
   } catch { state.user = null; }
   updateAuthUI();
@@ -1000,11 +1009,20 @@ $('sideLogout')?.addEventListener('click', doLogout);
 // --- Profile card (avatar + display name, Crunchyroll style) ---
 
 function profileName(u = state.user) {
-  return (u?.display_name || '').trim() || (u?.email || '').split('@')[0] || 'User';
+  if (u?.telegram_username) return '@' + String(u.telegram_username).replace(/^@/, '');
+  const dn = (u?.display_name || '').trim();
+  if (dn) return dn;
+  const email = (u?.email || '');
+  // hide internal tg_…@telegram.local
+  if (email.endsWith('@telegram.local')) return 'Telegram user';
+  return email.split('@')[0] || 'User';
 }
 
 function safeAvatar(url) {
-  return typeof url === 'string' && /^(https:\/\/|\/api\/users\/me\/avatar)/.test(url) ? url : '';
+  if (typeof url !== 'string' || !url) return '';
+  if (url.startsWith('/api/users/me/avatar')) return url;
+  if (/^https:\/\//i.test(url)) return url;
+  return '';
 }
 
 function avatarHtml(u = state.user, cls = '') {
@@ -1028,6 +1046,7 @@ function renderProfileCard(editing = false) {
       </button>
       <input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp" hidden>
       <h3 class="profile-name">${esc(profileName(u))}${isAdmin ? ' <span class="role-badge">Admin</span>' : (u.role === 'uploader' ? ' <span class="role-badge">Uploader</span>' : '')}</h3>
+      ${u.telegram_id ? `<p class="muted profile-tg-sub">Telegram account</p>` : (u.email && !String(u.email).endsWith('@telegram.local') ? `<p class="muted profile-tg-sub">${esc(u.email)}</p>` : '')}
       <p class="muted profile-email">${esc(u.email)}</p>
       ${editing ? `
         <form id="profileEditForm" class="profile-edit stack">
@@ -1262,6 +1281,41 @@ function recapHtml(item) {
   return item.ai_recap ? `<div class="recap"><strong>🤖 AI Recap</strong>${esc(item.ai_recap)}</div>` : '';
 }
 
+
+function contentShareUrl(type, id) {
+  const base = (location.origin || "https://anicore-f6f4.onrender.com").replace(/\/$/, "");
+  return `${base}/#/detail/${type}/${id}`;
+}
+
+async function shareContent(type, id, title) {
+  const url = contentShareUrl(type, id);
+  const text = title ? `${title} on ANICORE` : "Watch on ANICORE";
+  try {
+    if (window.Telegram && Telegram.WebApp && Telegram.WebApp.openTelegramLink) {
+      // Prefer native share sheet when available
+      if (navigator.share) {
+        await navigator.share({ title: text, text, url });
+        toast("Shared");
+        return;
+      }
+    }
+    if (navigator.share) {
+      await navigator.share({ title: text, text, url });
+      toast("Shared");
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === "AbortError") return;
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("Link copied");
+  } catch (e) {
+    // fallback prompt
+    window.prompt("Copy this link:", url);
+  }
+}
+
 function buildDetailHtml(type, item, comments) {
   const banner = safeUrl(item.banner) || safeUrl(item.poster);
   const genres = Array.isArray(item.genres) && item.genres.length ? item.genres.join(', ') : '';
@@ -1283,7 +1337,9 @@ function buildDetailHtml(type, item, comments) {
     ${episodesHtml(item.episodes, type, item._id, item)}
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
+      ${state.user?.role === 'admin' ? `<button class="outline" id="shareBtn" type="button">🔗 Share link</button>` : ''}
     </div>
+    ${state.user?.role === 'admin' ? `<p class="hint share-url-hint" id="shareUrlHint">${esc(contentShareUrl(type, item._id))}</p>` : ''}
     <h3>Comments</h3>
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
@@ -1309,6 +1365,18 @@ function bindDetailEvents(type, item, container) {
       if (!item.episodes) return;
       openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster, 0, item.season_thumbnails || {});
     });
+  });
+
+  container.querySelector('#shareBtn')?.addEventListener('click', () => {
+    shareContent(type, item._id, item.title);
+  });
+  container.querySelector('#shareUrlHint')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(contentShareUrl(type, item._id));
+      toast("Link copied");
+    } catch (e) {
+      window.prompt("Copy this link:", contentShareUrl(type, item._id));
+    }
   });
 
   container.querySelector('#wlBtn')?.addEventListener('click', async (e) => {
@@ -1565,6 +1633,62 @@ function clearPlayer() {
   wrap.innerHTML = '';
 }
 
+
+function setTgPlayerExpanded(on) {
+  document.body.classList.toggle("tg-player-expanded", !!on);
+  let exit = document.getElementById("tgPlayerExit");
+  if (on) {
+    if (!exit) {
+      exit = document.createElement("button");
+      exit.type = "button";
+      exit.id = "tgPlayerExit";
+      exit.className = "tg-player-exit";
+      exit.textContent = "✕ Exit full";
+      exit.addEventListener("click", () => setTgPlayerExpanded(false));
+      document.body.appendChild(exit);
+    }
+    try {
+      if (TG && TG.requestFullscreen) TG.requestFullscreen();
+    } catch (e) {}
+  } else {
+    exit?.remove();
+    try {
+      if (TG && TG.exitFullscreen) TG.exitFullscreen();
+    } catch (e) {}
+  }
+}
+
+function wireTgVideoFullscreen(video, wrap) {
+  if (!isTelegram || !video) return;
+  // Double-tap player → expand to full Telegram viewport
+  let lastTap = 0;
+  wrap.addEventListener("click", () => {
+    const now = Date.now();
+    if (now - lastTap < 320) setTgPlayerExpanded(true);
+    lastTap = now;
+  });
+  // Native fullscreen when user presses the fullscreen control
+  video.addEventListener("webkitbeginfullscreen", () => setTgPlayerExpanded(true));
+  video.addEventListener("webkitendfullscreen", () => setTgPlayerExpanded(false));
+  const fsBtn = document.createElement("button");
+  fsBtn.type = "button";
+  fsBtn.className = "outline small tg-expand-btn";
+  fsBtn.textContent = "⛶ Full screen";
+  fsBtn.style.margin = "8px 14px";
+  fsBtn.addEventListener("click", () => {
+    setTgPlayerExpanded(true);
+    try {
+      if (video.requestFullscreen) video.requestFullscreen();
+      else if (video.webkitEnterFullscreen) video.webkitEnterFullscreen();
+    } catch (e) {}
+  });
+  // Insert after player wrap if not present
+  if (!document.querySelector(".tg-expand-btn")) {
+    wrap.parentNode?.insertBefore(fsBtn, wrap.nextSibling);
+  }
+}
+
+
 async function mountPlayer(url, posterSrc = '', startPercent = 0) {
   const wrap = $('playerWrap');
   if (!wrap) return;
@@ -1626,6 +1750,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     }
     wrap.appendChild(video);
     attachPlayerAutomation(video, wrap);
+    wireTgVideoFullscreen(video, wrap);
     // Browsers can reject autoplay; the user can still press play.
     video.play?.()?.catch?.(() => {});
   } else {
@@ -1637,6 +1762,15 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       iframe.setAttribute('referrerpolicy', 'origin');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
+      if (isTelegram) {
+        const fsBtn = document.createElement("button");
+        fsBtn.type = "button";
+        fsBtn.className = "outline small tg-expand-btn";
+        fsBtn.textContent = "⛶ Full screen";
+        fsBtn.style.margin = "8px 14px";
+        fsBtn.addEventListener("click", () => setTgPlayerExpanded(true));
+        if (!document.querySelector(".tg-expand-btn")) wrap.parentNode?.insertBefore(fsBtn, wrap.nextSibling);
+      }
     };
 
     if (posterSrc && !playerPref.get('autoplayNext')) {
@@ -3072,6 +3206,12 @@ function initTelegramWebApp() {
     };
     applyVp();
     TG.onEvent && TG.onEvent("viewportChanged", applyVp);
+    try {
+      TG.onEvent && TG.onEvent("fullscreenChanged", () => {
+        if (TG.isFullscreen) document.body.classList.add("tg-player-expanded");
+        else document.body.classList.remove("tg-player-expanded");
+      });
+    } catch (e) {}
 
     console.log("[anicore] Telegram WebApp", TG.platform, TG.version);
   } catch (err) {
@@ -3110,17 +3250,35 @@ wireSeriesPage();
 
   await checkUser();
 
-  // Telegram auto-login when opened as Mini App
+  // Telegram login + multi-account switch
   if (isTelegram && TG && TG.initData) {
     try {
-      const me = state.user;
-      if (!me) {
+      const tgUser = (TG.initDataUnsafe && TG.initDataUnsafe.user) || {};
+      const tgId = String(tgUser.id || "");
+      const currentTg = String(state.user?.telegram_id || "");
+      const needLogin = !state.user || (tgId && currentTg && tgId !== currentTg) || (tgId && !currentTg && state.user?.email?.endsWith?.("@telegram.local") === false) || (tgId && !currentTg);
+      // Always re-auth when Telegram user id differs, or when not logged in
+      const mustSwitch = !state.user || (tgId && currentTg !== tgId);
+      if (mustSwitch) {
+        if (state.user && currentTg && tgId && currentTg !== tgId) {
+          try { await api("/api/auth/logout", { method: "POST" }); } catch (e) {}
+          state.user = null;
+        }
         await api("/api/auth/telegram", {
           method: "POST",
           body: JSON.stringify({ initData: TG.initData }),
         });
         await checkUser();
-        if (state.user) toast("Signed in with Telegram");
+        // Apply live TG photo/username immediately if API returned them via me
+        if (tgUser.photo_url && state.user) state.user.avatar = tgUser.photo_url;
+        if (tgUser.username && state.user) {
+          state.user.telegram_username = tgUser.username;
+          state.user.display_name = "@" + tgUser.username;
+        } else if (tgUser.first_name && state.user) {
+          state.user.display_name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ");
+        }
+        updateAuthUI();
+        if (state.user) toast("Signed in as " + profileName(state.user));
       }
     } catch (err) {
       console.warn("[tg auth]", err.message || err);
