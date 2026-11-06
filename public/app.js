@@ -1798,11 +1798,51 @@ function wireTgVideoFullscreen(video, wrap) {
 }
 
 
+// --- Open links in the phone's real browser (Telegram only) ---
+function openExternal(url) {
+  try {
+    if (isTelegram && TG && TG.openLink) {
+      TG.openLink(url, { try_browser: "chrome" });
+      return;
+    }
+  } catch (e) {}
+  window.open(url, "_blank", "noopener");
+}
+
+document.addEventListener("click", (e) => {
+  const a = e.target.closest && e.target.closest("#playerOpenLink");
+  if (!a || !isTelegram) return;
+  e.preventDefault();
+  openExternal(a.href);
+});
+
+// "Watch in browser" button under the player (Telegram only)
+function setWatchInBrowserBtn(url) {
+  if (!isTelegram) return;
+  const wrap = $("playerWrap");
+  if (!wrap) return;
+  let btn = document.getElementById("watchInBrowserBtn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "watchInBrowserBtn";
+    btn.className = "outline small";
+    btn.style.margin = "8px 14px";
+    btn.textContent = "🌐 Watch in browser";
+    btn.addEventListener("click", () => {
+      if (btn.dataset.url) openExternal(btn.dataset.url);
+    });
+    wrap.parentNode?.insertBefore(btn, wrap.nextSibling);
+  }
+  btn.dataset.url = url;
+}
+
 async function mountPlayer(url, posterSrc = '', startPercent = 0) {
   const wrap = $('playerWrap');
   if (!wrap) return;
 
   clearPlayer();
+  try { setWatchInBrowserBtn(isDirectVideo(url) ? url : normalizeEmbedUrl(url)); } catch (e) {}
 
   const fallback = $('playerFallback');
   const openLink = $('playerOpenLink');
