@@ -1683,6 +1683,11 @@ function clearPlayer() {
 }
 
 
+// Telegram draws its own overlay (Back/Close, collapse, menu) in native fullscreen and apps can't hide it.
+// true  = true edge-to-edge fullscreen (Telegram overlay stays visible)
+// false = no Telegram overlay, but the normal Telegram header bar stays on top
+const TG_NATIVE_FULLSCREEN = true;
+
 function tgViewportSize() {
   const vv = window.visualViewport;
   const w = Math.round((vv && vv.width) || window.innerWidth);
@@ -1729,7 +1734,7 @@ function setTgPlayerExpanded(on) {
       document.body.appendChild(exit);
     }
     if (!was) {
-      try { if (TG && TG.requestFullscreen && !TG.isFullscreen) TG.requestFullscreen(); } catch (e) {}
+      try { if (TG_NATIVE_FULLSCREEN && TG && TG.requestFullscreen && !TG.isFullscreen) TG.requestFullscreen(); } catch (e) {}
       tgTryLockLandscape(true);
     }
     if (!tgRotateWired) {
@@ -1738,9 +1743,11 @@ function setTgPlayerExpanded(on) {
       window.visualViewport && window.visualViewport.addEventListener("resize", updateTgRotate);
       window.addEventListener("orientationchange", () => { setTimeout(updateTgRotate, 150); setTimeout(updateTgRotate, 500); });
     }
+    try { TG && TG.BackButton && TG.BackButton.hide(); } catch (e) {}
     updateTgRotate();
     [100, 300, 700, 1200].forEach((ms) => setTimeout(updateTgRotate, ms));
   } else {
+    try { window.tgSyncBack && window.tgSyncBack(); } catch (e) {}
     exit?.remove();
     document.body.classList.remove("tg-rotate");
     tgTryLockLandscape(false);
@@ -3302,6 +3309,7 @@ function initTelegramWebApp() {
     window.tgSyncBack = () => {
       if (!bb) return;
       try {
+        if (document.body.classList.contains("tg-player-expanded")) { bb.hide(); return; }
         if (state.page && state.page !== "home") bb.show();
         else bb.hide();
       } catch (e) {}
