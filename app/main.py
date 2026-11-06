@@ -679,12 +679,15 @@ def me(request: Request):
     user = get_current_user(request)
     if not user:
         return {"authenticated": False}
+    prefs = dict(user.get("prefs") or {})
     return {
         "authenticated": True,
         "email": user["email"],
         "role": user.get("role", "user"),
         "display_name": user.get("display_name") or "",
-        "prefs": user.get("prefs") or {},
+        "telegram_id": str(user.get("telegram_id") or ""),
+        "telegram_username": user.get("telegram_username") or "",
+        "prefs": prefs,
     }
 
 
@@ -2130,31 +2133,39 @@ def auth_telegram(data: TelegramAuthData, response: Response):
     username = (tg_user.get("username") or "").strip()
     first = (tg_user.get("first_name") or "").strip()
     last = (tg_user.get("last_name") or "").strip()
-    display = (first + (" " + last if last else "")).strip() or username or f"tg_{tg_id}"
+    photo = (tg_user.get("photo_url") or "").strip()
+    # Prefer @username, then first name
+    display = (f"@{username}" if username else "") or (first + (" " + last if last else "")).strip() or f"User {tg_id}"
+    if display.startswith("@@"):
+        display = display[1:]
     email = f"tg_{tg_id}@telegram.local"
 
     user = db.users.find_one({"$or": [{"telegram_id": tg_id}, {"email": email}]})
+    prefs_update = {}
+    if photo.startswith("https://"):
+        prefs_update["prefs.avatar"] = photo
+
     if not user:
-        user = {
+        doc = {
             "email": email,
             "password_hash": hash_password(f"tg:{tg_id}:{TELEGRAM_BOT_TOKEN[:8]}"),
             "role": "user",
             "telegram_id": tg_id,
             "telegram_username": username,
             "display_name": display,
+            "prefs": {"avatar": photo} if photo.startswith("https://") else {},
             "created_at": utc_now(),
         }
-        ins = db.users.insert_one(user)
-        user["_id"] = ins.inserted_id
+        ins = db.users.insert_one(doc)
+        user = db.users.find_one({"_id": ins.inserted_id})
     else:
-        db.users.update_one(
-            {"_id": user["_id"]},
-            {"$set": {
-                "telegram_id": tg_id,
-                "telegram_username": username,
-                "display_name": user.get("display_name") or display,
-            }},
-        )
+        updates = {
+            "telegram_id": tg_id,
+            "telegram_username": username,
+            "display_name": display,  # always sync TG name/username for this account
+        }
+        updates.update(prefs_update)
+        db.users.update_one({"_id": user["_id"]}, {"$set": updates})
         user = db.users.find_one({"_id": user["_id"]})
 
     if user.get("banned"):
@@ -2162,11 +2173,15 @@ def auth_telegram(data: TelegramAuthData, response: Response):
 
     token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
     response.set_cookie(**get_cookie_options(), value=token)
+    avatar = ((user.get("prefs") or {}).get("avatar") or photo or "")
     return {
         "message": "Logged in with Telegram",
         "role": user.get("role", "user"),
         "email": user["email"],
         "display_name": user.get("display_name") or display,
+        "telegram_id": tg_id,
+        "telegram_username": username,
+        "avatar": avatar,
     }
 
 
