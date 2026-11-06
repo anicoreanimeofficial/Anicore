@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 
-from .config import APP_NAME, ENABLE_AI_RECAPS, WEBHOOK_URL
+from .config import APP_NAME, ENABLE_AI_RECAPS, TELEGRAM_BOT_TOKEN, WEBHOOK_URL
 from . import database
 from .database import close_database, connect_database
 from .security import (
@@ -2063,6 +2063,111 @@ def announce(data: AnnounceData, admin=Depends(require_admin)):
 
 
 # --- Health Check ---
+
+
+
+
+# --- Telegram Mini App auth ---
+
+class TelegramAuthData(BaseModel):
+    initData: str = Field(min_length=10, max_length=4096)
+
+
+def _verify_telegram_init_data(init_data: str) -> dict:
+    """Validate Telegram WebApp initData per https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app"""
+    import hashlib
+    import hmac
+    from urllib.parse import parse_qsl
+
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Telegram login is not configured")
+
+    parsed = dict(parse_qsl(init_data, keep_blank_values=True))
+    received_hash = parsed.pop("hash", None)
+    if not received_hash:
+        raise HTTPException(status_code=401, detail="Invalid Telegram data")
+
+    check_list = [f"{k}={v}" for k, v in sorted(parsed.items())]
+    data_check_string = "\n".join(check_list)
+    secret_key = hmac.new(b"WebAppData", TELEGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calculated, received_hash):
+        raise HTTPException(status_code=401, detail="Telegram data check failed")
+
+    # auth_date freshness (1 day)
+    try:
+        auth_date = int(parsed.get("auth_date") or 0)
+        if auth_date and (utc_now().timestamp() - auth_date) > 86400:
+            raise HTTPException(status_code=401, detail="Telegram data expired — reopen the app")
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    user_raw = parsed.get("user")
+    if not user_raw:
+        raise HTTPException(status_code=401, detail="No Telegram user")
+    import json as _json
+    try:
+        user = _json.loads(user_raw)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Bad Telegram user payload")
+    return user
+
+
+@app.get("/api/telegram/config")
+def telegram_config():
+    return {"enabled": bool(TELEGRAM_BOT_TOKEN)}
+
+
+@app.post("/api/auth/telegram")
+def auth_telegram(data: TelegramAuthData, response: Response):
+    tg_user = _verify_telegram_init_data(data.initData)
+    tg_id = str(tg_user.get("id") or "")
+    if not tg_id:
+        raise HTTPException(status_code=401, detail="Missing Telegram id")
+
+    username = (tg_user.get("username") or "").strip()
+    first = (tg_user.get("first_name") or "").strip()
+    last = (tg_user.get("last_name") or "").strip()
+    display = (first + (" " + last if last else "")).strip() or username or f"tg_{tg_id}"
+    email = f"tg_{tg_id}@telegram.local"
+
+    user = db.users.find_one({"$or": [{"telegram_id": tg_id}, {"email": email}]})
+    if not user:
+        user = {
+            "email": email,
+            "password_hash": hash_password(f"tg:{tg_id}:{TELEGRAM_BOT_TOKEN[:8]}"),
+            "role": "user",
+            "telegram_id": tg_id,
+            "telegram_username": username,
+            "display_name": display,
+            "created_at": utc_now(),
+        }
+        ins = db.users.insert_one(user)
+        user["_id"] = ins.inserted_id
+    else:
+        db.users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "telegram_id": tg_id,
+                "telegram_username": username,
+                "display_name": user.get("display_name") or display,
+            }},
+        )
+        user = db.users.find_one({"_id": user["_id"]})
+
+    if user.get("banned"):
+        raise HTTPException(status_code=403, detail="This account has been suspended.")
+
+    token = create_session_token(str(user["_id"]), user["email"], user.get("role", "user"))
+    response.set_cookie(**get_cookie_options(), value=token)
+    return {
+        "message": "Logged in with Telegram",
+        "role": user.get("role", "user"),
+        "email": user["email"],
+        "display_name": user.get("display_name") or display,
+    }
 
 
 @app.get("/health")

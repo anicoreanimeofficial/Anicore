@@ -29,3 +29,5 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 # Feature Flags
 ENABLE_AI_RECAPS = os.getenv("ENABLE_AI_RECAPS", "false").lower() == "true"
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "")  # For external notifications
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
