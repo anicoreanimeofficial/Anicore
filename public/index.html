@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=54">
+  <link rel="stylesheet" href="/assets/style.css?v=56">
 <script>
   (function(){
     try {
@@ -460,7 +460,9 @@
           </div>
           <div class="player-wrap" id="playerWrap"></div>
           <div class="player-tools" id="playerTools">
-            
+            <label class="pt-item pt-check"><input type="checkbox" data-pref="autoSkipIntro"> Auto skip intro</label>
+            <label class="pt-item pt-check"><input type="checkbox" data-pref="autoSkipOutro"> Auto skip outro</label>
+            <p id="skipNote" class="muted hidden" style="font-size:12px;margin:6px 0 0">Skip buttons only work with direct video links (.mp4 / .m3u8), not embedded players.</p>
           </div>
           <div id="playerFallback" class="hidden">
             <p class="muted">This source may block embedding.
@@ -539,6 +541,7 @@
             <input id="epIntroEnd" placeholder="Intro end (e.g. 1:30)" inputmode="text">
           </div>
           <input id="epOutroStart" placeholder="Outro / credits start (e.g. 22:10)" inputmode="text">
+          <label class="check-row"><input type="checkbox" id="epIntroAllSeason"> Use these intro times for ALL episodes of this season</label>
           <textarea id="epSubs" rows="3" placeholder="Subtitles, one per line: Label|lang|https://.../file.vtt&#10;English|en|https://example.com/ep1-en.vtt"></textarea>
         </details>
         <button type="submit" class="primary block" id="epSubmit">Add Episode</button>
@@ -571,7 +574,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=54"></script>
-  <script src="/assets/features.js?v=54"></script>
+  <script src="/assets/app.js?v=56"></script>
+  <script src="/assets/features.js?v=56"></script>
 </body>
 </html>

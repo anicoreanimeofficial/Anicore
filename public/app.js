@@ -1619,6 +1619,54 @@ function attachPlayerAutomation(video, wrap) {
   video.addEventListener('ended', () => {
     try { saveWatchProgress(100); } catch (e) { /* noop */ }
   });
+
+  // ---- Skip intro / outro (direct video links only) ----
+  const ep = videoContext && videoContext.episodes[videoContext.currentIndex];
+  if (!ep) return;
+  const introEnd = Number.isFinite(Number(ep.intro_end)) && ep.intro_end !== null ? Number(ep.intro_end) : null;
+  const introStart = Number.isFinite(Number(ep.intro_start)) && ep.intro_start !== null ? Number(ep.intro_start) : 0;
+  const outroStart = Number.isFinite(Number(ep.outro_start)) && ep.outro_start !== null ? Number(ep.outro_start) : null;
+  if (introEnd === null && outroStart === null) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'player-skip hidden';
+  wrap.appendChild(btn);
+  let mode = '';
+  let autoIntroDone = false;
+  let autoOutroDone = false;
+  const hasNext = () => nextPlayableIndex() !== -1;
+
+  const skipIntro = () => { video.currentTime = introEnd; };
+  const skipOutro = () => {
+    if (hasNext()) { advanced = true; playNextEpisode(); }
+    else if (video.duration) video.currentTime = Math.max(0, video.duration - 0.25);
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (mode === 'intro') skipIntro(); else if (mode === 'outro') skipOutro();
+  });
+
+  video.addEventListener('timeupdate', () => {
+    const t = video.currentTime;
+    let next = '';
+    if (introEnd !== null && introEnd > introStart && t >= introStart && t < introEnd - 0.5) next = 'intro';
+    else if (outroStart !== null && t >= outroStart && (!video.duration || t < video.duration - 0.5)) next = 'outro';
+
+    if (next === 'intro' && !autoIntroDone && playerPref.get('autoSkipIntro')) {
+      autoIntroDone = true; skipIntro(); next = '';
+    } else if (next === 'outro' && !autoOutroDone && playerPref.get('autoSkipOutro')) {
+      autoOutroDone = true; skipOutro(); next = '';
+    }
+
+    if (next !== mode) {
+      mode = next;
+      btn.classList.toggle('hidden', !mode);
+      if (mode === 'intro') btn.textContent = 'Skip Intro ▸▸';
+      if (mode === 'outro') btn.textContent = hasNext() ? 'Next episode ▸▸' : 'Skip Outro ▸▸';
+    }
+  });
 }
 
 function clearPlayer() {
@@ -1640,6 +1688,7 @@ function updateTgRotate() {
   // with CSS so the video really covers the whole screen (Telegram can't force landscape).
   const expanded = document.body.classList.contains("tg-player-expanded");
   const portrait = window.innerHeight > window.innerWidth;
+  // Always lands in landscape, whatever the phone's auto-rotate / orientation lock is set to.
   document.body.classList.toggle("tg-rotate", expanded && portrait);
 }
 
@@ -1658,10 +1707,6 @@ function setTgPlayerExpanded(on) {
       document.body.appendChild(exit);
     }
     try { if (TG && TG.requestFullscreen) TG.requestFullscreen(); } catch (e) {}
-    try {
-      const lock = screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape");
-      if (lock && lock.catch) lock.catch(() => {});
-    } catch (e) {}
     if (!tgRotateWired) {
       tgRotateWired = true;
       window.addEventListener("resize", updateTgRotate);
@@ -1672,7 +1717,6 @@ function setTgPlayerExpanded(on) {
   } else {
     exit?.remove();
     document.body.classList.remove("tg-rotate");
-    try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (e) {}
     try { if (TG && TG.exitFullscreen && TG.isFullscreen) TG.exitFullscreen(); } catch (e) {}
   }
 }
@@ -1780,6 +1824,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       video.src = url;
     }
     wrap.appendChild(video);
+    $('skipNote')?.classList.add('hidden');
     attachPlayerAutomation(video, wrap);
     wireTgVideoFullscreen(video, wrap);
     addTgFloatBtn(wrap);
@@ -1794,6 +1839,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       iframe.setAttribute('referrerpolicy', 'origin');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
+      $('skipNote')?.classList.remove('hidden');
       addTgFloatBtn(wrap);
       if (isTelegram) {
         const fsBtn = document.createElement("button");
@@ -2440,6 +2486,16 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
         : `/api/admin/tvshows/${id}/episodes`;
       await api(path, { method: 'POST', body: JSON.stringify(payload) });
       toast('Episode added');
+    }
+    if ($('epIntroAllSeason')?.checked && introEnd !== null) {
+      try {
+        const doc = await api(`/api/content/${type}/${id}`);
+        const same = (doc.episodes || []).filter((x) => Number(x.season) === Number(payload.season));
+        await Promise.all(same.map((x) => api(`/api/admin/${type}/${id}/episodes/${x.season}/${x.episode}`, {
+          method: 'PUT', body: JSON.stringify({ intro_start: introStart, intro_end: introEnd }),
+        })));
+        toast(`Intro times set on ${same.length} episode(s)`);
+      } catch (err) { toast(err.message || 'Could not apply intro to season', 'error'); }
     }
     const thumbScope = $('epThumbScope')?.value || 'episode';
     if (thumbScope !== 'episode' && payload.thumbnail) {
@@ -3199,6 +3255,7 @@ function initTelegramWebApp() {
     if (bb) {
       bb.onClick(() => {
         try {
+          if (document.body.classList.contains("tg-player-expanded")) { setTgPlayerExpanded(false); return; }
           if (state.page === "video" || state.page === "detail") {
             // prefer in-app back
             if (typeof history !== "undefined" && history.length > 1) history.back();
