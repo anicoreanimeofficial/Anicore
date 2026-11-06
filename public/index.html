@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="telegram-web-app" content="true">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <meta name="theme-color" content="#09090f" id="themeColorMeta">
   <meta name="description" content="ANICORE — Discover Anime, TV Shows and Movies">
   <meta name="mobile-web-app-capable" content="yes">
@@ -19,9 +21,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=49">
+  <link rel="stylesheet" href="/assets/style.css?v=50">
+<script>
+  (function(){
+    try {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && tg.initData !== undefined) {
+        document.documentElement.classList.add('tg-webapp');
+        document.body && document.body.classList.add('tg-webapp');
+        try { tg.ready(); tg.expand(); } catch(e) {}
+      }
+    } catch(e) {}
+  })();
+</script>
 </head>
-<body>
+<body class="">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
 
 
@@ -557,7 +571,7 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=49"></script>
+  <script src="/assets/app.js?v=50"></script>
   <script src="/assets/features.js?v=49"></script>
 </body>
 </html>

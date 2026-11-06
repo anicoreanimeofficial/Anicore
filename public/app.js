@@ -13,7 +13,7 @@ const BOOT_NAV = (() => {
 })();
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v45';
+const APP_JS_VERSION = 'v50';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -217,6 +217,9 @@ function toast(message, kind = 'ok') {
   el.textContent = message;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
+  try {
+    if (window.tgHaptic) tgHaptic(kind === 'error' ? 'error' : 'success');
+  } catch (e) {}
 }
 
 function errorText(data) {
@@ -395,6 +398,7 @@ function showPage(page) {
   void target.offsetWidth;
   if (page !== state.page) target.classList.add(dir);
   state.page = page;
+  if (window.tgSyncBack) tgSyncBack();
   saveNavState();
 
   // Highlight the parent category when on detail/video
@@ -2981,10 +2985,106 @@ function bindHero(root) {
   setTimeout(finish, 3300);
 })();
 
+
+// ============================================================
+// Telegram Mini App (WebApp)
+// ============================================================
+const TG = (() => {
+  try {
+    return (window.Telegram && window.Telegram.WebApp) || null;
+  } catch (e) {
+    return null;
+  }
+})();
+
+const isTelegram = !!(TG && (TG.initData || TG.platform));
+
+function initTelegramWebApp() {
+  if (!TG) return;
+  try {
+    document.documentElement.classList.add("tg-webapp");
+    document.body.classList.add("tg-webapp");
+
+    TG.ready();
+    TG.expand();
+    try { TG.disableVerticalSwipes && TG.disableVerticalSwipes(); } catch (e) {}
+
+    // Match app theme
+    try {
+      TG.setHeaderColor("#09090f");
+      TG.setBackgroundColor("#09090f");
+      if (TG.setBottomBarColor) TG.setBottomBarColor("#09090f");
+    } catch (e) {}
+
+    // Haptic helper
+    window.tgHaptic = (type) => {
+      try {
+        if (!TG.HapticFeedback) return;
+        if (type === "success") TG.HapticFeedback.notificationOccurred("success");
+        else if (type === "error") TG.HapticFeedback.notificationOccurred("error");
+        else if (type === "light") TG.HapticFeedback.impactOccurred("light");
+        else TG.HapticFeedback.selectionChanged();
+      } catch (e) {}
+    };
+
+    // Back button → app navigation
+    const bb = TG.BackButton;
+    if (bb) {
+      bb.onClick(() => {
+        try {
+          if (state.page === "video" || state.page === "detail") {
+            // prefer in-app back
+            if (typeof history !== "undefined" && history.length > 1) history.back();
+            else showPage("home");
+          } else if (state.page !== "home") {
+            showPage("home");
+          } else {
+            TG.close();
+          }
+        } catch (e) {
+          showPage("home");
+        }
+      });
+    }
+
+    // Sync back button visibility with page
+    window.tgSyncBack = () => {
+      if (!bb) return;
+      try {
+        if (state.page && state.page !== "home") bb.show();
+        else bb.hide();
+      } catch (e) {}
+    };
+
+    // Optional MainButton for install is not needed in TG
+    try {
+      if (TG.MainButton) TG.MainButton.hide();
+    } catch (e) {}
+
+    // Viewport CSS variables
+    const applyVp = () => {
+      try {
+        const h = TG.viewportStableHeight || TG.viewportHeight || window.innerHeight;
+        document.documentElement.style.setProperty("--tg-viewport-height", h + "px");
+        document.documentElement.style.setProperty("--tg-safe-top", (TG.safeAreaInset?.top || 0) + "px");
+        document.documentElement.style.setProperty("--tg-safe-bottom", (TG.safeAreaInset?.bottom || TG.contentSafeAreaInset?.bottom || 0) + "px");
+      } catch (e) {}
+    };
+    applyVp();
+    TG.onEvent && TG.onEvent("viewportChanged", applyVp);
+
+    console.log("[anicore] Telegram WebApp", TG.platform, TG.version);
+  } catch (err) {
+    console.warn("[anicore] Telegram init failed", err);
+  }
+}
+
+
 // --- Init ---
 wireSeriesPage();
 
 (async function init() {
+  initTelegramWebApp();
   // Mark the page we landed on as the first history entry, so Back can return to it.
   try {
     const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
@@ -3009,6 +3109,23 @@ wireSeriesPage();
   }
 
   await checkUser();
+
+  // Telegram auto-login when opened as Mini App
+  if (isTelegram && TG && TG.initData) {
+    try {
+      const me = state.user;
+      if (!me) {
+        await api("/api/auth/telegram", {
+          method: "POST",
+          body: JSON.stringify({ initData: TG.initData }),
+        });
+        await checkUser();
+        if (state.user) toast("Signed in with Telegram");
+      }
+    } catch (err) {
+      console.warn("[tg auth]", err.message || err);
+    }
+  }
 
   // Stay on the same page after refresh
   const saved = BOOT_NAV;

@@ -2930,3 +2930,41 @@ button, a, .media-card, .episode { touch-action: manipulation; }
     scroll-behavior: auto !important;
   }
 }
+
+
+/* =========================================================
+   TELEGRAM MINI APP
+   ========================================================= */
+html.tg-webapp,
+body.tg-webapp {
+  --tg-viewport-height: 100vh;
+  background: #09090f !important;
+  overscroll-behavior: none;
+}
+
+body.tg-webapp {
+  min-height: var(--tg-viewport-height, 100vh);
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px) + var(--tg-safe-bottom, 0px));
+}
+
+/* Hide PWA install prompts inside Telegram */
+body.tg-webapp .install-popup-overlay,
+body.tg-webapp .install-banner,
+body.tg-webapp #installPopup {
+  display: none !important;
+}
+
+/* Bottom nav sits above Telegram home indicator */
+body.tg-webapp .bottom-nav {
+  bottom: max(12px, calc(env(safe-area-inset-bottom, 0px) + 8px + var(--tg-safe-bottom, 0px))) !important;
+}
+
+body.tg-webapp .app-header {
+  padding-top: max(10px, env(safe-area-inset-top, 0px));
+}
+
+/* Slightly tighter for TG WebView */
+body.tg-webapp .splash {
+  z-index: 20000;
+}

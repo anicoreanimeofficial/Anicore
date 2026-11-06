@@ -2,8 +2,8 @@
 const CACHE = "anicore-v50";
 const ASSETS = [
   "/",
-  "/assets/style.css?v=49",
-  "/assets/app.js?v=49",
+  "/assets/style.css?v=50",
+  "/assets/app.js?v=50",
   "/manifest.json"
 ];
 
