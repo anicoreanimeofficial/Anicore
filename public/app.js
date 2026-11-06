@@ -1624,6 +1624,7 @@ function attachPlayerAutomation(video, wrap) {
 function clearPlayer() {
   const wrap = $('playerWrap');
   if (!wrap) return;
+  if (document.body.classList.contains('tg-player-expanded')) setTgPlayerExpanded(false);
   const video = wrap.querySelector('video');
   if (video) {
     try { video.pause(); } catch { /* noop */ }
@@ -1634,6 +1635,15 @@ function clearPlayer() {
 }
 
 
+function updateTgRotate() {
+  // If the phone is still portrait while the player is "full", rotate the player 90deg
+  // with CSS so the video really covers the whole screen (Telegram can't force landscape).
+  const expanded = document.body.classList.contains("tg-player-expanded");
+  const portrait = window.innerHeight > window.innerWidth;
+  document.body.classList.toggle("tg-rotate", expanded && portrait);
+}
+
+let tgRotateWired = false;
 function setTgPlayerExpanded(on) {
   document.body.classList.toggle("tg-player-expanded", !!on);
   let exit = document.getElementById("tgPlayerExit");
@@ -1647,15 +1657,36 @@ function setTgPlayerExpanded(on) {
       exit.addEventListener("click", () => setTgPlayerExpanded(false));
       document.body.appendChild(exit);
     }
+    try { if (TG && TG.requestFullscreen) TG.requestFullscreen(); } catch (e) {}
     try {
-      if (TG && TG.requestFullscreen) TG.requestFullscreen();
+      const lock = screen.orientation && screen.orientation.lock && screen.orientation.lock("landscape");
+      if (lock && lock.catch) lock.catch(() => {});
     } catch (e) {}
+    if (!tgRotateWired) {
+      tgRotateWired = true;
+      window.addEventListener("resize", updateTgRotate);
+      window.addEventListener("orientationchange", () => setTimeout(updateTgRotate, 250));
+    }
+    updateTgRotate();
+    setTimeout(updateTgRotate, 350);
   } else {
     exit?.remove();
-    try {
-      if (TG && TG.exitFullscreen) TG.exitFullscreen();
-    } catch (e) {}
+    document.body.classList.remove("tg-rotate");
+    try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (e) {}
+    try { if (TG && TG.exitFullscreen && TG.isFullscreen) TG.exitFullscreen(); } catch (e) {}
   }
+}
+
+// Floating full-screen button on top of the player (Telegram only)
+function addTgFloatBtn(wrap) {
+  if (!isTelegram || !wrap || wrap.querySelector(".tg-fs-float")) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tg-fs-float";
+  b.setAttribute("aria-label", "Full screen");
+  b.textContent = "⛶";
+  b.addEventListener("click", (e) => { e.stopPropagation(); setTgPlayerExpanded(true); });
+  wrap.appendChild(b);
 }
 
 function wireTgVideoFullscreen(video, wrap) {
@@ -1751,17 +1782,19 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     wrap.appendChild(video);
     attachPlayerAutomation(video, wrap);
     wireTgVideoFullscreen(video, wrap);
+    addTgFloatBtn(wrap);
     // Browsers can reject autoplay; the user can still press play.
     video.play?.()?.catch?.(() => {});
   } else {
     const mountIframe = () => {
       wrap.innerHTML = '';
       const iframe = document.createElement('iframe');
-      iframe.allowFullscreen = true;
-      iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write');
+      iframe.allowFullscreen = !isTelegram;
+      iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write' + (isTelegram ? '' : '; fullscreen'));
       iframe.setAttribute('referrerpolicy', 'origin');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
+      addTgFloatBtn(wrap);
       if (isTelegram) {
         const fsBtn = document.createElement("button");
         fsBtn.type = "button";
