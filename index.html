@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="telegram-web-app" content="true">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <meta name="theme-color" content="#09090f" id="themeColorMeta">
+  <meta name="description" content="ANICORE — Discover Anime, TV Shows and Movies">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="apple-touch-icon" href="https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg">
+  <link rel="icon" type="image/jpeg" href="https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg">
+  <title>ANICORE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/style.css?v=57">
+<script>
+  (function(){
+    try {
+      var tg = window.Telegram && window.Telegram.WebApp;
+      if (tg && tg.initData !== undefined) {
+        document.documentElement.classList.add('tg-webapp');
+        document.body && document.body.classList.add('tg-webapp');
+        try { tg.ready(); tg.expand(); } catch(e) {}
+      }
+    } catch(e) {}
+  })();
+</script>
+</head>
+<body class="">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
+
+
+  <!-- AC intro animation -->
+  <div id="splash" class="splash" aria-hidden="true">
+    <svg class="splash-svg" viewBox="0 0 350 300" xmlns="http://www.w3.org/2000/svg">
+      <g class="splash-letters">
+        <text class="sp-a" x="95" y="222" text-anchor="middle">A</text>
+        <text class="sp-c" x="258" y="222" text-anchor="middle">C</text>
+      </g>
+    </svg>
+    <button type="button" class="splash-skip" id="splashSkip">Skip</button>
+  </div>
+  <script>try{if(sessionStorage.getItem('anicore-splash')){document.getElementById('splash').remove();}}catch(e){}</script>
+
+  <!-- Site background image (default, or the signed-in user's own) -->
+  <div class="site-bg" id="siteBg" aria-hidden="true">
+    <div class="site-bg-overlay"></div>
+  </div>
+
+
+  <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+    <a class="brand" href="#" data-page="home"><span class="brand-text">ANICORE</span></a>
+    <nav class="side-nav">
+      <button type="button" data-page="home" class="active"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-5h4v5"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-5h4v5"/></g></svg></span> Home</button>
+      <button type="button" data-page="search"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></g></svg></span> Search</button>
+      <button type="button" data-page="series"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><rect x="3" y="6.5" width="18" height="12.5" rx="2"/><path d="M8.5 3l3.5 3.5L15.5 3"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><rect x="3" y="6.5" width="18" height="12.5" rx="2"/><path d="M8.5 3l3.5 3.5L15.5 3"/></g></svg></span> Series</button>
+      <button type="button" data-page="movies"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.3v5.4l4.6-2.7z"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.3v5.4l4.6-2.7z"/></g></svg></span> Movies</button>
+      <button type="button" data-page="schedule"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></g></svg></span> Schedule</button>
+      <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span> Profile</button>
+      <button type="button" id="sideAdminBtn" data-page="admin" class="hidden"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="12" r="3.8"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="12" r="3.8"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></g></svg></span> Admin</button>
+    </nav>
+    <div class="side-footer">
+      <div class="pref-row">
+        <select id="langSelect" class="small" aria-label="Language" title="Language">
+          <option value="en">EN</option>
+          <option value="hi">हिं</option>
+        </select>
+        <select id="accentSelect" class="small" aria-label="Accent color" title="Accent">
+          <option value="pink">Pink</option>
+          <option value="purple">Purple</option>
+          <option value="blue">Blue</option>
+          <option value="green">Green</option>
+          <option value="orange">Orange</option>
+        </select>
+      </div>
+      <button type="button" id="sideSignIn" class="outline small">Sign In</button>
+      <button type="button" id="sideLogout" class="outline small hidden">Logout</button>
+    </div>
+  </aside>
+
+  <div class="app-shell">
+    <header class="app-header">
+      <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
+      <a class="brand mobile-brand" href="#" data-page="home"><span class="brand-text">ANICORE</span></a>
+      <div class="header-actions">
+        <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
+        <button id="signInBtn" class="outline small" type="button">Sign In</button>
+        <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
+      </div>
+    </header>
+
+    <main id="appMain">
+      <section class="page active" id="page-home" aria-label="Home">
+        <h1 class="sr-only">ANICORE — Discover Anime, TV Shows and Movies</h1>
+        <div id="hero" class="hero loading" aria-label="Featured">
+          <div class="hero-stage"><div class="hero-skel-card"></div></div>
+          <div class="hero-info">
+            <div class="sk sk-title"></div>
+            <div class="sk-row"><span class="sk sk-chip"></span><span class="sk sk-chip"></span><span class="sk sk-chip"></span></div>
+            <div class="sk sk-line"></div>
+            <div class="sk sk-line short"></div>
+          </div>
+        </div>
+        <div id="topAiringSection" class="hidden">
+          <h3 class="section-title top-title"><span class="top-bar" aria-hidden="true"></span>Top Airing <span class="top-live" aria-hidden="true">&#9679;</span></h3>
+          <div id="topAiringRow" class="top-row" aria-label="Top airing series"></div>
+        </div>
+        <div id="recommendSection" class="hidden">
+          <h3 class="section-title" data-i18n="recommended">Recommended for You</h3>
+          <div id="recommendGrid" class="media-grid horizontal"></div>
+        </div>
+        <div class="section-heading-row">
+          <h3 class="section-title">Trending Series</h3>
+          <button type="button" class="text-button" data-page="series">See all</button>
+        </div>
+        <div id="homeSeriesGrid" class="media-grid"></div>
+        <div class="section-heading-row">
+          <h3 class="section-title">Latest Series</h3>
+          <button type="button" class="text-button" data-page="series">See all</button>
+        </div>
+        <div id="homeAnimeGrid" class="media-grid"></div>
+        <div class="section-heading-row">
+          <h3 class="section-title">Latest Movies</h3>
+          <button type="button" class="text-button" data-page="movies">See all</button>
+        </div>
+        <div id="homeMovieGrid" class="media-grid"></div>
+      </section>
+
+      
+      <section class="page" id="page-series" aria-label="Series catalogue">
+        <div class="section">
+          <h2 data-i18n="series">Series</h2>
+          <div class="filters" id="seriesFilters">
+            <input type="search" id="seriesSearch" placeholder="Search series..." aria-label="Search series">
+            <div class="filter-row">
+              <select id="seriesGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="seriesStatus" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <select id="seriesSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+            <div class="genre-chips" id="seriesChips" role="listbox" aria-label="Quick genres"></div>
+          </div>
+          <div id="seriesGrid" class="media-grid flush"></div>
+          <div id="seriesSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="seriesEmpty" class="muted empty hidden">No series found.</p>
+        </div>
+      </section>
+
+
+      <section class="page" id="page-movies" aria-label="Movies">
+        <div class="section">
+          <h2>Movies</h2>
+          <div class="filters" id="movieFilters">
+            <input type="search" id="movieSearch" placeholder="Search movies..." aria-label="Search movies">
+            <div class="filter-row">
+              <select id="movieGenre" aria-label="Genre filter"><option value="">All Genres</option></select>
+              <select id="movieStatus" aria-label="Status filter">
+                <option value="">All Status</option>
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <select id="movieSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+                <option value="year">Year</option>
+              </select>
+            </div>
+            <div class="genre-chips" id="movieChips" role="listbox" aria-label="Quick genres"></div>
+          </div>
+          <div id="movieGrid" class="media-grid flush"></div>
+          <div id="movieSentinel" class="scroll-sentinel" aria-hidden="true"></div>
+          <p id="movieEmpty" class="muted empty hidden">No movies found.</p>
+        </div>
+      </section>
+
+      
+      <section class="page" id="page-schedule" aria-label="Release schedule">
+        <div class="section">
+          <h2 data-i18n="schedule">Schedule</h2>
+          <p class="muted schedule-tz" id="scheduleTz"></p>
+          <div class="day-tabs" id="dayTabs" role="tablist" aria-label="Day of the week"></div>
+          <div id="scheduleList" class="schedule-list"></div>
+          <div id="upcomingSection" class="hidden">
+            <h3 class="section-title">Coming Soon</h3>
+            <div id="upcomingList" class="schedule-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-search" aria-label="Search">
+        <div class="section">
+          <h2 data-i18n="search">Search</h2>
+          <div class="filters">
+            <input type="search" id="globalSearch" placeholder="Search series and movies..." aria-label="Global search" autofocus>
+            <div class="filter-row">
+              <select id="searchType" aria-label="Type">
+                <option value="">All types</option>
+                <option value="series">Series</option>
+                <option value="movie">Movies</option>
+              </select>
+              <select id="searchGenre" aria-label="Genre"><option value="">All Genres</option></select>
+              <select id="searchSort" aria-label="Sort">
+                <option value="newest">Newest</option>
+                <option value="rating">Top Rated</option>
+                <option value="views">Most Viewed</option>
+                <option value="title">Title A–Z</option>
+              </select>
+            </div>
+          </div>
+          <div id="searchGrid" class="media-grid flush"></div>
+          <p id="searchEmpty" class="muted empty hidden">Type to search the catalogue.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-profile" aria-label="Profile">
+        <div class="section">
+          <h2>My Profile</h2>
+          <div id="profileInfo"></div>
+          <div id="profileMember" class="hidden">
+            <div class="panel" id="profileActivityPanel">
+              <h3 data-i18n="activity">Your Activity</h3>
+              <div id="profileActivity" class="activity-list"></div>
+            </div>
+            <div class="panel">
+              <h3 data-i18n="preferences">Preferences</h3>
+              <div class="pref-controls">
+                <label>Accent
+                  <select id="profileAccent">
+                    <option value="pink">Pink</option>
+                    <option value="purple">Purple</option>
+                    <option value="blue">Blue</option>
+                    <option value="green">Green</option>
+                    <option value="orange">Orange</option>
+                  </select>
+                </label>
+                <label>Language
+                  <select id="profileLang">
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी</option>
+                  </select>
+                </label>
+                <button type="button" id="savePrefsBtn" class="primary small">Save Preferences</button>
+              </div>
+            </div>
+            <div class="panel" id="bgPanel">
+              <h3>Customize Background</h3>
+              <p class="hint">Make ANICORE yours. Paste a link to an image or upload one from your device.</p>
+              <div class="bg-preview" id="bgPreview" aria-label="Background preview"></div>
+              <form id="bgUrlForm" class="stack">
+                <input id="bgUrl" type="url" placeholder="Image URL (https://...)" autocomplete="off">
+                <button type="submit" class="primary block">Use this link</button>
+              </form>
+              <div class="bg-actions">
+                <label class="outline small file-btn">Upload image
+                  <input type="file" id="bgFile" accept="image/jpeg,image/png,image/webp" hidden>
+                </label>
+                <button type="button" id="bgReset" class="outline small">Reset to default</button>
+              </div>
+              <p id="bgMsg" class="hint"></p>
+            </div>
+            <div class="panel">
+              <h3>Request a Title</h3>
+              <form id="requestForm">
+                <input id="reqTitle" placeholder="Title" maxlength="180" required>
+                <select id="reqLanguage" aria-label="Language">
+                  <option>Hindi Dub</option>
+                  <option>English Dub</option>
+                  <option>Subbed</option>
+                  <option>Other</option>
+                </select>
+                <textarea id="reqNotes" rows="2" maxlength="500" placeholder="Notes (optional)"></textarea>
+                <button type="submit" class="primary block">Send Request</button>
+              </form>
+            </div>
+            <h3>My Watchlist</h3>
+            <div id="watchlistGrid" class="media-grid flush"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-admin" aria-label="Admin">
+        <div class="section">
+          <h2 id="adminTitle">Admin Studio</h2>
+          
+          <div class="panel">
+            <h3>Import from Anilist</h3>
+            <form id="anilistForm" class="stack">
+              <div class="row">
+                <input id="anilistId" type="number" placeholder="Anilist ID (e.g. 21)" min="1">
+                <span class="muted">or</span>
+                <input id="anilistSearch" placeholder="Search title...">
+              </div>
+              <select id="anilistType">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+              </select>
+              <button type="submit" class="primary block">Import</button>
+            </form>
+            <p id="anilistMsg" class="hint"></p>
+          </div>
+          <div class="panel">
+            <h3>Bulk Add Episodes</h3>
+            <p class="hint">One episode per line: <code>season|episode|title|video_url|duration</code></p>
+            <form id="bulkEpForm" class="stack">
+              <select id="bulkEpType">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+              </select>
+              <select id="bulkEpContent"><option value="">Select title…</option></select>
+              <textarea id="bulkEpText" rows="6" placeholder="1|1|Episode 1|https://...|24m&#10;1|2|Episode 2|https://...|24m"></textarea>
+              <button type="submit" class="primary block">Add Episodes</button>
+            </form>
+            <p id="bulkEpMsg" class="hint"></p>
+          </div>
+          <div class="panel admin-only" id="analyticsPanel">
+            <h3>Analytics</h3>
+            <div id="analyticsContent" class="stats-grid"></div>
+            <div id="analyticsTop" class="analytics-top"></div>
+          </div>
+
+          <div class="panel admin-only" id="adminStatsPanel">
+            <h3>Overview</h3>
+            <div id="adminStats" class="stats-grid"></div>
+          </div>
+          <div class="panel">
+            <h3 id="adminFormTitle">Add Content</h3>
+            <form id="adminForm">
+              <input type="hidden" id="aId">
+              <select id="aType" aria-label="Content type">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Show</option>
+                <option value="movie">Movie</option>
+              </select>
+              <input id="aTitle" placeholder="Title" maxlength="180" required>
+              <textarea id="aDesc" rows="3" maxlength="5000" placeholder="Description"></textarea>
+              <input id="aGenres" placeholder="Genres (comma separated)">
+              <div class="row">
+                <input id="aYear" type="number" min="1900" max="2100" placeholder="Year">
+                <input id="aRating" placeholder="Display rating (e.g. 8.5)">
+              </div>
+              <select id="aStatus" aria-label="Status">
+                <option>Ongoing</option>
+                <option>Completed</option>
+                <option>Upcoming</option>
+              </select>
+              <div class="row">
+                <select id="aSeason" aria-label="Season">
+                  <option value="">Season (optional)</option>
+                  <option>Winter</option><option>Spring</option><option>Summer</option><option>Fall</option>
+                </select>
+                <input id="aStudio" placeholder="Studio (optional)" maxlength="80">
+              </div>
+              <div class="sched-fields" id="aSchedFields">
+                <label>Airs every
+                  <select id="aAirDay" aria-label="Release weekday">
+                    <option value="">— not weekly —</option>
+                    <option value="0">Monday</option><option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option><option value="3">Thursday</option>
+                    <option value="4">Friday</option><option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                  </select>
+                </label>
+                <label>at (your local time)
+                  <input id="aAirTime" type="time">
+                </label>
+              </div>
+              <label class="sched-publish">Publish on (optional — hidden until then)
+                <input id="aPublishAt" type="datetime-local">
+              </label>
+              <div class="feature-fields">
+                <label class="check-row"><input type="checkbox" id="aHero"> Show in hero banner</label>
+                <label>Hero order <input id="aHeroOrder" type="number" min="0" max="999" placeholder="1 = first"></label>
+                <label class="check-row"><input type="checkbox" id="aTopAiring"> Pin to Top Airing</label>
+                <label>Top Airing rank <input id="aTopRank" type="number" min="0" max="999" placeholder="1 = first"></label>
+              </div>
+              <input id="aPoster" type="url" placeholder="Poster URL (https://...)">
+              <input id="aBanner" type="url" placeholder="Banner URL (https://...)">
+              <button type="button" id="aAutoFetch" class="outline block">Auto-fetch title info (Anilist + Wikipedia)</button>
+              <button type="button" id="aWikiFetch" class="outline block">Fetch description from Wikipedia</button>
+              <div class="meta-key-row">
+                <input id="metaApiKey" type="password" placeholder="TMDB API key (for episode name & description)" autocomplete="off">
+                <button type="button" id="metaApiKeySave" class="outline small">Save key</button>
+              </div>
+              <p class="hint">Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>. Saved on this device only.</p>
+              <button type="submit" id="aSubmit" class="primary block">Save</button>
+              <button type="button" id="aCancel" class="outline block form-cancel hidden">Cancel edit</button>
+            </form>
+          </div>
+          <div class="panel admin-only" id="uploadersPanel">
+            <h3>Uploaders</h3>
+            <p class="hint">Create an account for an uploader: you choose their email and password, then share them. Uploaders can add and edit posts, but can't delete or see analytics.</p>
+            <form id="uploaderCreateForm" class="stack">
+              <input id="uploaderNewEmail" type="email" placeholder="Uploader email" autocomplete="off" required>
+              <input id="uploaderNewPass" type="text" placeholder="Password (min 6 characters)" minlength="6" maxlength="128" autocomplete="off" required>
+              <button type="submit" class="primary block">Create uploader account</button>
+            </form>
+            <p class="hint" style="margin-top:16px">Or give access to someone who already has an account:</p>
+            <form id="uploaderForm" class="stack">
+              <input id="uploaderEmail" type="email" placeholder="Existing user's email" autocomplete="off" required>
+              <button type="submit" class="outline block">Give access to existing user</button>
+            </form>
+            <p id="uploaderMsg" class="hint"></p>
+            <div id="uploaderList"></div>
+          </div>
+          <div class="panel">
+            <h3>Manage Library</h3>
+            <div class="lib-tools">
+              <select id="libType" aria-label="Library type">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Shows</option>
+                <option value="movie">Movies</option>
+              </select>
+              <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
+            </div>
+            <div id="libList"></div>
+            <button id="libMore" class="outline block hidden" type="button">Load More</button>
+          </div>
+          <div class="panel admin-only">
+            <h3>Requests</h3>
+            <div id="adminRequests"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page" id="page-detail" aria-label="Details">
+        <div class="section detail-page">
+          <button type="button" class="outline small" id="detailBack">← Back</button>
+          <div id="detailPageContent"></div>
+        </div>
+      </section>
+
+      <section class="page" id="page-video" aria-label="Video Player">
+        <div class="section detail-page">
+          <button type="button" class="outline small" id="videoBack">← Back</button>
+          <div class="video-header">
+            <h2 id="videoTitle"></h2>
+            <p id="videoSubtitle" class="muted"></p>
+          </div>
+          <div class="player-wrap" id="playerWrap"></div>
+          <div class="player-tools" id="playerTools">
+            <label class="pt-item pt-check"><input type="checkbox" data-pref="autoSkipIntro"> Auto skip intro</label>
+            <label class="pt-item pt-check"><input type="checkbox" data-pref="autoSkipOutro"> Auto skip outro</label>
+            <p id="skipNote" class="muted hidden" style="font-size:12px;margin:6px 0 0">Skip buttons only work with direct video links (.mp4 / .m3u8), not embedded players.</p>
+          </div>
+          <div id="playerFallback" class="hidden">
+            <p class="muted">This source may block embedding.
+              <a id="playerOpenLink" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a>
+            </p>
+          </div>
+          <div class="video-nav">
+            <button type="button" class="outline" id="videoPrev">← Previous</button>
+            <button type="button" class="outline" id="videoNext">Next →</button>
+          </div>
+          <div id="videoEpList"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>© <span id="yearNow"></span> ANICORE</footer>
+  </div>
+
+  <div id="authModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="modal-card">
+      <button class="close" type="button" id="authClose" aria-label="Close">×</button>
+      <h2 id="authTitle">Welcome Back</h2>
+      <p id="authSubtitle" class="muted"></p>
+      <form id="authForm" novalidate>
+        <div id="authError" class="error-message hidden" role="alert"></div>
+        <input type="email" id="authEmail" placeholder="Email" autocomplete="email" required>
+        <input type="password" id="authPass" placeholder="Password" required>
+        <button type="submit" id="authSubmit" class="primary block">Sign In</button>
+      </form>
+      <p class="auth-toggle muted">
+        <span id="toggleText"></span>
+        <button type="button" id="toggleAuthBtn" class="link"></button>
+      </p>
+    </div>
+  </div>
+
+  <div id="episodesModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="Manage episodes">
+    <div class="modal-card wide">
+      <button class="close" type="button" id="episodesClose" aria-label="Close">×</button>
+      <h2 id="episodesTitle">Episodes</h2>
+      <form id="episodeForm" novalidate>
+        <input type="hidden" id="epId">
+        <div class="row">
+          <input id="epSeason" type="number" min="1" value="1" placeholder="Season" required>
+          <input id="epNumber" type="number" min="1" placeholder="Episode" required>
+        </div>
+        <input id="epTitle" placeholder="Episode title (optional)">
+        <input id="epDuration" placeholder="Duration (e.g. 24m)">
+        <input id="epVideo" type="text" placeholder="Video URL or <iframe src=&quot;...&quot;> HTML">
+        <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
+        <input id="epThumb" type="url" placeholder="Episode / season thumbnail URL (https://...)">
+        <label class="thumb-scope">Apply this thumbnail to
+          <select id="epThumbScope">
+            <option value="episode">This episode only</option>
+            <option value="season">All episodes of this season</option>
+            <option value="all">All episodes of the whole anime (every season)</option>
+          </select>
+        </label>
+        <details class="ep-extras" id="thumbTools">
+          <summary>Thumbnails: whole anime / per season</summary>
+          <input id="thumbAllUrl" type="url" placeholder="Anime thumbnail URL (all episodes, all seasons)">
+          <button type="button" id="thumbAllApply" class="outline block">Set on ALL episodes</button>
+          <div class="row">
+            <input id="thumbSeasonNum" type="number" min="1" value="1" placeholder="Season">
+            <input id="thumbSeasonUrl" type="url" placeholder="Season thumbnail URL">
+          </div>
+          <button type="button" id="thumbSeasonApply" class="outline block">Set on this season only</button>
+        </details>
+        <button type="button" id="epAutoFetch" class="outline block">Auto-fetch ep name, duration and description</button>
+        <input id="epWikiUrl" type="url" placeholder="Wikipedia link with the episode list (optional)">
+        <button type="button" id="epWikiFetch" class="outline block">Fetch ep name from Wikipedia</button>
+        <details class="ep-extras">
+          <summary>Player extras: skip intro/outro &amp; subtitles</summary>
+          <div class="row">
+            <input id="epIntroStart" placeholder="Intro start (e.g. 0:05)" inputmode="text">
+            <input id="epIntroEnd" placeholder="Intro end (e.g. 1:30)" inputmode="text">
+          </div>
+          <input id="epOutroStart" placeholder="Outro / credits start (e.g. 22:10)" inputmode="text">
+          <label class="check-row"><input type="checkbox" id="epIntroAllSeason"> Use these intro times for ALL episodes of this season</label>
+          <textarea id="epSubs" rows="3" placeholder="Subtitles, one per line: Label|lang|https://.../file.vtt&#10;English|en|https://example.com/ep1-en.vtt"></textarea>
+        </details>
+        <button type="submit" class="primary block" id="epSubmit">Add Episode</button>
+        <button type="button" class="outline block form-cancel hidden" id="epCancel">Cancel edit</button>
+      </form>
+      <h3 style="margin-top:20px">Existing Episodes</h3>
+      <div id="episodeList"></div>
+    </div>
+  </div>
+
+  <div class="resume-bar hidden" id="resumeBar" role="region" aria-label="Continue watching">
+    <button type="button" class="resume-main" id="resumeMain">
+      <span class="resume-thumb"><img id="resumeImg" alt=""><span class="resume-play" aria-hidden="true">&#9654;</span></span>
+      <span class="resume-body">
+        <span class="resume-top"><span class="resume-ep" id="resumeEp"></span><span class="resume-left" id="resumeLeft"></span></span>
+        <span class="resume-title" id="resumeTitle"></span>
+        <span class="resume-track"><span class="resume-fill" id="resumeFill"></span><span class="resume-pct" id="resumePct"></span></span>
+      </span>
+    </button>
+    <button type="button" class="resume-close" id="resumeClose" aria-label="Dismiss">&times;</button>
+  </div>
+
+  <nav class="bottom-nav" id="bottomNav" aria-label="Main">
+    <span class="nav-pill" id="navPill" aria-hidden="true"></span>
+    <button type="button" data-page="home" class="active"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-5h4v5"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><path d="M3.5 11.5 12 4l8.5 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M10 20v-5h4v5"/></g></svg></span>Home</button>
+    <button type="button" data-page="search"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5"/></g></svg></span>Search</button>
+    <button type="button" data-page="series"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><rect x="3" y="6.5" width="18" height="12.5" rx="2"/><path d="M8.5 3l3.5 3.5L15.5 3"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><rect x="3" y="6.5" width="18" height="12.5" rx="2"/><path d="M8.5 3l3.5 3.5L15.5 3"/></g></svg></span>Series</button>
+    <button type="button" data-page="movies"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.3v5.4l4.6-2.7z"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.3v5.4l4.6-2.7z"/></g></svg></span>Movies</button>
+    <button type="button" data-page="schedule"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5.5l3.5 2"/></g></svg></span>Schedule</button>
+    <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
+  </nav>
+
+  <script src="/assets/app.js?v=57"></script>
+  <script src="/assets/features.js?v=56"></script>
+</body>
+</html>
