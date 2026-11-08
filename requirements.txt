@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-pymongo[srv]
-itsdangerous
-email-validator
-python-dotenv
-pyjwt
-aiohttp
-python-multipart
