@@ -1546,7 +1546,21 @@ function dailyMotionId(url) {
   return m ? m[1] : null;
 }
 
+// Many hosts serve a share page (refuses framing) and a separate embed page (allows it).
+function hostEmbedUrl(url) {
+  let u;
+  try { u = new URL(url); } catch { return url; }
+  const h = u.hostname.replace(/^www\./, '');
+  const id = u.pathname.split('/').filter(Boolean).pop() || '';
+  if (/^(dood|d000d|dsvplay|doods)\./.test(h) || /dood/.test(h)) return u.pathname.match(/^\/[dv]\//) ? `${u.origin}/e/${id}` : url;
+  if (/streamtape|strtape|tapeadvertisement/.test(h)) return u.pathname.startsWith('/v/') ? u.href.replace('/v/', '/e/') : url;
+  if (/mixdrop|mxdrop/.test(h)) return u.pathname.startsWith('/f/') ? u.href.replace('/f/', '/e/') : url;
+  if (/filemoon|moonplayer/.test(h)) return u.pathname.startsWith('/d/') ? u.href.replace('/d/', '/e/') : url;
+  return url;
+}
+
 function normalizeEmbedUrl(url) {
+  url = hostEmbedUrl(url);
   const yt = youtubeId(url);
   if (yt) return `https://www.youtube.com/embed/${yt}?autoplay=1&rel=0`;
   const vm = vimeoId(url);
@@ -1967,9 +1981,13 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       const iframe = document.createElement('iframe');
       iframe.allowFullscreen = true;
       iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen');
-      iframe.setAttribute('referrerpolicy', 'origin');
+      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
+      // A host that refuses framing ("refused to connect") can't be detected from here,
+      // so always offer a one-tap way out under embedded players.
+      if (openLink) openLink.href = normalizeEmbedUrl(url);
+      fallback?.classList.remove('hidden');
       $('skipNote')?.classList.remove('hidden');
       addTgFloatBtn(wrap);
       if (isTelegram) {
