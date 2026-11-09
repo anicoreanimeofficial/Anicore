@@ -4,7 +4,6 @@ import { DB, Doc, isId } from "./db";
 
 export interface Env {
   DB: D1Database;
-  UPLOADS: R2Bucket;
   ASSETS: Fetcher;
   SECRET_KEY: string;
   ENVIRONMENT?: string;
@@ -16,6 +15,21 @@ export interface Env {
   ENABLE_AI_RECAPS?: string;
 }
 export type AppCtx = Context<{ Bindings: Env; Variables: { db: DB } }>;
+
+// ---------- image storage (D1 "blobs" table, base64) ----------
+export async function blobPut(env: Env, key: string, type: string, bytes: Uint8Array) {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  await env.DB.prepare("INSERT OR REPLACE INTO blobs (key, type, data) VALUES (?, ?, ?)").bind(key, type, btoa(bin)).run();
+}
+export async function blobGet(env: Env, key: string): Promise<{ type: string; bytes: Uint8Array } | null> {
+  const row = await env.DB.prepare("SELECT type, data FROM blobs WHERE key = ?").bind(key).first<{ type: string; data: string }>();
+  if (!row) return null;
+  return { type: row.type, bytes: Uint8Array.from(atob(row.data), (ch) => ch.charCodeAt(0)) };
+}
+export async function blobDelete(env: Env, key: string) {
+  await env.DB.prepare("DELETE FROM blobs WHERE key = ?").bind(key).run();
+}
 
 export const COOKIE_NAME = "anicore_session";
 export const TOKEN_TTL = 60 * 60 * 24 * 7;
