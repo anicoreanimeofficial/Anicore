@@ -1281,38 +1281,51 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
   const seasons = [...new Set(sorted.map((e) => e.season))];
-  const epHtml = (ep) => {
-    const thumb = safeUrl(ep.thumbnail) || seasonThumb(sorted, ep.season, contentCtx) || '';
-    return `
-    <div class="episode" data-season="${ep.season}" data-episode="${ep.episode}">
-      ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy" decoding="async">` : ''}
-      <div class="ep-body">
-        <div class="ep-header">
-          <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
-        </div>
-        <div class="ep-actions">
-          ${ep.video_url ? `<button type="button" class="outline medium ep-play"
-            data-season="${ep.season}"
-            data-episode="${ep.episode}">▶ Watch</button>` : ''}
-          ${state.user ? `<button type="button" class="outline small mark-progress"
-            data-season="${ep.season}" data-episode="${ep.episode}">Mark watched</button>` : ''}
-        </div>
-        ${linkList(ep.quality_links)}
-      </div>
-    </div>`;
+  let n = 0;
+  const epLink = (ep) => {
+    const url = safeUrl(ep.video_url);
+    const label = esc(ep.episode);
+    const tip = esc(ep.title ? `Episode ${ep.episode} — ${ep.title}` : `Episode ${ep.episode}`);
+    const delay = `style="--i:${Math.min(n++, 24)}"`;
+    return url
+      ? `<a class="ep-link" ${delay} href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${tip}" data-season="${esc(ep.season)}" data-episode="${esc(ep.episode)}">${label}</a>`
+      : `<span class="ep-link off" ${delay} title="${tip} (not available yet)">${label}</span>`;
   };
   return `<h3>Episodes</h3>` + seasons.map((s) => {
     const list = sorted.filter((e) => e.season === s);
-    const st = seasonThumb(sorted, s);
+    n = 0;
     return `
     <div class="season-block">
-      <div class="season-head">
-        ${st ? `<img class="season-thumb" src="${esc(st)}" alt="" loading="lazy" decoding="async">` : ''}
-        <div><strong>Season ${esc(s)}</strong><div class="muted small-muted">${list.length} episode${list.length === 1 ? '' : 's'}</div></div>
-      </div>
-      <div class="episodes">${list.map(epHtml).join('')}</div>
+      <div class="ep-season-title">Season ${esc(s)} <span class="muted small-muted">${list.length} episode${list.length === 1 ? '' : 's'}</span></div>
+      <div class="ep-links">${list.map(epLink).join('')}</div>
     </div>`;
   }).join('');
+}
+
+const DMCA_EMAIL = ''; // optional: set to your contact address to show it in the disclaimer
+
+function disclaimerHtml() {
+  return `
+    <aside class="disclaimer fade-io" aria-label="Disclaimer">
+      <h4>Disclaimer</h4>
+      <p>Anicore is a fan-run catalogue. All titles, artwork, characters and trademarks belong to their respective owners and licensors, and no ownership is claimed.</p>
+      <p>Episode links open on external pages and are provided for personal, non-commercial viewing. If you own the rights to a title and want it removed, contact us${DMCA_EMAIL ? ` at <a href="mailto:${esc(DMCA_EMAIL)}">${esc(DMCA_EMAIL)}</a>` : ''} and we'll take it down promptly.</p>
+      <p>Please support the official releases when they're available in your region.</p>
+    </aside>`;
+}
+
+// Fade elements in as they enter the screen and back out as they leave.
+let fadeObserver = null;
+function observeFades(root) {
+  const els = root.querySelectorAll('.fade-io');
+  if (!els.length) return;
+  if (!('IntersectionObserver' in window)) { els.forEach((el) => el.classList.add('in-view')); return; }
+  if (!fadeObserver) {
+    fadeObserver = new IntersectionObserver((entries) => {
+      entries.forEach((en) => en.target.classList.toggle('in-view', en.isIntersecting));
+    }, { threshold: 0.12 });
+  }
+  els.forEach((el) => fadeObserver.observe(el));
 }
 
 function commentsHtml(comments) {
@@ -1392,6 +1405,7 @@ function buildDetailHtml(type, item, comments) {
     <div id="dRecapSlot">${recapHtml(item)}</div><div id="similarSlot"></div>
     ${type === 'movie' ? linkList(item.quality_links) : ''}
     ${episodesHtml(item.episodes, type, item._id, item)}
+    ${disclaimerHtml()}
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
       ${state.user?.role === 'admin' ? `<button class="outline" id="shareBtn" type="button">🔗 Share link</button>` : ''}
@@ -1415,14 +1429,12 @@ function bindDetailEvents(type, item, container) {
     synBtn.textContent = collapsed ? 'Read more' : 'Show less';
   });
 
-  container.querySelectorAll('.ep-play').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const s = Number(btn.dataset.season);
-      const e = Number(btn.dataset.episode);
-      if (!item.episodes) return;
-      openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster, 0, item.season_thumbnails || {});
+  container.querySelectorAll('.ep-link[href]').forEach((a) => {
+    a.addEventListener('click', (e) => {
+      if (isTelegram) { e.preventDefault(); openExternal(a.href); }
     });
   });
+  observeFades(container);
 
   container.querySelector('#shareBtn')?.addEventListener('click', () => {
     shareContent(type, item._id, item.title);
@@ -1557,6 +1569,15 @@ function hostEmbedUrl(url) {
   if (/mixdrop|mxdrop/.test(h)) return u.pathname.startsWith('/f/') ? u.href.replace('/f/', '/e/') : url;
   if (/filemoon|moonplayer/.test(h)) return u.pathname.startsWith('/d/') ? u.href.replace('/d/', '/e/') : url;
   return url;
+}
+
+// Hosts that block iframes: their videos open in a new tab instead of an embedded player.
+const NEW_TAB_HOSTS = ['upload18.org'];
+function isNewTabHost(url) {
+  try {
+    const h = new URL(url).hostname.replace(/^www\./, '');
+    return NEW_TAB_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+  } catch { return false; }
 }
 
 function normalizeEmbedUrl(url) {
@@ -1913,6 +1934,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
   if (!wrap) return;
 
   clearPlayer();
+  document.body.classList.toggle('newtab-player', !isDirectVideo(url) && isNewTabHost(url));
   try { setWatchInBrowserBtn(isDirectVideo(url) ? url : normalizeEmbedUrl(url)); } catch (e) {}
 
   const fallback = $('playerFallback');
@@ -1975,13 +1997,27 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     addTgFloatBtn(wrap);
     // Browsers can reject autoplay; the user can still press play.
     video.play?.()?.catch?.(() => {});
+  } else if (isNewTabHost(url)) {
+    // Hosts that refuse to be framed: show a play card that opens the video in a new tab.
+    const target = normalizeEmbedUrl(url);
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'player-cover';
+    card.setAttribute('aria-label', 'Play in new tab');
+    if (posterSrc) card.style.backgroundImage = `url("${posterSrc.replace(/"/g, '%22')}")`;
+    card.innerHTML = '<span class="player-play">&#9654;</span><span class="player-newtab-note">Opens in a new tab</span>';
+    card.addEventListener('click', () => {
+      openExternal(target);
+      saveWatchProgress(1);
+    });
+    wrap.appendChild(card);
+    $('skipNote')?.classList.add('hidden');
   } else {
     const mountIframe = () => {
       wrap.innerHTML = '';
       const iframe = document.createElement('iframe');
       iframe.allowFullscreen = true;
       iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen');
-      iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
       // A host that refuses framing ("refused to connect") can't be detected from here,
@@ -2125,6 +2161,9 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
   if (idx === -1) { toast('Episode not found', 'error'); return; }
   const ep = sorted[idx];
   if (!ep.video_url) { toast('No video for this episode', 'error'); return; }
+  // There is no in-site player page any more: the episode link opens in a new tab.
+  const ext = safeUrl(ep.video_url);
+  if (ext) { openExternal(ext); return; }
 
   videoContext = {
     type,
@@ -3283,20 +3322,8 @@ function heroRestartTimer() {
   }, 6000);
 }
 
-async function heroWatch(item) {
-  const type = item._type;
-  if (type === 'movie') { openDetail(type, item._id, item); return; }
-  try {
-    const full = await api(`/api/content/${type}/${item._id}`);
-    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
-    const ep = eps.find((e) => e.video_url);
-    if (!ep) { openDetail(type, item._id, item); return; }
-    state.detailId = item._id;
-    state.detailType = type;
-    openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
-  } catch (err) {
-    toast(err.message || 'Could not open', 'error');
-  }
+function heroWatch(item) {
+  openDetail(item._type, item._id, item);
 }
 
 function bindHero(root) {
