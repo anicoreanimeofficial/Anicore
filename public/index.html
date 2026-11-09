@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/style.css?v=57">
+  <link rel="stylesheet" href="/assets/style.css?v=58">
 <script>
   (function(){
     try {
@@ -94,6 +94,10 @@
     <main id="appMain">
       <section class="page active" id="page-home" aria-label="Home">
         <h1 class="sr-only">ANICORE — Discover Anime, TV Shows and Movies</h1>
+        <div class="home-search-wrap">
+          <label class="home-search" for="homeQuickSearch"><span aria-hidden="true">⌕</span><input id="homeQuickSearch" type="search" autocomplete="off" placeholder="Search anime, movies, genres…" aria-label="Search anime and movies"><kbd>↵</kbd></label>
+          <div id="homeSearchSuggestions" class="search-suggestions hidden" role="listbox" aria-label="Search suggestions"></div>
+        </div>
         <div id="hero" class="hero loading" aria-label="Featured">
           <div class="hero-stage"><div class="hero-skel-card"></div></div>
           <div class="hero-info">
@@ -103,8 +107,16 @@
             <div class="sk sk-line short"></div>
           </div>
         </div>
+        <section id="continueSection" class="home-section hidden" aria-label="Continue watching">
+          <div class="section-heading-row"><h3 class="section-title">Continue Watching</h3><span class="section-kicker">PICK UP WHERE YOU LEFT OFF</span></div>
+          <div id="continueGrid" class="media-grid horizontal"></div>
+        </section>
+        <div class="home-genre-section">
+          <div class="section-heading-row"><h3 class="section-title">Explore by Genre</h3><button type="button" class="text-button" data-page="series">All genres</button></div>
+          <div id="homeGenreChips" class="home-genre-chips" aria-label="Browse genres"></div>
+        </div>
         <div id="topAiringSection" class="hidden">
-          <h3 class="section-title top-title"><span class="top-bar" aria-hidden="true"></span>Top Airing <span class="top-live" aria-hidden="true">&#9679;</span></h3>
+          <h3 class="section-title top-title"><span class="top-bar" aria-hidden="true"></span>Top 10 Popular <span class="top-live" aria-hidden="true">&#9679;</span></h3>
           <div id="topAiringRow" class="top-row" aria-label="Top airing series"></div>
         </div>
         <div id="recommendSection" class="hidden">
@@ -112,20 +124,24 @@
           <div id="recommendGrid" class="media-grid horizontal"></div>
         </div>
         <div class="section-heading-row">
-          <h3 class="section-title">Trending Series</h3>
+          <h3 class="section-title">Trending Anime &amp; Series</h3>
           <button type="button" class="text-button" data-page="series">See all</button>
         </div>
-        <div id="homeSeriesGrid" class="media-grid"></div>
+        <div id="homeSeriesGrid" class="media-grid horizontal"></div>
         <div class="section-heading-row">
-          <h3 class="section-title">Latest Series</h3>
+          <h3 class="section-title">Recently Added</h3>
           <button type="button" class="text-button" data-page="series">See all</button>
         </div>
-        <div id="homeAnimeGrid" class="media-grid"></div>
+        <div id="homeAnimeGrid" class="media-grid horizontal"></div>
+        <section id="homeUpcomingSection" class="home-section hidden">
+          <div class="section-heading-row"><h3 class="section-title">Coming Soon</h3><button type="button" class="text-button" data-page="schedule">Release schedule</button></div>
+          <div id="homeUpcomingList" class="schedule-list home-upcoming-list"></div>
+        </section>
         <div class="section-heading-row">
           <h3 class="section-title">Latest Movies</h3>
           <button type="button" class="text-button" data-page="movies">See all</button>
         </div>
-        <div id="homeMovieGrid" class="media-grid"></div>
+        <div id="homeMovieGrid" class="media-grid horizontal"></div>
       </section>
 
       
@@ -567,7 +583,6 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=57"></script>
-  <script src="/assets/features.js?v=56"></script>
+  <script src="/assets/app.js?v=58"></script>
 </body>
 </html>
