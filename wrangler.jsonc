@@ -11,9 +11,6 @@
   "d1_databases": [
     { "binding": "DB", "database_name": "anicore", "database_id": "bed48c92-adbc-42ee-8365-427c6a203c3b", "migrations_dir": "migrations" }
   ],
-  "r2_buckets": [
-    { "binding": "UPLOADS", "bucket_name": "anicore-uploads" }
-  ],
   "triggers": { "crons": ["0 3 * * *"] },
   "vars": { "ENVIRONMENT": "production", "APP_NAME": "Anicore" }
 }

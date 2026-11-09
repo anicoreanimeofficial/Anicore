@@ -1,6 +1,6 @@
 # Deploy Anicore on Cloudflare only
 
-Stack: **Worker** (API + site) · **D1** (database) · **R2** (uploaded images) · custom domain.
+Stack: **Worker** (API + site) · **D1** (database) · **D1** (uploaded images too) · custom domain.
 No Render, no MongoDB.
 
 ## 1. Install
@@ -12,7 +12,6 @@ npx wrangler login
 ## 2. Create the database and bucket
 ```bash
 npx wrangler d1 create anicore          # copy the database_id it prints
-npx wrangler r2 bucket create anicore-uploads
 ```
 Paste the `database_id` into `wrangler.jsonc` (replace `PASTE_DATABASE_ID_HERE`).
 
@@ -54,8 +53,8 @@ npm run dev
 
 ## Notes
 - **Use the Workers Paid plan ($5/mo)** for a public site. Password hashing (PBKDF2) can exceed the Free plan's
-  10 ms CPU limit; D1/R2/Workers request limits are also much higher.
+  10 ms CPU limit; D1/Workers request limits are also much higher.
 - Old accounts and catalogue from MongoDB are **not** copied. Start fresh, or ask for an export/import script.
 - Old password hashes (scrypt) are not compatible, so existing users would need to reset or re-register.
 - Notifications older than 90 days are deleted by a daily cron (replaces MongoDB's TTL index).
-- Uploads (posters, avatars, backgrounds) live in R2 and are served from `/assets/uploads/...`.
+- Uploads (posters, avatars, backgrounds, max ~1.3MB each) live in D1 and are served from `/assets/uploads/...`.
