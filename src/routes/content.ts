@@ -4,6 +4,7 @@ import {
   AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, currentUser,
   escapeRe, exactRegex, getContentColl, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
   requireAdmin, requireUploader, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
+  blobPut, blobGet,
 } from "../lib";
 
 export const content = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
@@ -606,7 +607,8 @@ content.get("/api/meta/episode", async (c) => {
   });
 });
 
-// ---------- image upload (stored in R2) ----------
+// ---------- image upload (stored in D1) ----------
+const MAX_UPLOAD = 1_300_000;
 const ALLOWED_IMAGE: Record<string, string> = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "image/gif": ".gif" };
 
 content.post("/api/upload/image", async (c) => {
@@ -618,17 +620,17 @@ content.post("/api/upload/image", async (c) => {
   const type = (file.type || "").split(";")[0].trim().toLowerCase();
   if (!ALLOWED_IMAGE[type]) throw bad("Only JPEG, PNG, WebP or GIF allowed");
   const buf = await file.arrayBuffer();
-  if (buf.byteLength > 8 * 1024 * 1024) throw bad("File must be under 8MB");
+  if (buf.byteLength > MAX_UPLOAD) throw bad("Image must be under 1.3MB");
   const name = `${crypto.randomUUID().replace(/-/g, "")}${ALLOWED_IMAGE[type]}`;
-  await c.env.UPLOADS.put(`uploads/${name}`, buf, { httpMetadata: { contentType: type } });
+  await blobPut(c.env, `uploads/${name}`, type, new Uint8Array(buf));
   return c.json({ url: `/assets/uploads/${name}`, message: "Uploaded" });
 });
 
 content.get("/assets/uploads/:name", async (c) => {
-  const obj = await c.env.UPLOADS.get(`uploads/${c.req.param("name")}`);
+  const obj = await blobGet(c.env, `uploads/${c.req.param("name")}`);
   if (!obj) return c.text("Not found", 404);
-  return new Response(obj.body, { headers: {
-    "Content-Type": obj.httpMetadata?.contentType || "application/octet-stream",
+  return new Response(obj.bytes, { headers: {
+    "Content-Type": obj.type || "application/octet-stream",
     "Cache-Control": "public, max-age=31536000, immutable",
   } });
 });

@@ -4,6 +4,7 @@ import { DB } from "../db";
 import {
   AppCtx, COOKIE_NAME, Env, HttpError, R, bad, cookieOptions, currentUser, hashPassword, hmacSha256, json,
   now, parse, requireAdmin, requireUser, signToken, toHex, verifyPassword,
+  blobPut, blobGet, blobDelete,
 } from "../lib";
 
 export const auth = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
@@ -141,10 +142,10 @@ function imageRoutes(kind: "background" | "avatar", prefKey: string, max: number
     if (url) {
       if (!BG_URL_RE.test(url)) throw bad("Image URL must start with https:// and contain no spaces or quotes.");
       updates[`prefs.${prefKey}`] = url;
-      await c.env.UPLOADS.delete(r2key(user._id));
+      await blobDelete(c.env, r2key(user._id));
     } else {
       const img = decodeDataUrl(raw);
-      await c.env.UPLOADS.put(r2key(user._id), img.bytes, { httpMetadata: { contentType: img.type } });
+      await blobPut(c.env, r2key(user._id), img.type, img.bytes);
       updates[`prefs.${prefKey}`] = `/api/users/me/${kind}?v=${Math.floor(Date.now() / 1000)}`;
     }
     const db = c.get("db");
@@ -155,10 +156,10 @@ function imageRoutes(kind: "background" | "avatar", prefKey: string, max: number
 
   auth.get(`/api/users/me/${kind}`, async (c) => {
     const user = await requireUser(c);
-    const obj = await c.env.UPLOADS.get(r2key(user._id));
+    const obj = await blobGet(c.env, r2key(user._id));
     if (!obj) throw new HttpError(404, `No uploaded ${kind}`);
-    return new Response(obj.body, { headers: {
-      "Content-Type": obj.httpMetadata?.contentType || "image/jpeg",
+    return new Response(obj.bytes, { headers: {
+      "Content-Type": obj.type || "image/jpeg",
       "Cache-Control": "private, max-age=31536000, immutable",
     } });
   });
@@ -166,7 +167,7 @@ function imageRoutes(kind: "background" | "avatar", prefKey: string, max: number
   auth.delete(`/api/users/me/${kind}`, async (c) => {
     const user = await requireUser(c);
     await c.get("db").users.updateOne({ _id: user._id }, { $unset: { [`prefs.${prefKey}`]: "" } });
-    await c.env.UPLOADS.delete(r2key(user._id));
+    await blobDelete(c.env, r2key(user._id));
     return c.json({ message: clearMsg });
   });
 }
