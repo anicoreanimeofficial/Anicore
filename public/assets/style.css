@@ -3129,3 +3129,78 @@ body.tg-webapp.tg-player-expanded.tg-rotate .tg-player-exit {
 }
 body.tg-webapp .tg-fs-float { display: block; }
 body.tg-webapp.tg-player-expanded .tg-fs-float { display: none; }
+
+/* =========================================================
+   ANICORE HOMEPAGE REDESIGN v58 — Netflix-inspired dark cinema
+   ========================================================= */
+.home-search-wrap { position: relative; z-index: 30; width: min(92%, 620px); margin: 12px auto 18px; }
+.home-search { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 15px; border: 1px solid rgba(255,255,255,.13); border-radius: 15px; background: rgba(255,255,255,.065); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); box-shadow: 0 8px 30px rgba(0,0,0,.18); }
+.home-search > span { color: var(--pink); font-size: 27px; line-height: 1; }
+.home-search input { flex: 1; min-width: 0; margin: 0; padding: 12px 0; border: 0; background: transparent; color: var(--text); box-shadow: none; }
+.home-search input:focus { outline: 0; box-shadow: none; }
+.home-search kbd { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; color: var(--muted); font-size: 11px; }
+.search-suggestions { position: absolute; top: calc(100% + 8px); left: 0; right: 0; max-height: min(65vh, 430px); overflow: auto; padding: 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; background: rgba(15,13,22,.96); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); box-shadow: 0 18px 55px rgba(0,0,0,.55); }
+.search-suggestion { width: 100%; display: flex; align-items: center; gap: 11px; padding: 8px; border: 0; border-radius: 11px; color: var(--text); background: transparent; text-align: left; cursor: pointer; }
+.search-suggestion:hover { background: rgba(255,255,255,.08); }
+.search-suggestion img { width: 42px; height: 56px; flex: none; border-radius: 7px; object-fit: cover; background: #211923; }
+.search-suggestion span { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.search-suggestion strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.search-suggestion small, .search-suggestion-empty { color: var(--muted); font-size: 11px; }
+.search-suggestion b { color: var(--pink); font-size: 22px; }
+.search-suggestion-empty { margin: 12px; }
+.home-section { margin: 8px 0 20px; }
+.section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.section-heading-row .section-title { min-width: 0; }
+.section-kicker { margin: 24px 5px 0 0; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .12em; white-space: nowrap; }
+.home-genre-section { margin: 10px 0 20px; }
+.home-genre-chips { display: flex; gap: 8px; overflow-x: auto; padding: 12px 5% 8px; scrollbar-width: none; }
+.home-genre-chips::-webkit-scrollbar { display: none; }
+.home-genre-chip { flex: 0 0 auto; padding: 8px 14px; border: 1px solid rgba(255,255,255,.13); border-radius: 999px; color: #eee9f2; background: rgba(255,255,255,.055); font-size: 12px; font-weight: 700; cursor: pointer; transition: .2s ease; }
+.home-genre-chip:hover, .home-genre-chip:focus-visible { border-color: var(--pink); color: #fff; background: rgba(255,63,130,.17); }
+#homeSeriesGrid.media-grid.horizontal, #homeAnimeGrid.media-grid.horizontal, #homeMovieGrid.media-grid.horizontal, #recommendGrid.media-grid.horizontal { padding-top: 15px; padding-bottom: 20px; }
+#homeSeriesGrid.media-grid.horizontal .media-card, #homeAnimeGrid.media-grid.horizontal .media-card, #homeMovieGrid.media-grid.horizontal .media-card, #recommendGrid.media-grid.horizontal .media-card { flex: 0 0 clamp(128px, 16vw, 176px); scroll-snap-align: start; }
+.continue-card { flex: 0 0 clamp(220px, 29vw, 300px); min-width: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--panel); text-align: left; cursor: pointer; scroll-snap-align: start; }
+.continue-poster { position: relative; display: block; aspect-ratio: 16/9; overflow: hidden; background: #17101e; }
+.continue-poster img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
+.continue-card:hover img { transform: scale(1.045); }
+.continue-poster i { position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 23px; font-style: normal; text-shadow: 0 2px 12px #000; background: rgba(0,0,0,.16); }
+.continue-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.28); }
+.continue-progress span { display: block; height: 100%; background: var(--pink); }
+.continue-meta { display: grid; gap: 3px; padding: 10px 12px 12px; }
+.continue-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.continue-meta small { color: var(--muted); font-size: 11px; }
+.home-upcoming-list { padding: 12px 5% 4px; }
+
+/* Wide cinematic hero while preserving the existing featured-title controls */
+.hero { padding: 4px 0 42px; text-align: left; -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 82%, transparent 100%); }
+.hero::before { background: linear-gradient(90deg, rgba(7,7,11,.78), rgba(7,7,11,.18) 65%, rgba(7,7,11,.25)), linear-gradient(to bottom, transparent 55%, var(--bg) 100%); }
+.hero-stage { width: min(94%, 1120px); height: clamp(250px, 43vw, 510px); margin: 8px auto 0; }
+.hero-slide { left: 50%; width: 100%; height: 100%; margin-left: -50%; border-radius: 22px; border: 1px solid rgba(255,255,255,.14); }
+.hero-slide img { object-fit: cover; object-position: center 28%; }
+.hero-slide.is-active { box-shadow: 0 24px 65px rgba(0,0,0,.52); }
+.hero-slide.is-next { transform: translateX(105%) scale(.94); }
+.hero-slide.is-prev { transform: translateX(-105%) scale(.94); }
+.hero-info { width: min(94%, 1120px); margin: -155px auto 0; min-height: 145px; padding: 0 5% 8px; pointer-events: none; }
+.hero-info > * { pointer-events: auto; }
+.hero-title { max-width: 620px; font-size: clamp(34px, 6vw, 66px); text-align: left; text-shadow: 0 4px 22px #000; }
+.hero-chips { justify-content: flex-start; }
+.hero-desc { max-width: 540px; margin-left: 0; text-align: left; }
+.hero-actions { justify-content: flex-start; }
+.hero-dots { margin-top: 16px; }
+.top-title { padding-left: 5%; }
+@media (max-width: 700px) {
+  .home-search-wrap { width: 92%; margin-top: 8px; }
+  .hero { padding-bottom: 32px; }
+  .hero-stage { width: 100%; height: clamp(230px, 68vw, 340px); margin-top: 0; }
+  .hero-slide { border-radius: 0; border-left: 0; border-right: 0; }
+  .hero-slide.is-next, .hero-slide.is-prev { opacity: 0; }
+  .hero-info { width: 100%; margin-top: -112px; padding: 0 5% 8px; }
+  .hero-title { font-size: clamp(30px, 9vw, 46px); }
+  .hero-chip { padding: 5px 10px; font-size: 11px; }
+  .hero-desc { font-size: 12px; -webkit-line-clamp: 2; }
+  .hero-watch { height: 42px; padding: 0 24px; font-size: 14px; }
+  .hero-circle { width: 42px; height: 42px; }
+  .section-kicker { font-size: 8px; }
+  #homeSeriesGrid.media-grid.horizontal .media-card, #homeAnimeGrid.media-grid.horizontal .media-card, #homeMovieGrid.media-grid.horizontal .media-card, #recommendGrid.media-grid.horizontal .media-card { flex-basis: 132px; }
+  .continue-card { flex-basis: 230px; }
+}
