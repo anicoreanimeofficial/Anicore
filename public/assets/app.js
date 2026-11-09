@@ -2613,7 +2613,7 @@ $('episodesModal')?.addEventListener('click', (e) => {
 // --- Image upload helper ---
 async function uploadImageFile(file) {
   if (!file) throw new Error("No file selected");
-  if (file.size > 8 * 1024 * 1024) throw new Error("Image must be under 8MB");
+  if (file.size > 1_300_000) throw new Error("Image must be under 1.3MB");
   const fd = new FormData();
   fd.append("file", file);
   const res = await fetch("/api/upload/image", { method: "POST", body: fd, credentials: "same-origin" });
