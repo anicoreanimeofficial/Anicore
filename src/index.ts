@@ -14,7 +14,15 @@ async function seedAdmin(env: Env, db: DB) {
   seeded = true;
   const email = (env.ADMIN_EMAIL || "").trim().toLowerCase();
   if (!email || !env.ADMIN_PASSWORD) return;
-  if (await db.users.findOne({ email })) return;
+  const existing = await db.users.findOne({ email });
+  if (existing) {
+    // Imported admin (old MongoDB hash): set the password from ADMIN_PASSWORD so you can log in.
+    if (!String(existing.password_hash || "").startsWith("pbkdf2$")) {
+      await db.users.updateOne({ _id: existing._id }, { $set: { password_hash: await hashPassword(env.ADMIN_PASSWORD), role: "admin" } });
+      console.log(`Reset imported admin password: ${email}`);
+    }
+    return;
+  }
   try {
     await db.users.insert({ email, password_hash: await hashPassword(env.ADMIN_PASSWORD), role: "admin", created_at: now() });
     console.log(`Created initial admin account: ${email}`);
