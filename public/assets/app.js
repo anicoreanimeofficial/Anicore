@@ -4210,3 +4210,789 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     toast(err.message, 'error');
   } finally { btn.disabled = false; }
 });
+
+
+// ============================================================
+// Telegram-style header search overlay
+// ============================================================
+(function wireSearchOverlay() {
+  const overlay = $('searchOverlay'), input = $('soInput'), body = $('soBody'), clearBtn = $('soClear');
+  if (!overlay || !input || !body) return;
+  let timer, seq = 0;
+  const hint = (t) => { body.innerHTML = ''; const p = document.createElement('p'); p.className = 'so-hint'; p.textContent = t; body.appendChild(p); };
+  const RK = 'anicore_recent_searches';
+  const getRecent = () => { try { return JSON.parse(localStorage.getItem(RK) || '[]'); } catch (e) { return []; } };
+  const setRecent = (a) => { try { localStorage.setItem(RK, JSON.stringify(a.slice(0, 6))); } catch (e) { /* noop */ } };
+  const saveRecent = (q) => { q = (q || '').trim(); if (q.length < 2) return; setRecent([q, ...getRecent().filter((x) => x.toLowerCase() !== q.toLowerCase())]); };
+  let trendCache = null;
+  async function showIdle() {
+    body.innerHTML = '';
+    const recent = getRecent();
+    if (recent.length) {
+      const head = document.createElement('div'); head.className = 'so-head';
+      head.innerHTML = '<span>Recent searches</span><button type="button" class="so-link">Clear</button>';
+      head.querySelector('button').addEventListener('click', () => { setRecent([]); showIdle(); });
+      body.appendChild(head);
+      const row = document.createElement('div'); row.className = 'so-chips';
+      recent.forEach((q) => {
+        const c = document.createElement('button'); c.type = 'button'; c.className = 'so-chip'; c.textContent = q;
+        c.addEventListener('click', () => { input.value = q; run(); input.focus(); });
+        row.appendChild(c);
+      });
+      body.appendChild(row);
+    }
+    const head2 = document.createElement('div'); head2.className = 'so-head'; head2.innerHTML = '<span>Trending now</span>';
+    body.appendChild(head2);
+    const list = document.createElement('div'); body.appendChild(list);
+    try {
+      if (!trendCache) { const d = await api('/api/anime?' + new URLSearchParams({ page: '1', limit: '8', sort: 'views' })); trendCache = d.items || []; }
+      if (input.value.trim().length >= 2) return;
+      trendCache.slice(0, 8).forEach((item, i) => {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'so-result';
+        b.innerHTML = '<em class="so-rank"></em><img alt="" loading="lazy"><span><strong></strong><small></small></span>';
+        b.querySelector('.so-rank').textContent = String(i + 1);
+        b.querySelector('img').src = safeUrl(item.poster) || PLACEHOLDER;
+        b.querySelector('strong').textContent = item.title || 'Untitled';
+        b.querySelector('small').textContent = [(item.content_type || 'anime').replace('_', ' '), item.year || ''].filter(Boolean).join(' · ');
+        b.addEventListener('click', () => { close(); openDetail(item.content_type || 'anime', item._id || item.content_id, item); });
+        list.appendChild(b);
+      });
+    } catch (e) { if (!recent.length) hint('Type to search anime, series and movies'); }
+  }
+
+  function open() {
+    overlay.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    if (input.value.trim().length < 2) showIdle();
+    setTimeout(() => input.focus(), 30);
+  }
+  function close() {
+    overlay.classList.add('hidden');
+    document.body.style.overflow = '';
+    input.blur();
+  }
+  async function run() {
+    const q = input.value.trim();
+    clearBtn.classList.toggle('hidden', !input.value);
+    if (q.length < 2) { showIdle(); return; }
+    const mine = ++seq;
+    try {
+      const data = await api('/api/search?' + new URLSearchParams({ q, limit: '12', sort: 'views' }));
+      if (mine !== seq) return;
+      const items = data.items || [];
+      if (!items.length) { hint('No results found'); return; }
+      body.innerHTML = '';
+      items.forEach((item) => {
+        const type = item.content_type || item._type || 'anime';
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'so-result';
+        b.innerHTML = '<img alt="" loading="lazy"><span><strong></strong><small></small></span>';
+        const img = b.querySelector('img');
+        img.src = safeUrl(item.poster) || PLACEHOLDER;
+        b.querySelector('strong').textContent = item.title || 'Untitled';
+        b.querySelector('small').textContent = [type.replace('_', ' '), item.year || ''].filter(Boolean).join(' · ');
+        b.addEventListener('click', () => { saveRecent(input.value); close(); openDetail(type, item._id || item.content_id, item); });
+        body.appendChild(b);
+      });
+      const all = document.createElement('button');
+      all.type = 'button'; all.className = 'so-all'; all.textContent = 'See all results';
+      all.addEventListener('click', () => goFull());
+      body.appendChild(all);
+    } catch (err) {
+      if (mine === seq) hint(err.message || 'Search failed');
+    }
+  }
+  function goFull() {
+    const q = input.value.trim();
+    saveRecent(q);
+    close();
+    showPage('search');
+    const gs = $('globalSearch');
+    if (gs) { gs.value = q; runGlobalSearch(); }
+  }
+
+  $('searchOpenBtn')?.addEventListener('click', open);
+  $('soBack')?.addEventListener('click', close);
+  clearBtn.addEventListener('click', () => { input.value = ''; run(); input.focus(); });
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 220); });
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); goFull(); } });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+    else if (e.key === '/' && overlay.classList.contains('hidden') && !/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) { e.preventDefault(); open(); }
+  });
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+})();
+
+
+// ============================================================
+// UI ENHANCEMENTS (v60)
+// ============================================================
+(function enhancements() {
+  const LS = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* noop */ } },
+  };
+  const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+  const buzz = (kind = 'light') => {
+    try {
+      const h = window.Telegram?.WebApp?.HapticFeedback;
+      if (h) { h.impactOccurred(kind); return; }
+      navigator.vibrate?.(8);
+    } catch (e) { /* noop */ }
+  };
+  const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+  const DAY = 864e5;
+
+  // ---------- 1. Haptics on taps ----------
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('.bottom-nav button, .header-icon-btn, #signInBtn, .media-card, .so-result, .genre-chip, .fx-btn, .fx-chip')) buzz('light');
+  }, true);
+
+  // ---------- 2. Scroll-to-top button ----------
+  const topBtn = el('button', 'scroll-top hidden', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>');
+  topBtn.type = 'button'; topBtn.setAttribute('aria-label', 'Back to top');
+  document.body.appendChild(topBtn);
+  topBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  let topTick = false;
+  window.addEventListener('scroll', () => {
+    if (topTick) return; topTick = true;
+    requestAnimationFrame(() => {
+      topTick = false;
+      const show = window.scrollY > 700 && ['home', 'series', 'movies', 'search', 'profile', 'schedule'].includes(state.page);
+      topBtn.classList.toggle('hidden', !show);
+    });
+  }, { passive: true });
+
+  // ---------- 3. Skeleton shimmer on poster rows ----------
+  const ROW_IDS = ['homeSeriesGrid', 'homeAnimeGrid', 'homeMovieGrid'];
+  function skeletonRows() {
+    ROW_IDS.forEach((id) => { const g = $(id); if (g && !g.querySelector('.media-card')) showSkeleton(id, 6); });
+    setTimeout(() => {
+      ROW_IDS.forEach((id) => { const g = $(id); if (g && g.querySelector('.skeleton-grid') && !g.querySelector('.media-card')) g.innerHTML = '<p class="muted empty">Nothing here yet.</p>'; });
+    }, 12000);
+  }
+  skeletonRows();
+
+  // ---------- 4. Pull-to-refresh on Home ----------
+  const ptr = el('div', 'ptr', '<span class="ptr-spin"></span>');
+  document.body.appendChild(ptr);
+  let py = 0, pdy = 0, pulling = false, refreshing = false;
+  document.addEventListener('touchstart', (e) => {
+    if (state.page !== 'home' || window.scrollY > 0 || refreshing || e.touches.length !== 1) return;
+    if (e.target.closest('.hero, .media-grid.horizontal, .top-row, .home-genre-chips, #searchOverlay')) return;
+    py = e.touches[0].clientY; pdy = 0; pulling = true;
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    pdy = e.touches[0].clientY - py;
+    if (pdy <= 0) { ptr.style.transform = ''; ptr.style.opacity = '0'; return; }
+    const d = Math.min(pdy * 0.5, 80);
+    ptr.style.opacity = String(Math.min(d / 50, 1));
+    ptr.style.transform = `translate(-50%, ${d}px) rotate(${d * 4}deg)`;
+  }, { passive: true });
+  document.addEventListener('touchend', () => {
+    if (!pulling) return; pulling = false;
+    if (pdy * 0.5 >= 56) {
+      refreshing = true; buzz('medium');
+      ptr.classList.add('spinning'); ptr.style.transform = 'translate(-50%, 56px)'; ptr.style.opacity = '1';
+      ROW_IDS.forEach((id) => { const g = $(id); if (g) g.innerHTML = ''; });
+      skeletonRows();
+      try { showPage('home'); } catch (e) { /* noop */ }
+      setTimeout(() => { ptr.classList.remove('spinning'); ptr.style.transform = ''; ptr.style.opacity = '0'; refreshing = false; }, 1100);
+    } else { ptr.style.transform = ''; ptr.style.opacity = '0'; }
+    pdy = 0;
+  }, { passive: true });
+
+  // ---------- 5. Empty states + card data + NEW badges (wrap renderGrid) ----------
+  const EMPTY_ICON = '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="10" y="14" width="44" height="34" rx="6"/><path d="M22 54h20M32 48v6"/><path d="M24 28l6 6M30 28l-6 6M38 31h6"/></svg>';
+  function addBadge(card, it, type) {
+    const now = Date.now();
+    const upd = Date.parse(it.updated_at || ''), cre = Date.parse(it.created_at || '');
+    let label = '';
+    if (type !== 'movie' && upd && now - upd < DAY) label = 'NEW EP';
+    else if (cre && now - cre < 7 * DAY) label = 'NEW';
+    if (!label) return;
+    const b = el('span', 'new-badge' + (label === 'NEW EP' ? ' ep' : ''), label);
+    card.querySelector('.poster-wrap')?.appendChild(b);
+  }
+  const origRenderGrid = renderGrid;
+  renderGrid = function (grid, items, type, opts = {}) {
+    origRenderGrid(grid, items, type, opts);
+    try {
+      if (!items.length && !opts.append) {
+        const p = grid.querySelector('.empty');
+        if (p) {
+          const isWl = grid.id === 'watchlistGrid', isMovie = grid.id === 'movieGrid' || grid.id === 'homeMovieGrid';
+          const cta = isWl || grid.id === 'searchGrid' || grid.id === 'seriesGrid' ? '' : '';
+          p.className = 'fx-empty';
+          p.innerHTML = EMPTY_ICON + `<strong>${esc(opts.empty || 'Nothing here yet.')}</strong>`
+            + (isWl ? '<span>Tap ♡ on any title to save it here.</span><button type="button" class="outline small" data-page="series">Browse series</button>'
+              : (grid.id === 'seriesGrid' || grid.id === 'movieGrid') ? '<span>Try a different filter or search.</span><button type="button" class="outline small fx-reset-filters">Reset filters</button>'
+                : `<button type="button" class="outline small" data-page="${isMovie ? 'movies' : 'series'}">Explore</button>`) + cta;
+        }
+        return;
+      }
+      const cards = [...grid.children].filter((c) => c.classList && c.classList.contains('media-card'));
+      cards.slice(cards.length - items.length).forEach((card, i) => {
+        const it = items[i]; card._item = it; card._type = it._type || type;
+        addBadge(card, it, card._type);
+      });
+    } catch (e) { /* noop */ }
+  };
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.fx-reset-filters')) return;
+    ['seriesGenre', 'seriesStatus', 'movieGenre', 'movieStatus'].forEach((id) => { const s = $(id); if (s && s.value) { s.value = ''; s.dispatchEvent(new Event('change')); } });
+    ['seriesSearch', 'movieSearch'].forEach((id) => { const s = $(id); if (s && s.value) { s.value = ''; s.dispatchEvent(new Event('input')); } });
+  });
+
+  // ---------- 6. Filters bottom sheet + grid/list toggle ----------
+  const sheet = el('div', 'fx-sheet hidden', '<div class="fx-sheet-bg"></div><div class="fx-sheet-card" role="dialog" aria-modal="true"><div class="fx-grabber"></div><div class="fx-sheet-title"></div><div class="fx-sheet-body"></div></div>');
+  document.body.appendChild(sheet);
+  const sheetTitle = sheet.querySelector('.fx-sheet-title'), sheetBody = sheet.querySelector('.fx-sheet-body');
+  const closeSheet = () => sheet.classList.add('hidden');
+  const openSheet = (title, build) => { sheetTitle.textContent = title; sheetBody.innerHTML = ''; build(sheetBody); sheet.classList.remove('hidden'); };
+  sheet.querySelector('.fx-sheet-bg').addEventListener('click', closeSheet);
+  // swipe down to close
+  (function () {
+    const card = sheet.querySelector('.fx-sheet-card'); let sy = 0, dy = 0, on = false;
+    card.addEventListener('touchstart', (e) => { if (card.scrollTop > 0) return; sy = e.touches[0].clientY; dy = 0; on = true; }, { passive: true });
+    card.addEventListener('touchmove', (e) => { if (!on) return; dy = Math.max(0, e.touches[0].clientY - sy); card.style.transform = `translateY(${dy}px)`; }, { passive: true });
+    card.addEventListener('touchend', () => { if (!on) return; on = false; card.style.transform = ''; if (dy > 90) closeSheet(); });
+  })();
+
+  function chipGroup(label, select) {
+    const wrap = el('div', 'fx-group'); wrap.appendChild(el('div', 'fx-group-label', label));
+    const row = el('div', 'fx-chips'); wrap.appendChild(row);
+    [...select.options].forEach((o) => {
+      const text = o.textContent.trim(); if (!text) return;
+      const c = el('button', 'fx-chip' + (select.value === o.value ? ' active' : ''), '');
+      c.type = 'button'; c.textContent = text;
+      c.addEventListener('click', () => {
+        select.value = o.value; select.dispatchEvent(new Event('change', { bubbles: true }));
+        row.querySelectorAll('.fx-chip').forEach((x) => x.classList.toggle('active', x === c));
+        refreshToolbars();
+      });
+      row.appendChild(c);
+    });
+    return wrap;
+  }
+  const FILTER_SETS = {
+    series: { search: 'seriesSearch', genre: 'seriesGenre', status: 'seriesStatus', sort: 'seriesSort', grid: 'seriesGrid', filters: 'seriesFilters' },
+    movies: { search: 'movieSearch', genre: 'movieGenre', status: 'movieStatus', sort: 'movieSort', grid: 'movieGrid', filters: 'movieFilters' },
+  };
+  const viewMode = () => LS.get('anicore_view', 'grid');
+  function applyView() {
+    const list = viewMode() === 'list';
+    ['seriesGrid', 'movieGrid', 'searchGrid'].forEach((id) => $(id)?.classList.toggle('list-view', list));
+    document.querySelectorAll('.fx-view').forEach((b) => { b.innerHTML = list ? ICON_GRID : ICON_LIST; b.setAttribute('aria-label', list ? 'Grid view' : 'List view'); });
+  }
+  const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+  const ICON_GRID = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>';
+  function refreshToolbars() {
+    Object.entries(FILTER_SETS).forEach(([key, f]) => {
+      const btn = document.querySelector(`.fx-filter-btn[data-set="${key}"]`); if (!btn) return;
+      const n = [f.genre, f.status].filter((id) => $(id)?.value).length + (($(f.sort)?.value || 'newest') !== 'newest' ? 1 : 0);
+      btn.querySelector('.fx-count').textContent = n ? String(n) : '';
+      btn.classList.toggle('has', n > 0);
+    });
+  }
+  Object.entries(FILTER_SETS).forEach(([key, f]) => {
+    const host = $(f.filters), input = $(f.search); if (!host || !input) return;
+    const bar = el('div', 'fx-toolbar');
+    const fb = el('button', 'fx-btn fx-filter-btn', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>Filters</span><b class="fx-count"></b>');
+    fb.type = 'button'; fb.dataset.set = key;
+    const vb = el('button', 'fx-btn fx-view', ''); vb.type = 'button';
+    fb.addEventListener('click', () => openSheet('Filters', (body) => {
+      body.appendChild(chipGroup('Genre', $(f.genre)));
+      body.appendChild(chipGroup('Status', $(f.status)));
+      body.appendChild(chipGroup('Sort by', $(f.sort)));
+      const done = el('button', 'primary block', 'Show results'); done.type = 'button'; done.addEventListener('click', closeSheet);
+      const reset = el('button', 'outline block', 'Reset'); reset.type = 'button';
+      reset.addEventListener('click', () => {
+        [f.genre, f.status].forEach((id) => { const s = $(id); if (s) { s.value = ''; s.dispatchEvent(new Event('change', { bubbles: true })); } });
+        const s = $(f.sort); if (s) { s.value = 'newest'; s.dispatchEvent(new Event('change', { bubbles: true })); }
+        closeSheet(); refreshToolbars();
+      });
+      const row = el('div', 'fx-sheet-actions'); row.append(reset, done); body.appendChild(row);
+    }));
+    vb.addEventListener('click', () => { LS.set('anicore_view', viewMode() === 'list' ? 'grid' : 'list'); applyView(); });
+    bar.append(fb, vb);
+    input.insertAdjacentElement('afterend', bar);
+    ['genre', 'status', 'sort'].forEach((k) => $(f[k])?.addEventListener('change', refreshToolbars));
+  });
+  applyView(); refreshToolbars();
+
+  // ---------- 7. Seen episodes, streak, genre counts ----------
+  const seenMap = () => LS.get('anicore_seen', {});
+  function markSeen() {
+    if (!videoContext) return;
+    const ep = videoContext.episodes[videoContext.currentIndex]; if (!ep) return;
+    const key = `${videoContext.type}:${videoContext.contentId}`;
+    const m = seenMap(); const a = m[key] || []; const id = `${ep.season}-${ep.episode}`;
+    if (!a.includes(id)) { a.push(id); m[key] = a; LS.set('anicore_seen', m); }
+    const days = LS.get('anicore_days', []); const today = new Date().toISOString().slice(0, 10);
+    if (!days.includes(today)) { days.push(today); LS.set('anicore_days', days.slice(-120)); }
+  }
+  const origLoadVideoEpisode = loadVideoEpisode;
+  loadVideoEpisode = function () {
+    const r = origLoadVideoEpisode.apply(this, arguments);
+    try { markSeen(); } catch (e) { /* noop */ }
+    return r;
+  };
+  const origBuildDetail = buildDetailHtml;
+  buildDetailHtml = function (type, item, comments) {
+    if (comments !== null && item) {
+      try {
+        const g = Array.isArray(item.genres) ? item.genres : String(item.genres || '').split(',');
+        const counts = LS.get('anicore_genres', {});
+        g.map((x) => String(x).trim()).filter(Boolean).forEach((x) => { counts[x] = (counts[x] || 0) + 1; });
+        LS.set('anicore_genres', counts);
+      } catch (e) { /* noop */ }
+    }
+    return origBuildDetail.apply(this, arguments);
+  };
+
+  // ---------- 8. Watchlist tabs + status ----------
+  const STATUSES = [['all', 'All'], ['plan', 'Plan to Watch'], ['watching', 'Watching'], ['completed', 'Completed']];
+  const wlStatusMap = () => LS.get('anicore_wl_status', {});
+  const wlKey = (t, id) => `${t}:${id}`;
+  function getStatus(t, id) {
+    const s = wlStatusMap()[wlKey(t, id)]; if (s) return s;
+    return (seenMap()[wlKey(t, id)] || []).length ? 'watching' : 'plan';
+  }
+  let wlTab = 'all';
+  function applyWlFilter() {
+    const grid = $('watchlistGrid'); if (!grid) return;
+    const counts = { all: 0, plan: 0, watching: 0, completed: 0 };
+    grid.querySelectorAll('.media-card').forEach((c) => {
+      if (!c._item) return;
+      const st = getStatus(c._type, c._item._id || c._item.content_id);
+      counts.all++; counts[st]++;
+      c.style.display = (wlTab === 'all' || wlTab === st) ? '' : 'none';
+      let tag = c.querySelector('.wl-tag');
+      if (!tag) { tag = el('span', 'wl-tag'); c.querySelector('.poster-wrap')?.appendChild(tag); }
+      tag.textContent = STATUSES.find((s) => s[0] === st)[1]; tag.dataset.st = st;
+    });
+    document.querySelectorAll('#wlTabs .wl-tab').forEach((b) => {
+      b.querySelector('i').textContent = counts[b.dataset.tab] || 0;
+      b.classList.toggle('active', b.dataset.tab === wlTab);
+    });
+    const none = grid.querySelector('.wl-none');
+    if (counts.all && !counts[wlTab] && wlTab !== 'all') { if (!none) grid.appendChild(el('p', 'muted empty wl-none', 'Nothing in this list yet. Long-press a title to change its status.')); }
+    else none?.remove();
+    renderStats(counts.all);
+  }
+  (function buildWlTabs() {
+    const grid = $('watchlistGrid'); if (!grid || $('wlTabs')) return;
+    const tabs = el('div', 'wl-tabs'); tabs.id = 'wlTabs';
+    STATUSES.forEach(([k, label]) => {
+      const b = el('button', 'wl-tab' + (k === 'all' ? ' active' : ''), `${label}<i>0</i>`); b.type = 'button'; b.dataset.tab = k;
+      b.addEventListener('click', () => { wlTab = k; applyWlFilter(); });
+      tabs.appendChild(b);
+    });
+    grid.parentNode.insertBefore(tabs, grid);
+    new MutationObserver(() => applyWlFilter()).observe(grid, { childList: true });
+  })();
+
+  // ---------- 9. Stats card on profile ----------
+  function renderStats(titles) {
+    const member = $('profileMember'); if (!member || member.classList.contains('hidden')) return;
+    let panel = $('statsPanel');
+    if (!panel) { panel = el('div', 'panel'); panel.id = 'statsPanel'; member.insertBefore(panel, member.firstChild); }
+    const seen = seenMap(); let eps = 0; Object.values(seen).forEach((a) => { eps += a.length; });
+    const hours = Math.round((eps * 24) / 6) / 10;
+    const gc = LS.get('anicore_genres', {}); const top = Object.entries(gc).sort((a, b) => b[1] - a[1])[0];
+    const days = new Set(LS.get('anicore_days', [])); let streak = 0; const d = new Date();
+    if (!days.has(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);
+    while (days.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 1); }
+    panel.innerHTML = `<h3>Your stats</h3><div class="stat-cards">
+      <div class="stat-card"><b>${eps}</b><span>Episodes watched</span></div>
+      <div class="stat-card"><b>~${hours}h</b><span>Watch time</span></div>
+      <div class="stat-card"><b>${streak}🔥</b><span>Day streak</span></div>
+      <div class="stat-card"><b>${titles || 0}</b><span>In watchlist</span></div>
+      <div class="stat-card wide"><b>${top ? esc(top[0]) : '—'}</b><span>Favourite genre</span></div></div>`;
+  }
+
+  // ---------- 10. Long-press card menu ----------
+  let suppressUntil = 0;
+  document.addEventListener('click', (e) => {
+    if (Date.now() < suppressUntil && e.target.closest('.media-card')) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
+  document.addEventListener('contextmenu', (e) => { if (e.target.closest('.media-card')) e.preventDefault(); });
+  let lpTimer = null, lpX = 0, lpY = 0;
+  document.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('.media-card'); if (!card || !card._item || e.button > 0) return;
+    lpX = e.clientX; lpY = e.clientY;
+    clearTimeout(lpTimer);
+    lpTimer = setTimeout(() => { suppressUntil = Date.now() + 700; buzz('medium'); openCardMenu(card); }, 480);
+  }, { passive: true });
+  ['pointerup', 'pointercancel', 'scroll'].forEach((ev) => document.addEventListener(ev, () => clearTimeout(lpTimer), { passive: true, capture: true }));
+  document.addEventListener('pointermove', (e) => { if (Math.hypot(e.clientX - lpX, e.clientY - lpY) > 10) clearTimeout(lpTimer); }, { passive: true });
+
+  function openCardMenu(card) {
+    const it = card._item, type = card._type, id = it._id || it.content_id;
+    openSheet(it.title || 'Title', (body) => {
+      const mk = (icon, label, fn) => { const b = el('button', 'fx-action', `<span>${icon}</span>${label}`); b.type = 'button'; b.addEventListener('click', () => { closeSheet(); fn(); }); body.appendChild(b); return b; };
+      mk('▶', 'Open details', () => openDetail(type, id, it));
+      const wl = mk('♡', 'Watchlist…', async () => {
+        if (!state.user) return openAuth('login');
+        try { const res = await api(`/api/watchlist/${type}/${id}`, { method: 'POST' }); toast(res.saved ? 'Added to watchlist' : 'Removed from watchlist'); if (state.page === 'profile') loadProfile(); } catch (err) { toast(err.message, 'error'); }
+      });
+      if (state.user) api('/api/watchlist').then((list) => {
+        const has = list.some((w) => w.content_type === type && String(w.content_id) === String(id));
+        wl.innerHTML = has ? '<span>♥</span>Remove from watchlist' : '<span>♡</span>Add to watchlist';
+      }).catch(() => {});
+      mk('↗', 'Share', () => shareContent(type, id, it.title));
+      if (card.closest('#watchlistGrid')) {
+        body.appendChild(el('div', 'fx-group-label', 'Set status'));
+        const row = el('div', 'fx-chips');
+        STATUSES.slice(1).forEach(([k, label]) => {
+          const c = el('button', 'fx-chip' + (getStatus(type, id) === k ? ' active' : ''), label); c.type = 'button';
+          c.addEventListener('click', () => { const m = wlStatusMap(); m[wlKey(type, id)] = k; LS.set('anicore_wl_status', m); closeSheet(); applyWlFilter(); toast(`Marked ${label}`); });
+          row.appendChild(c);
+        });
+        body.appendChild(row);
+      }
+    });
+  }
+
+  // ---------- 11. Poster fly-in transition ----------
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('.media-card');
+    if (!card || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const img = card.querySelector('.poster-wrap img'); if (!img) return;
+    const r = img.getBoundingClientRect(); if (!r.width) return;
+    const c = img.cloneNode(); c.className = 'fly-poster'; c.removeAttribute('loading');
+    Object.assign(c.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
+    document.body.appendChild(c);
+    const tw = Math.min(innerWidth * 0.6, 360), th = tw * (r.height / r.width);
+    const dx = (innerWidth / 2 - tw / 2) - r.left, dy = 90 - r.top;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      c.style.transform = `translate(${dx}px, ${dy}px) scale(${tw / r.width})`;
+      c.style.transformOrigin = '0 0'; c.style.opacity = '0';
+    }));
+    setTimeout(() => c.remove(), 460);
+  }, true);
+
+  // ---------- 12. Toast with Undo for watchlist removal ----------
+  let lastWl = null;
+  const origApi = api;
+  api = async function (path, options = {}) {
+    const res = await origApi(path, options);
+    try { if (/^\/api\/watchlist\/[^/]+\/[^/]+$/.test(path) && (options.method || 'GET') === 'POST') lastWl = { path, at: Date.now() }; } catch (e) { /* noop */ }
+    return res;
+  };
+  const origToast = toast;
+  toast = function (message, kind = 'ok') {
+    if (message === 'Removed from watchlist' && lastWl && Date.now() - lastWl.at < 4000) {
+      const { path } = lastWl;
+      const t = el('div', 'toast ok toast-undo'); t.setAttribute('role', 'status');
+      t.innerHTML = '<span>Removed from watchlist</span><button type="button">Undo</button>';
+      t.querySelector('button').addEventListener('click', async () => {
+        t.remove();
+        try {
+          const r = await origApi(path, { method: 'POST' });
+          const wb = $('wlBtn'); if (wb && r.saved) { wb.textContent = '♥ In Watchlist'; wb.classList.add('saved'); }
+          if (state.page === 'profile') loadProfile();
+          origToast('Restored to watchlist');
+        } catch (err) { origToast(err.message, 'error'); }
+      });
+      document.body.appendChild(t); setTimeout(() => t.remove(), 5500); buzz('light');
+      return;
+    }
+    return origToast(message, kind);
+  };
+
+  // ---------- 13. Avatar presets ----------
+  const PRESETS = [['😺', '#ff3f82'], ['🦊', '#f97316'], ['🐼', '#64748b'], ['🐉', '#16a34a'], ['👻', '#8b5cf6'], ['🌸', '#ec4899'], ['⚡', '#eab308'], ['🔥', '#ef4444']];
+  function presetDataUrl(emoji, color) {
+    const c = document.createElement('canvas'); c.width = c.height = 320; const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 320, 320); grad.addColorStop(0, color); grad.addColorStop(1, '#14101c');
+    g.fillStyle = grad; g.fillRect(0, 0, 320, 320);
+    g.font = '170px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(emoji, 160, 176);
+    return c.toDataURL('image/jpeg', 0.85);
+  }
+  const origRenderProfileCard = renderProfileCard;
+  renderProfileCard = function (editing = false) {
+    origRenderProfileCard(editing);
+    if (!editing) return;
+    const form = $('profileEditForm'); if (!form || form.querySelector('.avatar-presets')) return;
+    const box = el('div', 'avatar-presets'); box.appendChild(el('div', 'fx-group-label', 'Or pick an avatar'));
+    const row = el('div', 'avatar-preset-row');
+    PRESETS.forEach(([emoji, color]) => {
+      const b = el('button', 'avatar-preset', emoji); b.type = 'button'; b.style.background = `linear-gradient(135deg, ${color}, #14101c)`;
+      b.addEventListener('click', async () => {
+        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(emoji, color) }); renderProfileCard(true); toast('Avatar updated'); } catch (err) { toast(err.message, 'error'); }
+      });
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+    form.querySelector('.bg-actions')?.insertAdjacentElement('beforebegin', box);
+  };
+
+  // wrap loadProfile so stats/tabs refresh
+  const origLoadProfile = loadProfile;
+  loadProfile = async function () {
+    const r = await origLoadProfile.apply(this, arguments);
+    try { applyWlFilter(); } catch (e) { /* noop */ }
+    return r;
+  };
+
+  // ---------- 14. Notification bell (new episodes on watchlist) ----------
+  const bell = el('button', 'header-icon-btn hidden', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 20a1.9 1.9 0 0 0 3.4 0"/></svg><i class="bell-dot hidden"></i>');
+  bell.id = 'bellBtn'; bell.type = 'button'; bell.setAttribute('aria-label', 'Notifications');
+  $('searchOpenBtn')?.insertAdjacentElement('beforebegin', bell);
+  let bellItems = [];
+  async function refreshBell(force) {
+    if (!state.user) { bell.classList.add('hidden'); return; }
+    bell.classList.remove('hidden');
+    const last = LS.get('anicore_bell_ts', 0);
+    if (!force && Date.now() - last < 30 * 60 * 1000) { bell.querySelector('.bell-dot').classList.toggle('hidden', !bellItems.length); return; }
+    try {
+      const list = (await api('/api/watchlist')).slice(0, 12);
+      const base = LS.get('anicore_ep_counts', null);
+      const counts = {}; const fresh = [];
+      await Promise.all(list.map(async (w) => {
+        try {
+          const d = await api(`/api/content/${w.content_type}/${w.content_id}`);
+          const k = wlKey(w.content_type, w.content_id); const n = (d.episodes || []).length; counts[k] = n;
+          if (base && base[k] != null && n > base[k]) {
+            const latest = [...(d.episodes || [])].sort((a, b) => (b.season - a.season) || (b.episode - a.episode))[0];
+            fresh.push({ type: w.content_type, id: w.content_id, title: w.title || d.title, poster: w.poster || d.poster, label: latest ? `S${latest.season} · E${latest.episode} is out` : 'New episode' });
+          }
+        } catch (e) { /* skip */ }
+      }));
+      bellItems = fresh; LS.set('anicore_bell_pending', fresh);
+      if (!base) LS.set('anicore_ep_counts', counts); else LS.set('anicore_bell_next', counts);
+      LS.set('anicore_bell_ts', Date.now());
+    } catch (e) { bellItems = LS.get('anicore_bell_pending', []); }
+    bell.querySelector('.bell-dot').classList.toggle('hidden', !bellItems.length);
+  }
+  bell.addEventListener('click', () => {
+    openSheet('Notifications', (body) => {
+      if (!bellItems.length) { body.appendChild(el('p', 'muted so-hint', 'No new episodes for your watchlist yet.')); return; }
+      bellItems.forEach((n) => {
+        const b = el('button', 'so-result', '<img alt="" loading="lazy"><span><strong></strong><small></small></span>'); b.type = 'button';
+        b.querySelector('img').src = safeUrl(n.poster) || PLACEHOLDER; b.querySelector('strong').textContent = n.title || 'Title'; b.querySelector('small').textContent = n.label;
+        b.addEventListener('click', () => { closeSheet(); openDetail(n.type, n.id); });
+        body.appendChild(b);
+      });
+    });
+    const next = LS.get('anicore_bell_next', null); if (next) LS.set('anicore_ep_counts', next);
+    bellItems = []; LS.set('anicore_bell_pending', []); bell.querySelector('.bell-dot').classList.add('hidden');
+  });
+  const origUpdateAuthUI = updateAuthUI;
+  updateAuthUI = function () { const r = origUpdateAuthUI.apply(this, arguments); try { refreshBell(); } catch (e) { /* noop */ } return r; };
+  bellItems = LS.get('anicore_bell_pending', []);
+  setTimeout(() => refreshBell(), 1500);
+
+  // ---------- 15. Mini-player (direct videos keep playing while you browse) ----------
+  let mini = null;
+  function closeMini() {
+    if (!mini) return;
+    try { mini.wrap.querySelector('video')?.pause(); } catch (e) { /* noop */ }
+    mini.wrap.remove(); mini.box.remove(); mini = null;
+  }
+  function openMini() {
+    const wrap = $('playerWrap'); if (!wrap || !videoContext) return;
+    const video = wrap.querySelector('video'); if (!video || video.paused || video.ended) return;
+    const ph = el('div', wrap.className); ph.id = 'playerWrap';
+    const box = el('div', 'mini-player');
+    const ep = videoContext.episodes[videoContext.currentIndex];
+    const bar = el('div', 'mini-bar', '<span class="mini-title"></span><button type="button" class="mini-btn" data-a="expand" aria-label="Expand">⤢</button><button type="button" class="mini-btn" data-a="close" aria-label="Close">✕</button>');
+    bar.querySelector('.mini-title').textContent = `${videoContext.contentTitle} · E${ep ? ep.episode : ''}`;
+    wrap.parentNode.insertBefore(ph, wrap); wrap.id = 'miniWrap';
+    box.append(bar, wrap); document.body.appendChild(box);
+    mini = { box, wrap, ph, ctx: videoContext };
+    video.play?.().catch(() => {});
+    bar.addEventListener('click', (e) => {
+      const a = e.target.closest('button')?.dataset.a;
+      if (a === 'close') closeMini();
+      if (a === 'expand') {
+        const m = mini; mini = null;
+        m.wrap.id = 'playerWrap'; m.ph.parentNode.replaceChild(m.wrap, m.ph); m.box.remove();
+        videoContext = m.ctx; showPage('video');
+        try { updateVideoNav(); renderVideoEpList(); } catch (err) { /* noop */ }
+        m.wrap.querySelector('video')?.play?.().catch(() => {});
+      }
+    });
+  }
+  const origShowPage = showPage;
+  showPage = function (page) {
+    if (state.page === 'video' && page !== 'video' && !mini) { try { openMini(); } catch (e) { /* noop */ } }
+    return origShowPage.apply(this, arguments);
+  };
+  const origOpenVideo = openVideo;
+  openVideo = function () { closeMini(); return origOpenVideo.apply(this, arguments); };
+
+  // ---------- 16. Player extras: double-tap seek, next-ep countdown, embed skip ----------
+  if (LS.get('anicore_autonext', null) === null) LS.set('anicore_autonext', true);
+  (function addAutoNextToggle() {
+    const tools = $('playerTools'); if (!tools || $('fxAutoNext')) return;
+    const lab = el('label', 'pt-item pt-check', '<input type="checkbox" id="fxAutoNext"> Auto-play next episode');
+    tools.insertBefore(lab, tools.firstChild);
+    const cb = lab.querySelector('input'); cb.checked = !!LS.get('anicore_autonext', true);
+    cb.addEventListener('change', () => LS.set('anicore_autonext', cb.checked));
+  })();
+
+  function ripple(wrap, side, text) {
+    const r = el('div', 'seek-ripple ' + side, `<span>${text}</span>`); wrap.appendChild(r); setTimeout(() => r.remove(), 650);
+  }
+  function setupDirect(video, wrap) {
+    if (video._fx) return; video._fx = true;
+    let last = 0, lastSide = '';
+    const seek = (side) => {
+      const d = side === 'left' ? -10 : 10;
+      video.currentTime = Math.max(0, Math.min((video.duration || Infinity) - 0.2, video.currentTime + d));
+      ripple(wrap, side, (d > 0 ? '+' : '−') + '10s'); buzz('light');
+    };
+    const handle = (e, x, y) => {
+      const r = wrap.getBoundingClientRect(); const rx = (x - r.left) / r.width, ry = (y - r.top) / r.height;
+      if (ry > 0.8 || ry < 0.1) return false;
+      const side = rx < 0.33 ? 'left' : rx > 0.67 ? 'right' : '';
+      if (!side) return false;
+      const now = Date.now();
+      if (now - last < 320 && lastSide === side) { last = 0; seek(side); return true; }
+      last = now; lastSide = side; return false;
+    };
+    wrap.addEventListener('touchend', (e) => { const t = e.changedTouches[0]; if (t && handle(e, t.clientX, t.clientY)) e.preventDefault(); }, { passive: false });
+    wrap.addEventListener('dblclick', (e) => {
+      const r = wrap.getBoundingClientRect(); const rx = (e.clientX - r.left) / r.width, ry = (e.clientY - r.top) / r.height;
+      if (ry > 0.8) return;
+      if (rx < 0.33) { e.preventDefault(); seek('left'); } else if (rx > 0.67) { e.preventDefault(); seek('right'); }
+    });
+    video.addEventListener('ended', () => {
+      if (!LS.get('anicore_autonext', true)) return;
+      const idx = nextPlayableIndex(); if (idx === -1 || wrap.querySelector('.player-next')) return;
+      const nx = videoContext.episodes[idx];
+      const box = el('div', 'player-next', `<p>Up next</p><strong></strong><span class="player-next-count"></span><div class="player-next-actions"><button type="button" class="outline small" data-act="cancel">Cancel</button><button type="button" class="primary small" data-act="now">Play now</button></div>`);
+      box.querySelector('strong').textContent = `S${nx.season} · E${nx.episode}${nx.title ? ' — ' + nx.title : ''}`;
+      wrap.appendChild(box);
+      let left = 5; const cnt = box.querySelector('.player-next-count'); cnt.textContent = `Playing in ${left}s`;
+      const go = () => { clearInterval(tm); box.remove(); playNextEpisode(); };
+      const tm = setInterval(() => { if (!wrap.contains(box)) { clearInterval(tm); return; } left--; if (left <= 0) go(); else cnt.textContent = `Playing in ${left}s`; }, 1000);
+      box.addEventListener('click', (e) => { const a = e.target.closest('button')?.dataset.act; if (a === 'cancel') { clearInterval(tm); box.remove(); } if (a === 'now') go(); });
+    });
+  }
+
+  // Embedded players (e.g. upload18.org): best-effort skip controls.
+  const embedMsgHandlers = new Set();
+  window.addEventListener('message', (e) => { embedMsgHandlers.forEach((h) => { try { h(e); } catch (err) { /* noop */ } }); });
+  function readTime(data) {
+    let d = data;
+    if (typeof d === 'string') { try { d = JSON.parse(d); } catch (e) { return null; } }
+    if (!d || typeof d !== 'object') return null;
+    const cands = [d.currentTime, d.time, d.position, d.seconds, d.data && d.data.currentTime, d.data && d.data.time, d.info && d.info.currentTime, d.value && d.value.currentTime, d.payload && d.payload.currentTime];
+    for (const c of cands) { if (typeof c === 'number' && Number.isFinite(c)) return c; }
+    return null;
+  }
+  function seekEmbed(iframe, sec) {
+    const w = iframe.contentWindow; if (!w) return;
+    const msgs = [
+      { event: 'command', func: 'seekTo', args: [sec, true] },
+      { method: 'setCurrentTime', value: sec },
+      { method: 'seekTo', value: sec }, { method: 'seek', value: sec },
+      { command: 'seek', time: sec }, { command: 'seekTo', time: sec, value: sec },
+      { type: 'seek', time: sec, value: sec }, { action: 'seek', time: sec, value: sec },
+      { event: 'seek', time: sec }, { name: 'seek', value: sec },
+      { seekTo: sec }, { currentTime: sec }, { cmd: 'seek', value: sec },
+    ];
+    msgs.forEach((m) => { try { w.postMessage(m, '*'); w.postMessage(JSON.stringify(m), '*'); } catch (e) { /* noop */ } });
+  }
+  function reloadAt(iframe, url, sec) {
+    try {
+      const u = new URL(normalizeEmbedUrl(url), location.href);
+      ['t', 'start', 'startTime', 'time', 'seek'].forEach((k) => u.searchParams.set(k, String(Math.floor(sec))));
+      iframe.src = u.toString();
+    } catch (e) { /* noop */ }
+  }
+  const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  function setupEmbed(iframe, wrap, url) {
+    const ep = videoContext && videoContext.episodes[videoContext.currentIndex]; if (!ep) return;
+    const iS = num(ep.intro_start) ?? 0, iE = num(ep.intro_end), oS = num(ep.outro_start);
+    if (iE === null && oS === null) return;
+    const box = el('div', 'embed-skip');
+    let introBtn = null, outroBtn = null, armed = 0, armTimer = null;
+    if (iE !== null) {
+      introBtn = el('button', 'embed-skip-btn', 'Skip Intro ▸▸'); introBtn.type = 'button';
+      introBtn.addEventListener('click', () => {
+        if (armed) { clearTimeout(armTimer); armed = 0; reloadAt(iframe, url, iE); toast(`Reloading at ${fmtT(iE)}`); return; }
+        seekEmbed(iframe, iE); buzz('light');
+        armed = Date.now(); armTimer = setTimeout(() => { armed = 0; }, 5000);
+        toast(`Jumping to ${fmtT(iE)} — if it didn't move, tap Skip Intro again to reload there`);
+      });
+      box.appendChild(introBtn);
+    }
+    if (oS !== null) {
+      const hasNext = nextPlayableIndex() !== -1;
+      outroBtn = el('button', 'embed-skip-btn', hasNext ? 'Next episode ▸▸' : 'Skip Outro ▸▸'); outroBtn.type = 'button';
+      outroBtn.addEventListener('click', () => { if (hasNext) playNextEpisode(); else seekEmbed(iframe, oS + 600); });
+      box.appendChild(outroBtn);
+    }
+    wrap.appendChild(box);
+    // If the embed reports its playback time, show each button only in its window and honour auto-skip.
+    let gotTime = false, autoI = false, autoO = false;
+    const handler = (e) => {
+      if (e.source !== iframe.contentWindow) return;
+      const t = readTime(e.data); if (t === null) return;
+      if (!gotTime) { gotTime = true; box.classList.add('smart'); }
+      const inIntro = iE !== null && t >= iS && t < iE - 0.5, inOutro = oS !== null && t >= oS;
+      introBtn?.classList.toggle('on', inIntro); outroBtn?.classList.toggle('on', inOutro);
+      if (inIntro && !autoI && playerPref.get('autoSkipIntro')) { autoI = true; seekEmbed(iframe, iE); }
+      if (inOutro && !autoO && playerPref.get('autoSkipOutro')) { autoO = true; outroBtn?.click(); }
+    };
+    embedMsgHandlers.add(handler);
+    const obs = new MutationObserver(() => { if (!wrap.contains(iframe)) { embedMsgHandlers.delete(handler); obs.disconnect(); } });
+    obs.observe(wrap, { childList: true });
+  }
+
+  const origMountPlayer = mountPlayer;
+  mountPlayer = async function (url) {
+    closeMini();
+    const r = await origMountPlayer.apply(this, arguments);
+    try {
+      const wrap = $('playerWrap'); if (!wrap) return r;
+      const v = wrap.querySelector('video'); if (v) setupDirect(v, wrap);
+      const f = wrap.querySelector('iframe'); if (f) setupEmbed(f, wrap, url);
+      // the embed may be mounted after a "tap to play" cover: watch for it
+      if (!f && !v) {
+        const mo = new MutationObserver(() => { const f2 = wrap.querySelector('iframe'); if (f2 && !wrap.querySelector('.embed-skip')) { setupEmbed(f2, wrap, url); mo.disconnect(); } const v2 = wrap.querySelector('video'); if (v2) { setupDirect(v2, wrap); mo.disconnect(); } });
+        mo.observe(wrap, { childList: true, subtree: true }); setTimeout(() => mo.disconnect(), 60000);
+      }
+    } catch (e) { /* noop */ }
+    return r;
+  };
+  // cover click mounts iframe later: also catch that case when the cover exists
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.player-cover')) return;
+    setTimeout(() => { const wrap = $('playerWrap'); const f = wrap?.querySelector('iframe'); if (f && !wrap.querySelector('.embed-skip') && videoContext) setupEmbed(f, wrap, videoContext.episodes[videoContext.currentIndex].video_url); }, 120);
+  }, true);
+
+  // ---------- 17. Episode grid view + watched ticks ----------
+  const origRenderVideoEpList = renderVideoEpList;
+  renderVideoEpList = function () {
+    origRenderVideoEpList.apply(this, arguments);
+    try {
+      const box = $('videoEpList'); const list = box && box.querySelector('.ep-list'); if (!list || list.querySelector('.ep-view-toggle')) { decorateEps(); return; }
+      const t = el('button', 'fx-btn ep-view-toggle', ''); t.type = 'button';
+      const paint = () => { const g = LS.get('anicore_epview', 'list') === 'grid'; t.innerHTML = (g ? ICON_LIST : ICON_GRID) + `<span>${g ? 'List' : 'Grid'}</span>`; $('epRows')?.classList.toggle('ep-rows-grid', g); };
+      t.addEventListener('click', () => { LS.set('anicore_epview', LS.get('anicore_epview', 'list') === 'grid' ? 'list' : 'grid'); paint(); });
+      list.insertBefore(t, list.firstChild); paint();
+      const rows = $('epRows'); if (rows) new MutationObserver(decorateEps).observe(rows, { childList: true });
+      decorateEps();
+    } catch (e) { /* noop */ }
+  };
+  function decorateEps() {
+    if (!videoContext) return;
+    const seen = new Set(seenMap()[`${videoContext.type}:${videoContext.contentId}`] || []);
+    document.querySelectorAll('#epRows .ep-row').forEach((row) => {
+      const ep = videoContext.episodes[Number(row.dataset.idx)]; if (!ep) return;
+      row.classList.toggle('seen', seen.has(`${ep.season}-${ep.episode}`) && !row.classList.contains('playing'));
+    });
+    $('epRows')?.classList.toggle('ep-rows-grid', LS.get('anicore_epview', 'list') === 'grid');
+  }
+
+  // ---------- 18. Apply list view to search results when they render ----------
+  const sg = $('searchGrid'); if (sg) new MutationObserver(applyView).observe(sg, { childList: true });
+})();
