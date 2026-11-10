@@ -4,13 +4,21 @@ const $ = (id) => document.getElementById(id);
 const BOOT_NAV = (() => {
   try {
     // A shared link wins: #/detail/<type>/<id> or #/<page>
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
     if (d) return { page: 'detail', detailType: d[1], detailId: d[2] };
     const p = location.hash.match(/^#\/([a-z]+)$/);
     if (p) return { page: p[1] };
     return JSON.parse(sessionStorage.getItem('anicore-nav') || 'null');
   } catch (e) { return null; }
 })();
+
+const isRealId = (v) => /^[0-9a-f]{24}$/.test(String(v || ''));
+function slugify(t) {
+  return String(t || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ').replace(/['\u2019]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+// Address-bar part for a title page: the anime name when known, otherwise the id.
+function detailRef(id, title) { return slugify(title) || id; }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 const APP_JS_VERSION = 'v53';
@@ -426,7 +434,7 @@ function saveNavState() {
   try {
     let h = state.page === 'home' ? '' : '#/' + state.page;
     if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
-      h = '#/detail/' + state.detailType + '/' + state.detailId;
+      h = '#/detail/' + state.detailType + '/' + detailRef(state.detailId, state.detailTitle);
     }
     const key = (state.page === 'detail' || state.page === 'video')
       ? `${state.page}:${state.detailType}:${state.detailId}` : state.page;
@@ -449,7 +457,7 @@ let navFromHistory = false;
 function navigateFromHistory() {
   let st = history.state;
   if (!st || !st.key) {
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
     const pg = location.hash.match(/^#\/([a-z]+)$/);
     st = d ? { page: 'detail', detailType: d[1], detailId: d[2] } : { page: pg ? pg[1] : 'home' };
   }
@@ -1463,9 +1471,9 @@ function recapHtml(item) {
 }
 
 
-function contentShareUrl(type, id) {
+function contentShareUrl(type, id, title) {
   const base = (location.origin || "https://anicore-f6f4.onrender.com").replace(/\/$/, "");
-  return `${base}/#/detail/${type}/${id}`;
+  return `${base}/#/detail/${type}/${detailRef(id, title)}`;
 }
 
 async function shareContent(type, id, title) {
@@ -1520,7 +1528,7 @@ function buildDetailHtml(type, item, comments) {
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
       ${state.user?.role === 'admin' ? `<button class="outline" id="shareBtn" type="button">🔗 Share link</button>` : ''}
     </div>
-    ${state.user?.role === 'admin' ? `<p class="hint share-url-hint" id="shareUrlHint">${esc(contentShareUrl(type, item._id))}</p>` : ''}
+    ${state.user?.role === 'admin' ? `<p class="hint share-url-hint" id="shareUrlHint">${esc(contentShareUrl(type, item._id, item.title))}</p>` : ''}
     <h3>Comments</h3>
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
@@ -1553,10 +1561,10 @@ function bindDetailEvents(type, item, container) {
   });
   container.querySelector('#shareUrlHint')?.addEventListener('click', async () => {
     try {
-      await navigator.clipboard.writeText(contentShareUrl(type, item._id));
+      await navigator.clipboard.writeText(contentShareUrl(type, item._id, item.title));
       toast("Link copied");
     } catch (e) {
-      window.prompt("Copy this link:", contentShareUrl(type, item._id));
+      window.prompt("Copy this link:", contentShareUrl(type, item._id, item.title));
     }
   });
 
@@ -1626,6 +1634,12 @@ function detailSkeletonHtml() {
 }
 
 async function openDetail(type, id, preview) {
+  // A name link (#/detail/anime/some-title) is turned into the real id first.
+  if (!isRealId(id)) {
+    try { id = (await api(`/api/resolve/${type}/${encodeURIComponent(id)}`))._id; }
+    catch (err) { toast('Title not found.', 'error'); showPage('home'); return; }
+    try { if (history.state) history.replaceState({ ...history.state, key: `detail:${type}:${id}`, detailId: id }, '', location.href); } catch (e) {}
+  }
   state.detailId = id;
   state.detailType = type;
   state.detailTitle = (preview && preview.title) || '';
@@ -1648,6 +1662,10 @@ async function openDetail(type, id, preview) {
     if (state.detailId !== id) return;
     state.detailTitle = item.title || state.detailTitle;
     updatePageTitle();
+    try { // show the anime name in the address bar
+      const u = location.pathname + location.search + '#/detail/' + type + '/' + detailRef(id, state.detailTitle);
+      if (history.state && history.state.key) history.replaceState(history.state, '', u);
+    } catch (e) {}
     contentEl.innerHTML = buildDetailHtml(type, item, comments);
     contentEl.classList.remove('swap-in'); void contentEl.offsetWidth; contentEl.classList.add('swap-in');
     bindDetailEvents(type, item, contentEl);
@@ -3630,7 +3648,7 @@ wireSeriesPage();
   initTelegramWebApp();
   // Mark the page we landed on as the first history entry, so Back can return to it.
   try {
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9]+)$/);
+    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
     const pg = location.hash.match(/^#\/([a-z]+)$/);
     const page = d ? 'detail' : (pg && PAGE_ORDER.includes(pg[1]) ? pg[1] : 'home');
     history.replaceState({
