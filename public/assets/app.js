@@ -196,9 +196,33 @@ function esc(value) {
   ));
 }
 
+const LOW_DATA_KEY = 'anicore_low_data';
+let lowData = false;
+try { lowData = localStorage.getItem(LOW_DATA_KEY) === '1'; } catch { /* ignore */ }
+document.documentElement.classList.toggle('low-data', lowData);
+
+// Low-data mode: ask AniList's CDN for the smaller image size.
+function lowDataUrl(url) {
+  return lowData ? url.replace(/\/(extraLarge|large)\//, '/medium/') : url;
+}
+
+// Lazy-load every image, including ones added later, so slow connections open the page fast.
+(function lazyImages() {
+  const mark = (img) => {
+    if (!img.hasAttribute('loading')) img.setAttribute('loading', 'lazy');
+    if (!img.hasAttribute('decoding')) img.setAttribute('decoding', 'async');
+  };
+  document.querySelectorAll('img').forEach(mark);
+  new MutationObserver((list) => list.forEach((m) => m.addedNodes.forEach((n) => {
+    if (n.nodeType !== 1) return;
+    if (n.tagName === 'IMG') mark(n);
+    n.querySelectorAll?.('img').forEach(mark);
+  }))).observe(document.documentElement, { childList: true, subtree: true });
+})();
+
 function safeUrl(url) {
   url = (url || '').trim();
-  if (/^https?:\/\//i.test(url)) return url;
+  if (/^https?:\/\//i.test(url)) return lowDataUrl(url);
   if (url.startsWith('/assets/')) return url;
   return '';
 }
@@ -250,6 +274,8 @@ function applyAccent(accent) {
   if (sel) sel.value = state.accent;
   const psel = $("profileAccent");
   if (psel) psel.value = state.accent;
+  const lc = $("profileLowData");
+  if (lc) lc.checked = lowData;
 }
 
 function applyLanguage(lang) {
@@ -2346,10 +2372,41 @@ async function loadAdminRequests() {
 }
 
 let libPage = 0;
+async function loadTrash() {
+  const el = $('libList');
+  $('libMore').classList.add('hidden');
+  try {
+    const data = await api('/api/admin/trash');
+    el.innerHTML = '';
+    if (!data.items.length) { el.innerHTML = '<p class="hint">The trash is empty. Deleted titles stay here for 30 days.</p>'; return; }
+    data.items.forEach((t) => {
+      const days = Math.max(0, Math.ceil((new Date(t.expires_at) - Date.now()) / 86400000));
+      const row = document.createElement('div');
+      row.className = 'lib-row';
+      row.innerHTML = `
+        <img src="${esc(safeUrl(t.poster) || PLACEHOLDER)}" alt="">
+        <div><h4>${esc(t.title)}</h4><p>${esc(t.content_type)} · deleted ${esc(new Date(t.deleted_at).toLocaleDateString())} · ${days}d left</p></div>
+        <div class="lib-actions">
+          <button type="button" class="outline restore-btn">Restore</button>
+          <button type="button" class="outline danger purge-btn">Delete forever</button>
+        </div>`;
+      row.querySelector('.restore-btn').addEventListener('click', async () => {
+        try { await api(`/api/admin/trash/${t._id}/restore`, { method: 'POST' }); toast('Restored'); loadTrash(); } catch (err) { toast(err.message, 'error'); }
+      });
+      row.querySelector('.purge-btn').addEventListener('click', async () => {
+        if (!confirm(`Delete "${t.title}" forever? This cannot be undone.`)) return;
+        try { await api(`/api/admin/trash/${t._id}`, { method: 'DELETE' }); toast('Deleted permanently'); loadTrash(); } catch (err) { toast(err.message, 'error'); }
+      });
+      el.appendChild(row);
+    });
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function loadLibrary(reset = false) {
   if (!['admin', 'uploader'].includes(state.user?.role)) return;
   if (reset) libPage = 0;
   const type = $('libType').value;
+  if (type === 'trash') return loadTrash();
   const q = $('libSearch').value.trim();
   const endpoint = type === 'anime' ? '/api/anime' : type === 'tv_show' ? '/api/tvshows' : '/api/movies';
   try {
@@ -2397,10 +2454,10 @@ async function loadLibrary(reset = false) {
         $('adminForm').scrollIntoView({ behavior: 'smooth' });
       });
       row.querySelector('.del-btn').addEventListener('click', async () => {
-        if (!confirm(`Delete "${item.title}"?`)) return;
+        if (!confirm(`Move "${item.title}" to the trash? You can restore it for 30 days.`)) return;
         try {
           await api(`/api/admin/content/${type}/${item._id}`, { method: 'DELETE' });
-          toast('Deleted');
+          toast('Moved to trash');
           loadLibrary(true);
         } catch (err) { toast(err.message, 'error'); }
       });
@@ -2456,7 +2513,13 @@ $('adminForm')?.addEventListener('submit', async (e) => {
       toast('Updated');
     } else {
       const path = type === 'anime' ? '/api/admin/anime' : type === 'tv_show' ? '/api/admin/tvshows' : '/api/admin/movies';
-      await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      try {
+        await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      } catch (err) {
+        if (!String(err.message).startsWith('DUPLICATE:')) throw err;
+        if (!confirm(String(err.message).replace('DUPLICATE:', '').trim() + '\n\nAdd it anyway?')) throw new Error('Not added');
+        await api(path, { method: 'POST', body: JSON.stringify({ ...payload, force: true }) });
+      }
       toast('Added');
     }
     e.target.reset();
@@ -3702,6 +3765,11 @@ async function savePreferences() {
     return;
   }
   const theme = $("profileTheme")?.value || state.theme;
+  const lowChk = $("profileLowData");
+  if (lowChk) {
+    try { localStorage.setItem(LOW_DATA_KEY, lowChk.checked ? '1' : '0'); } catch { /* ignore */ }
+    if (lowChk.checked !== lowData) { lowData = lowChk.checked; document.documentElement.classList.toggle('low-data', lowData); toast(lowData ? 'Low-data mode on. Refresh to load smaller posters.' : 'Low-data mode off. Refresh to restore full quality.'); }
+  }
   const accent = $("profileAccent")?.value || state.accent;
   const language = $("profileLang")?.value || state.language;
   try {

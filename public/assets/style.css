@@ -3382,3 +3382,8 @@ body.tg-webapp .so-bar { padding-top: max(10px, calc(env(safe-area-inset-top, 0p
 .ep-row.seen::after { content: "✓"; position: absolute; top: 6px; right: 8px; color: #22c55e; font-weight: 900; font-size: 13px; }
 .ep-rows:not(.ep-rows-grid) .ep-row.seen::after { top: 50%; transform: translateY(-50%); right: 16px; }
 .ep-row { position: relative; }
+
+/* Low-data mode: lighter visuals to save bandwidth and battery */
+.chk-row { display: flex; align-items: center; gap: 10px; font-size: 14px; margin: 6px 0; }
+html.low-data * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+html.low-data .hero-slide.is-next, html.low-data .hero-slide.is-prev { display: none; }
