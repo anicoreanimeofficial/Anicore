@@ -4,6 +4,8 @@ const $ = (id) => document.getElementById(id);
 const BOOT_NAV = (() => {
   try {
     // A shared link wins: #/detail/<type>/<id> or #/<page>
+    const w = location.hash.match(/^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/);
+    if (w) return { page: 'video', detailType: w[1], detailId: w[2], watchS: +w[3], watchE: +w[4] };
     const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
     if (d) return { page: 'detail', detailType: d[1], detailId: d[2] };
     const p = location.hash.match(/^#\/([a-z]+)$/);
@@ -19,6 +21,36 @@ function slugify(t) {
 }
 // Address-bar part for a title page: the anime name when known, otherwise the id.
 function detailRef(id, title) { return slugify(title) || id; }
+// Video page link: #/watch/<type>/<anime-name>/s1e3
+const WATCH_RE = /^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/;
+const watchHash = (type, id, title, s, e) => `#/watch/${type}/${detailRef(id, title)}/s${s}e${e}`;
+function parseHash(h) {
+  let m = (h || '').match(WATCH_RE);
+  if (m) return { page: 'video', detailType: m[1], detailId: m[2], watchS: +m[3], watchE: +m[4] };
+  m = (h || '').match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
+  if (m) return { page: 'detail', detailType: m[1], detailId: m[2] };
+  m = (h || '').match(/^#\/([a-z]+)$/);
+  return m ? { page: m[1] } : null;
+}
+
+// Haptic feedback: Telegram's native haptics inside the mini app, the vibration motor in a phone browser.
+let _lastBuzz = 0;
+function buzz(kind = 'light') {
+  try {
+    const t = Date.now(); // one buzz per tap, even when several handlers fire
+    if (t - _lastBuzz < 40) return;
+    _lastBuzz = t;
+    const h = window.Telegram?.WebApp?.HapticFeedback;
+    if (h) {
+      if (kind === 'success' || kind === 'warning' || kind === 'error') h.notificationOccurred(kind);
+      else if (kind === 'select') h.selectionChanged();
+      else h.impactOccurred(kind);
+      return;
+    }
+    const pat = { light: 12, soft: 8, medium: 22, rigid: 30, heavy: 40, select: 6, success: [12, 40, 12], warning: [20, 50, 20], error: [30, 50, 30, 50, 30] };
+    navigator.vibrate?.(pat[kind] || 12);
+  } catch (e) { /* noop */ }
+}
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 const APP_JS_VERSION = 'v53';
@@ -248,7 +280,7 @@ function toast(message, kind = 'ok') {
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
   try {
-    if (window.tgHaptic) tgHaptic(kind === 'error' ? 'error' : 'success');
+    buzz(kind === 'error' ? 'error' : 'success');
   } catch (e) {}
 }
 
@@ -428,18 +460,25 @@ function saveNavState() {
       page: state.page,
       detailId: state.detailId,
       detailType: state.detailType,
+      watchS: state.page === 'video' && videoContext ? videoContext.episodes[videoContext.currentIndex]?.season : null,
+      watchE: state.page === 'video' && videoContext ? videoContext.episodes[videoContext.currentIndex]?.episode : null,
     }));
   } catch (e) {}
   // Give every page its own link in the address bar
   try {
     let h = state.page === 'home' ? '' : '#/' + state.page;
-    if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
+    let ws = null, we = null;
+    if (state.page === 'video' && videoContext && state.detailId && state.detailType) {
+      const cur = videoContext.episodes[videoContext.currentIndex] || {};
+      ws = cur.season; we = cur.episode;
+      h = watchHash(state.detailType, state.detailId, state.detailTitle, ws, we);
+    } else if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
       h = '#/detail/' + state.detailType + '/' + detailRef(state.detailId, state.detailTitle);
     }
     const key = (state.page === 'detail' || state.page === 'video')
       ? `${state.page}:${state.detailType}:${state.detailId}` : state.page;
     const idx = (history.state && history.state.idx) || 0; // how many in-app pages sit behind this one
-    const entry = { key, idx, page: state.page, detailType: state.detailType, detailId: state.detailId };
+    const entry = { key, idx, page: state.page, detailType: state.detailType, detailId: state.detailId, watchS: ws, watchE: we };
     const url = location.pathname + location.search + h;
     // Each page the user opens gets its own history entry so the phone's Back button steps back
     // through the app instead of leaving the site. Back/forward itself must not add entries.
@@ -457,16 +496,14 @@ let navFromHistory = false;
 function navigateFromHistory() {
   let st = history.state;
   if (!st || !st.key) {
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
-    const pg = location.hash.match(/^#\/([a-z]+)$/);
-    st = d ? { page: 'detail', detailType: d[1], detailId: d[2] } : { page: pg ? pg[1] : 'home' };
+    st = parseHash(location.hash) || { page: 'home' };
   }
   navFromHistory = true;
   try {
     document.querySelectorAll('.modal:not(.hidden)').forEach((m) => m.classList.add('hidden'));
     if ((st.page === 'detail' || st.page === 'video') && st.detailId && st.detailType) {
-      // A video can't be rebuilt from history alone, so Back/Forward land on its details page.
-      openDetail(st.detailType, st.detailId);
+      if (st.page === 'video' && st.watchS != null && st.watchE != null) openVideoFromLink(st.detailType, st.detailId, st.watchS, st.watchE);
+      else openDetail(st.detailType, st.detailId);
     } else if (PAGE_ORDER.includes(st.page) && st.page !== 'detail' && st.page !== 'video') {
       showPage(st.page);
     } else {
@@ -504,6 +541,7 @@ function showPage(page) {
   if (page === 'video') hideResumeBar();
   else if (state.page === 'video' && state.user) setTimeout(loadContinueWatching, 400);
 
+  if (page !== state.page) buzz('light'); // every page change, including Back/Forward
   if (page !== state.page) { topLoader.start(); setTimeout(() => topLoader.done(), 500); } // always show the red bar when moving between pages
   const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
@@ -1350,7 +1388,7 @@ async function loadProfile() {
   const member = $('profileMember');
 
   if (!state.user) {
-    info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist, and to set your own background image.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
+    info.innerHTML = '<div class="panel profile-panel"><p class="muted">Sign in to see your profile and watchlist.</p><button class="primary" type="button" id="profileSignIn">Sign In</button></div>';
     $('profileSignIn')?.addEventListener('click', () => openAuth('login'));
     member?.classList.add('hidden');
     return;
@@ -2277,8 +2315,30 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
     // Only applies to the first episode loaded; lets a direct video pick up where it stopped.
     resumePercent: Number(resumePercent) || 0,
   };
+  state.detailId = contentId;
+  state.detailType = type;
+  state.detailTitle = contentTitle || state.detailTitle;
   loadVideoEpisode();
   showPage('video');
+  buzz('medium');
+}
+
+// Opens the player straight from a #/watch/<type>/<name>/s1e3 link (page refresh, shared link, Back/Forward).
+async function openVideoFromLink(type, ref, s, e) {
+  try {
+    let id = ref;
+    if (!isRealId(id)) id = (await api(`/api/resolve/${type}/${encodeURIComponent(ref)}`))._id;
+    const full = await api(`/api/content/${type}/${id}`);
+    rememberAir(full);
+    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const ep = eps.find((x) => Number(x.season) === Number(s) && Number(x.episode) === Number(e) && x.video_url);
+    if (!ep) { openDetail(type, id); return; }
+    try { if (history.state) history.replaceState({ ...history.state, key: `video:${type}:${id}`, detailId: id }, '', location.href); } catch (err) {}
+    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
+  } catch (err) {
+    toast('Could not open this video.', 'error');
+    showPage('home');
+  }
 }
 
 
@@ -2357,6 +2417,16 @@ function loadVideoEpisode() {
   updateVideoNav();
   renderVideoEpList();
   saveWatchProgress(startPercent);
+  // New episode -> new link (replace, so Back still leaves the player in one step)
+  if (state.page === 'video') {
+    try {
+      const u = location.pathname + location.search + watchHash(videoContext.type, videoContext.contentId, videoContext.contentTitle, ep.season, ep.episode);
+      history.replaceState({ ...(history.state || {}), watchS: ep.season, watchE: ep.episode }, '', u);
+      const nav = JSON.parse(sessionStorage.getItem('anicore-nav') || '{}');
+      sessionStorage.setItem('anicore-nav', JSON.stringify({ ...nav, watchS: ep.season, watchE: ep.episode }));
+    } catch (e) {}
+    buzz('select');
+  }
 }
 
 function updateVideoNav() {
@@ -3648,12 +3718,12 @@ wireSeriesPage();
   initTelegramWebApp();
   // Mark the page we landed on as the first history entry, so Back can return to it.
   try {
-    const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
-    const pg = location.hash.match(/^#\/([a-z]+)$/);
-    const page = d ? 'detail' : (pg && PAGE_ORDER.includes(pg[1]) ? pg[1] : 'home');
+    const hp = parseHash(location.hash);
+    const page = hp && PAGE_ORDER.includes(hp.page) ? hp.page : 'home';
     history.replaceState({
-      key: d ? `detail:${d[1]}:${d[2]}` : page, idx: 0, page,
-      detailType: d ? d[1] : null, detailId: d ? d[2] : null,
+      key: hp && hp.detailId ? `${page}:${hp.detailType}:${hp.detailId}` : page, idx: 0, page,
+      detailType: hp?.detailType || null, detailId: hp?.detailId || null,
+      watchS: hp?.watchS ?? null, watchE: hp?.watchE ?? null,
     }, '', location.href);
   } catch (e) { /* noop */ }
   applyTheme('dark');
@@ -3710,7 +3780,8 @@ wireSeriesPage();
   const saved = BOOT_NAV;
   if (saved?.page && saved.page !== 'home') {
     if ((saved.page === 'detail' || saved.page === 'video') && saved.detailId && saved.detailType) {
-      openDetail(saved.detailType, saved.detailId);
+      if (saved.page === 'video' && saved.watchS != null && saved.watchE != null) openVideoFromLink(saved.detailType, saved.detailId, saved.watchS, saved.watchE);
+      else openDetail(saved.detailType, saved.detailId);
     } else if (PAGE_ORDER.includes(saved.page) && saved.page !== 'video') {
       showPage(saved.page);
     }
@@ -4057,21 +4128,13 @@ async function loadSimilar(type, id, container) {
 
 // --- Background -------------------------------------------------
 
-function applyBackground(url) {
-  const root = document.documentElement;
-  const clean = typeof url === 'string' && /^(https:\/\/|\/api\/users\/me\/background)/.test(url) ? url : '';
-  if (clean) root.style.setProperty('--user-bg', `url("${clean.replace(/["\\()\s]/g, (c) => encodeURIComponent(c))}")`);
-  else root.style.removeProperty('--user-bg');
-  try {
-    if (clean) localStorage.setItem('anicore-bg', clean);
-    else localStorage.removeItem('anicore-bg');
-  } catch (e) { /* storage unavailable */ }
-  const input = $('bgUrl');
-  if (input && document.activeElement !== input) input.value = clean && clean.startsWith('https://') ? clean : '';
+function applyBackground() {
+  // Custom backgrounds were removed: always use the default site background.
+  document.documentElement.style.removeProperty('--user-bg');
+  try { localStorage.removeItem('anicore-bg'); } catch (e) { /* storage unavailable */ }
 }
 
-// Paint the remembered background immediately (cleared again if the session turns out to be signed out).
-try { const saved = localStorage.getItem('anicore-bg'); if (saved) applyBackground(saved); } catch (e) { /* noop */ }
+applyBackground();
 
 function bgNeedsSignIn() {
   if (state.user) return false;
@@ -4564,20 +4627,48 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* noop */ } },
   };
   const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
-  const buzz = (kind = 'light') => {
-    try {
-      const h = window.Telegram?.WebApp?.HapticFeedback;
-      if (h) { h.impactOccurred(kind); return; }
-      navigator.vibrate?.(8);
-    } catch (e) { /* noop */ }
-  };
   const num = (v) => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
   const DAY = 864e5;
 
-  // ---------- 1. Haptics on taps ----------
+  // ---------- 1. Haptics on every page: taps, switches, dropdowns, sliders ----------
+  const TAPPABLE = 'button, a[href], summary, label, select, input:not([type=text]):not([type=search]):not([type=email]):not([type=password]):not([type=url]):not([type=number]), [role=button], [role=tab], [role=switch], [onclick], .media-card, .so-result, .genre-chip, .fx-btn, .fx-chip, .ep-row, .player-cover, .chip, .tab, .card';
+  const isTappable = (t) => {
+    if (!t || !t.closest) return false;
+    if (t.closest(TAPPABLE)) return true;
+    // anything styled as clickable (cursor: pointer) counts too
+    for (let n = t, i = 0; n && n !== document.body && i < 4; n = n.parentElement, i++) {
+      try { if (getComputedStyle(n).cursor === 'pointer') return true; } catch (e) { break; }
+    }
+    return false;
+  };
   document.addEventListener('click', (e) => {
-    if (e.target.closest('.bottom-nav button, .header-icon-btn, #signInBtn, .media-card, .so-result, .genre-chip, .fx-btn, .fx-chip')) buzz('light');
+    if (e.target.closest && e.target.closest('input[type=range]')) return; // sliders have their own tick
+    if (isTappable(e.target)) buzz('light');
   }, true);
+  // toggles, radios, dropdowns
+  document.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.matches && t.matches('input[type=checkbox], input[type=radio], select')) buzz('select');
+  }, true);
+  // sliders tick while dragging
+  let sliderAt = 0;
+  document.addEventListener('input', (e) => {
+    if (e.target && e.target.matches && e.target.matches('input[type=range]') && Date.now() - sliderAt > 70) { sliderAt = Date.now(); buzz('select'); }
+  }, true);
+  // focusing a text box
+  document.addEventListener('focusin', (e) => {
+    if (e.target && e.target.matches && e.target.matches('input[type=text], input[type=search], input[type=email], input[type=password], input[type=url], input[type=number], textarea')) buzz('soft');
+  }, true);
+  // forms
+  document.addEventListener('submit', () => buzz('medium'), true);
+  // swipe between pages / tabs on touch (end of a horizontal swipe)
+  let sx = 0, sy = 0;
+  document.addEventListener('touchstart', (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true, capture: true });
+  document.addEventListener('touchend', (e) => {
+    const t = e.changedTouches[0]; if (!t) return;
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2 && e.target.closest && e.target.closest('.scroll-row, .hero, .carousel, [data-swipe], .row-scroll')) buzz('soft');
+  }, { passive: true, capture: true });
 
   // ---------- 2. Scroll-to-top button ----------
   const topBtn = el('button', 'scroll-top hidden', '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>');
@@ -5093,6 +5184,10 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
       if (ry > 0.8) return;
       if (rx < 0.33) { e.preventDefault(); seek('left'); } else if (rx > 0.67) { e.preventDefault(); seek('right'); }
     });
+    let started = false;
+    video.addEventListener('playing', () => { if (started) buzz('light'); started = true; });
+    video.addEventListener('pause', () => { if (started && !video.ended) buzz('light'); });
+    video.addEventListener('ended', () => buzz('success'));
     video.addEventListener('ended', () => {
       if (!LS.get('anicore_autonext', true)) return;
       const idx = nextPlayableIndex(); if (idx === -1 || wrap.querySelector('.player-next')) return;
