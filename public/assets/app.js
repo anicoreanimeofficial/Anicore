@@ -4452,10 +4452,9 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     overlay.classList.remove('dropping');
     overlay.classList.add('closing');
     clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => {
-      overlay.classList.add('hidden');
-      document.body.classList.remove('search-open');
-    }, 300);
+    // Let the header icon fade back in just before the popup is fully gone.
+    setTimeout(() => document.body.classList.remove('search-open'), 330);
+    closeTimer = setTimeout(() => overlay.classList.add('hidden'), 480);
   }
   async function run() {
     const q = input.value.trim();
