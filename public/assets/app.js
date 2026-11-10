@@ -4000,50 +4000,127 @@ async function importFromAnilist(e) {
   }
 }
 
+function bulkRows() { return [...document.querySelectorAll('#bulkEpRows tr[data-ep]')]; }
+
+// "Set rows": build one row per episode in the Ep range, keeping anything already typed.
+function buildBulkRows() {
+  const from = Math.trunc(Number($('bulkEpFrom')?.value));
+  const to = Math.trunc(Number($('bulkEpTo')?.value));
+  const msg = $('bulkEpMsg');
+  if (!from || !to || from < 1 || to < from) { if (msg) msg.textContent = 'Enter a valid Ep range (e.g. 1 – 12).'; return; }
+  if (to - from + 1 > 500) { if (msg) msg.textContent = 'Max 500 episodes per batch.'; return; }
+  const defDur = ($('bulkEpDefDur')?.value || '').trim() || '24min';
+  const old = {};
+  bulkRows().forEach((tr) => {
+    old[tr.dataset.ep] = {
+      url: tr.querySelector('.b-url').value, dur: tr.querySelector('.b-dur').value,
+      name: tr.querySelector('.b-name').value, desc: tr.querySelector('.b-desc').value,
+    };
+  });
+  let html = '';
+  for (let n = from; n <= to; n++) {
+    const o = old[n] || {};
+    html += `<tr data-ep="${n}">
+      <td>EP ${n}</td>
+      <td><input class="b-url" type="url" placeholder="https://..." value="${esc(o.url || '')}"></td>
+      <td><input class="b-dur" type="text" value="${esc(o.dur || defDur)}"></td>
+      <td><input class="b-name" type="text" placeholder="Episode ${n}" value="${esc(o.name || '')}"></td>
+      <td><textarea class="b-desc" rows="2">${esc(o.desc || '')}</textarea></td>
+    </tr>`;
+  }
+  $('bulkEpRows').innerHTML = html;
+  if (msg) msg.textContent = `${to - from + 1} rows ready. Paste the Ep URLs.`;
+}
+
+// Pasting several URLs (one per line) into any URL cell spreads them down the column.
+document.addEventListener('paste', (e) => {
+  const input = e.target.closest?.('#bulkEpRows .b-url');
+  if (!input) return;
+  const lines = (e.clipboardData?.getData('text') || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length < 2) return;
+  e.preventDefault();
+  const rows = bulkRows();
+  let i = rows.indexOf(input.closest('tr'));
+  lines.forEach((l) => { if (rows[i]) rows[i++].querySelector('.b-url').value = l; });
+});
+
+async function fillBulkWithAi() {
+  const msg = $('bulkEpMsg');
+  const sel = $('bulkEpContent');
+  const rows = bulkRows();
+  if (!sel?.value) { if (msg) msg.textContent = 'Select a title first.'; return; }
+  if (!rows.length) { if (msg) msg.textContent = 'Set an Ep range first.'; return; }
+  const btn = $('bulkEpAi');
+  if (btn) btn.disabled = true;
+  try {
+    const title = sel.selectedOptions[0]?.textContent || '';
+    const CHUNK = 25;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const part = rows.slice(i, i + CHUNK);
+      if (msg) msg.textContent = `Generating names & descriptions… ${Math.min(i + CHUNK, rows.length)}/${rows.length}`;
+      const res = await api('/api/admin/ai-episodes', {
+        method: 'POST',
+        body: JSON.stringify({
+          content_type: $('bulkEpType').value, content_id: sel.value, title,
+          season: Number($('bulkEpSeason')?.value) || 1,
+          episodes: part.map((tr) => Number(tr.dataset.ep)),
+        }),
+      });
+      (res.episodes || []).forEach((r) => {
+        const tr = document.querySelector(`#bulkEpRows tr[data-ep="${Number(r.episode)}"]`);
+        if (!tr) return;
+        if (r.title) tr.querySelector('.b-name').value = r.title;
+        if (r.description) tr.querySelector('.b-desc').value = r.description;
+      });
+    }
+    if (msg) msg.textContent = 'Names & descriptions filled. Review them before adding.';
+  } catch (err) {
+    if (msg) msg.textContent = err.message;
+    toast(err.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function submitBulkEpisodes(e) {
   e.preventDefault();
-  const content_type = $("bulkEpType")?.value || "anime";
-  const content_id = $("bulkEpContent")?.value;
-  const text = ($("bulkEpText")?.value || "").trim();
-  const msg = $("bulkEpMsg");
-  if (!content_id || !text) {
-    if (msg) msg.textContent = "Select a title and paste episode lines.";
-    return;
-  }
+  const content_type = $('bulkEpType')?.value || 'anime';
+  const content_id = $('bulkEpContent')?.value;
+  const season = Number($('bulkEpSeason')?.value) || 1;
+  const msg = $('bulkEpMsg');
+  if (!content_id) { if (msg) msg.textContent = 'Select a title first.'; return; }
   const episodes = [];
-  text.split("\n").forEach((line) => {
-    const parts = line.split("|").map((s) => s.trim());
-    if (parts.length < 2) return;
-    const season = Number(parts[0]) || 1;
-    const episode = Number(parts[1]);
-    if (!episode) return;
+  for (const tr of bulkRows()) {
+    const video_url = tr.querySelector('.b-url').value.trim();
+    if (!video_url) continue; // rows without a URL are skipped
+    if (!video_url.startsWith('https://')) { if (msg) msg.textContent = `EP ${tr.dataset.ep}: URL must start with https://`; return; }
     episodes.push({
-      season,
-      episode,
-      title: parts[2] || "",
-      video_url: parts[3] || "",
-      duration: parts[4] || "",
-      description: parts[5] || "",
+      season, episode: Number(tr.dataset.ep), video_url,
+      duration: tr.querySelector('.b-dur').value.trim() || '24min',
+      title: tr.querySelector('.b-name').value.trim(),
+      description: tr.querySelector('.b-desc').value.trim(),
     });
-  });
-  if (!episodes.length) {
-    if (msg) msg.textContent = "No valid episode lines found.";
-    return;
   }
+  if (!episodes.length) { if (msg) msg.textContent = 'Add at least one Ep URL.'; return; }
   try {
-    if (msg) msg.textContent = "Saving…";
-    const res = await api("/api/admin/bulk-episodes", {
-      method: "POST",
+    if (msg) msg.textContent = 'Saving…';
+    const res = await api('/api/admin/bulk-episodes', {
+      method: 'POST',
       body: JSON.stringify({ content_type, content_id, episodes }),
     });
     if (msg) msg.textContent = res.message;
     toast(res.message);
-    $("bulkEpText").value = "";
+    $('bulkEpRows').innerHTML = '<tr><td colspan="5" class="muted">Set an Ep range to create rows.</td></tr>';
   } catch (err) {
     if (msg) msg.textContent = err.message;
-    toast(err.message, "err");
+    toast(err.message, 'err');
   }
 }
+
+$('bulkEpForm')?.addEventListener('submit', submitBulkEpisodes);
+$('bulkEpBuild')?.addEventListener('click', buildBulkRows);
+$('bulkEpAi')?.addEventListener('click', fillBulkWithAi);
+$('bulkEpType')?.addEventListener('change', populateBulkContentSelect);
 
 async function populateBulkContentSelect() {
   const type = $("bulkEpType")?.value || "anime";
