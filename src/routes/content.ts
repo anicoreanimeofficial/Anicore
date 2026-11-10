@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { DB, Doc, Sort } from "../db";
 import {
   AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, currentUser,
-  escapeRe, exactRegex, getContentColl, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
+  escapeRe, exactRegex, getContentColl, logMod, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
   requireAdmin, requireUploader, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
   blobPut, blobGet,
 } from "../lib";
@@ -146,6 +146,13 @@ content.get("/api/content/:type/:id", async (c) => {
 
 // ---------- admin: create / edit / delete ----------
 async function insertContent(c: AppCtx, type: string, body: any, withEpisodes: boolean) {
+  // Duplicate detector: warn when a title with the same name is already in this library.
+  const force = !!body && body.force === true;
+  const wanted = String(body?.title || "").trim();
+  if (wanted && !force) {
+    const dup = await getContentColl(c, type).findOne({ title: exactRegex(wanted) });
+    if (dup) throw new HttpError(409, `DUPLICATE: "${dup.title}" is already in the library.`);
+  }
   const item = parse(body, contentRules(type === "movie"));
   item.poster = validUrl(item.poster);
   item.banner = validUrl(item.banner);
@@ -277,17 +284,69 @@ content.put("/api/admin/content/:type/:id", async (c) => {
   return c.json({ message: "Updated" });
 });
 
+// Trash bin: deleting moves a title to the trash for 30 days instead of erasing it.
+const TRASH_DAYS = 30;
+
 content.delete("/api/admin/content/:type/:id", async (c) => {
-  await requireAdmin(c);
+  const admin = await requireAdmin(c);
   const type = c.req.param("type");
   const coll = getContentColl(c, type);
   const id = objectId(c.req.param("id"));
-  if (!(await coll.deleteOne({ _id: id }))) throw new HttpError(404, "Not found");
+  const item = await coll.findOne({ _id: id });
+  if (!item) throw new HttpError(404, "Not found");
   const db = c.get("db");
-  const f = { content_type: type, content_id: id };
-  await Promise.all([db.watchlist.deleteMany(f), db.comments.deleteMany(f), db.progress.deleteMany(f), db.ratings.deleteMany(f)]);
-  return c.json({ message: "Deleted" });
+  await db.c("trash").insert({ content_type: type, item_id: id, title: item.title || "", item, deleted_at: now(), deleted_by: admin.email || "" });
+  await coll.deleteOne({ _id: id });
+  await logMod(db, admin, "content_trashed", item.title || id, type);
+  return c.json({ message: "Moved to trash" });
 });
+
+content.get("/api/admin/trash", async (c) => {
+  await requireAdmin(c);
+  const rows = await c.get("db").c("trash").find({}, { sort: [["deleted_at", -1]], limit: 200 });
+  return c.json({
+    items: rows.map((r) => ({
+      _id: r._id, content_type: r.content_type, title: r.title, poster: r.item?.poster || "",
+      deleted_at: r.deleted_at, deleted_by: r.deleted_by,
+      expires_at: new Date(new Date(r.deleted_at).getTime() + TRASH_DAYS * 86400000).toISOString(),
+    })),
+    total: rows.length,
+  });
+});
+
+content.post("/api/admin/trash/:id/restore", async (c) => {
+  const admin = await requireAdmin(c);
+  const db = c.get("db");
+  const row = await db.c("trash").findOne({ _id: objectId(c.req.param("id")) });
+  if (!row) throw new HttpError(404, "Not found in trash");
+  const coll = getContentColl(c, row.content_type);
+  if (await coll.findOne({ _id: row.item_id })) throw bad("A title with this id already exists");
+  await coll.insert({ ...row.item, _id: row.item_id });
+  await db.c("trash").deleteOne({ _id: row._id });
+  await logMod(db, admin, "content_restored", row.title || "", row.content_type);
+  return c.json({ message: "Restored" });
+});
+
+content.delete("/api/admin/trash/:id", async (c) => {
+  const admin = await requireAdmin(c);
+  const db = c.get("db");
+  const row = await db.c("trash").findOne({ _id: objectId(c.req.param("id")) });
+  if (!row) throw new HttpError(404, "Not found in trash");
+  await purgeTrashed(db, row);
+  await logMod(db, admin, "content_deleted_forever", row.title || "", row.content_type);
+  return c.json({ message: "Deleted permanently" });
+});
+
+export async function purgeTrashed(db: DB, row: Doc) {
+  const f = { content_type: row.content_type, content_id: row.item_id };
+  await Promise.all([db.watchlist.deleteMany(f), db.comments.deleteMany(f), db.progress.deleteMany(f), db.ratings.deleteMany(f)]);
+  await db.c("trash").deleteOne({ _id: row._id });
+}
+
+export async function purgeExpiredTrash(db: DB) {
+  const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString();
+  for (const row of await db.c("trash").find({ deleted_at: { $lt: cutoff } })) await purgeTrashed(db, row);
+}
 
 content.post("/api/admin/bulk-import", async (c) => {
   await requireUploader(c);
