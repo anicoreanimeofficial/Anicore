@@ -4398,6 +4398,8 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
 
   $('searchOpenBtn')?.addEventListener('click', open);
   $('soBack')?.addEventListener('click', close);
+  // Popup behaviour: tapping the dimmed area outside the card closes search.
+  $('searchOverlay')?.addEventListener('click', (e) => { if (e.target === $('searchOverlay')) close(); });
   clearBtn.addEventListener('click', () => { input.value = ''; run(); input.focus(); });
   input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(run, 220); });
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim()) { e.preventDefault(); goFull(); } });

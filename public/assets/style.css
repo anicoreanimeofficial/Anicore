@@ -3387,3 +3387,22 @@ body.tg-webapp .so-bar { padding-top: max(10px, calc(env(safe-area-inset-top, 0p
 .chk-row { display: flex; align-items: center; gap: 10px; font-size: 14px; margin: 6px 0; }
 html.low-data * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 html.low-data .hero-slide.is-next, html.low-data .hero-slide.is-prev { display: none; }
+
+/* Search as a popup card instead of a full-page overlay */
+.search-overlay {
+  align-items: center; justify-content: flex-start;
+  padding: calc(env(safe-area-inset-top, 0px) + 76px) 0 0;
+  background: rgba(5,5,10,.55);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px);
+}
+.so-bar, .so-body { width: min(560px, calc(100% - 24px)); }
+.so-bar {
+  border: 1px solid rgba(255,255,255,.14); border-radius: 20px 20px 0 0;
+  background: rgba(20,18,32,.98); min-height: 0; padding: 8px 10px;
+}
+.so-body {
+  flex: 0 1 auto; max-height: min(62vh, 520px);
+  background: rgba(20,18,32,.98); border: 1px solid rgba(255,255,255,.14); border-top: 0;
+  border-radius: 0 0 20px 20px; box-shadow: 0 24px 60px rgba(0,0,0,.55);
+}
+.so-body .so-hint { margin: 22px 0; }
