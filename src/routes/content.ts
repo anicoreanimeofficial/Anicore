@@ -118,6 +118,20 @@ content.get("/api/content/:type/:id/similar", async (c) => {
   return c.json(await coll.find(withVisibility(query), { sort: [["avg_rating", -1], ["views", -1]], limit }));
 });
 
+// Pretty links: #/detail/anime/<title-slug> -> real id
+const slugify = (t: string) =>
+  String(t || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ").replace(/['\u2019]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+content.get("/api/resolve/:type/:slug", async (c) => {
+  const coll = getContentColl(c, c.req.param("type"));
+  const want = c.req.param("slug").toLowerCase();
+  const docs = await coll.find(visibleQuery(), { sort: [["views", -1]] });
+  const hit = docs.find((d) => slugify(d.title) === want);
+  if (!hit) throw new HttpError(404, "Not found");
+  return c.json({ _id: hit._id });
+});
+
 content.get("/api/content/:type/:id", async (c) => {
   const type = c.req.param("type"), id = c.req.param("id");
   const coll = getContentColl(c, type);
