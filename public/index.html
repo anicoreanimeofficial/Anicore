@@ -10,10 +10,15 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" href="https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg">
   <link rel="icon" type="image/jpeg" href="https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg">
-  <title>ANICORE</title>
+  <title>ANICORE – Watch Anime Online</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
+  <style>
+    #topLoader { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 10000; background: linear-gradient(90deg, #ff1f3d, #ff5470); box-shadow: 0 0 10px rgba(255,31,61,.8); transform-origin: left center; transform: scaleX(0); opacity: 0; pointer-events: none; }
+    #topLoader.boot { opacity: 1; animation: topBoot 8s cubic-bezier(.1,.6,.2,1) forwards; }
+    @keyframes topBoot { from { transform: scaleX(0); } to { transform: scaleX(.85); } }
+  </style>
   <link rel="stylesheet" href="/assets/style.css?v=60">
 <script>
   (function(){
@@ -29,6 +34,7 @@
 </script>
 </head>
 <body class="">
+<div id="topLoader" class="boot" aria-hidden="true"></div>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs><filter id="pencil" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.8" xChannelSelector="R" yChannelSelector="G"/></filter><filter id="pencil2" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.07" numOctaves="2" seed="11" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="2" xChannelSelector="R" yChannelSelector="G"/></filter></defs></svg>
 
 
