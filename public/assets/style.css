@@ -3440,3 +3440,28 @@ body.search-open #searchOpenBtn { opacity: 0; }
   .search-overlay.closing, .search-overlay.closing .so-bar, .search-overlay.closing .so-body { animation: none; }
   .so-lens { display: none; }
 }
+
+/* Red page-loading bar */
+#topLoader {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 10000;
+  background: linear-gradient(90deg, #ff1f3d, #ff5470);
+  box-shadow: 0 0 10px rgba(255,31,61,.8), 0 0 4px rgba(255,31,61,.9);
+  transform-origin: left center; transform: scaleX(0); opacity: 0; pointer-events: none;
+}
+
+/* Detail page loading skeleton + soft swap-in */
+.detail-skel { display: grid; gap: 16px; padding: 8px 0; }
+.ds-poster, .ds-line, .ds-chips span, .ds-eps span {
+  background: linear-gradient(90deg, rgba(255,255,255,.04), rgba(255,255,255,.1), rgba(255,255,255,.04));
+  background-size: 200% 100%; animation: shimmer 1.3s infinite; border-radius: 12px;
+}
+.ds-poster { width: 46%; max-width: 220px; aspect-ratio: 2 / 3; border-radius: 18px; }
+.ds-lines { display: grid; gap: 10px; }
+.ds-line { height: 12px; } .ds-line.tall { height: 26px; } .ds-line.w70 { width: 70%; } .ds-line.w50 { width: 50%; }
+.ds-chips { display: flex; gap: 8px; }
+.ds-chips span { width: 56px; height: 26px; border-radius: 99px; }
+.ds-eps { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.ds-eps span { width: 46px; height: 46px; border-radius: 14px; }
+@keyframes swapIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.swap-in { animation: swapIn .4s ease both; }
+@media (prefers-reduced-motion: reduce) { .swap-in, .detail-skel * { animation: none; } }

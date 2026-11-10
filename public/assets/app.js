@@ -251,16 +251,50 @@ function errorText(data) {
   return typeof d === 'string' ? d : '';
 }
 
+// Red loading bar at the very top of the screen while the page or any request is loading.
+const topLoader = (() => {
+  const el = document.createElement('div');
+  el.id = 'topLoader';
+  el.setAttribute('aria-hidden', 'true');
+  document.documentElement.appendChild(el);
+  let pending = 0;
+  let timer = null;
+  function show() {
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    el.style.transform = 'scaleX(0)';
+    void el.offsetWidth;
+    el.style.transition = 'transform 10s cubic-bezier(.1,.7,.2,1), opacity .2s';
+    el.style.transform = 'scaleX(.9)';
+  }
+  function hide() {
+    el.style.transition = 'transform .25s ease, opacity .4s .2s ease';
+    el.style.transform = 'scaleX(1)';
+    el.style.opacity = '0';
+  }
+  return {
+    start() { pending++; if (pending === 1) { clearTimeout(timer); timer = setTimeout(show, 100); } },
+    done() { pending = Math.max(0, pending - 1); if (pending === 0) { clearTimeout(timer); hide(); } },
+  };
+})();
+topLoader.start();
+window.addEventListener('load', () => setTimeout(() => topLoader.done(), 250));
+
 async function api(path, options = {}) {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
-  let data = null;
-  try { data = await res.json(); } catch { /* non-JSON */ }
-  if (!res.ok) throw new Error(errorText(data) || `Request failed (${res.status})`);
-  return data;
+  topLoader.start();
+  try {
+    const res = await fetch(path, {
+      credentials: 'same-origin',
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* non-JSON */ }
+    if (!res.ok) throw new Error(errorText(data) || `Request failed (${res.status})`);
+    return data;
+  } finally {
+    topLoader.done();
+  }
 }
 
 // --- Theme ---
@@ -418,6 +452,7 @@ function showPage(page) {
   if (page === 'video') hideResumeBar();
   else if (state.page === 'video' && state.user) setTimeout(loadContinueWatching, 400);
 
+  if (page !== state.page) { topLoader.start(); setTimeout(() => topLoader.done(), 500); } // always show the red bar when moving between pages
   const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
   target.classList.remove('from-left', 'from-right');
@@ -986,19 +1021,37 @@ function updateAuthUI() {
   $('sideAdminBtn')?.classList.toggle('hidden', !canUpload);
 }
 
+const USER_CACHE_KEY = 'anicore_user_cache';
+function readCachedUser() {
+  try { return JSON.parse(localStorage.getItem(USER_CACHE_KEY) || 'null'); } catch { return null; }
+}
+function writeCachedUser(u) {
+  try { if (u) localStorage.setItem(USER_CACHE_KEY, JSON.stringify(u)); else localStorage.removeItem(USER_CACHE_KEY); } catch { /* ignore */ }
+}
+
 async function checkUser() {
-  try {
-    const res = await api('/api/auth/me');
-    state.user = res.authenticated ? {
-      email: res.email,
-      role: res.role || 'user',
-      display_name: res.display_name || '',
-      avatar: (res.prefs || {}).avatar || '',
-      telegram_id: res.telegram_id || '',
-      telegram_username: res.telegram_username || '',
-    } : null;
-    applyBackground(res.authenticated ? (res.prefs || {}).bg_image : '');
-  } catch { state.user = null; }
+  // Show the last known account straight away so a refresh never flashes "Sign In".
+  if (!state.user) {
+    const cached = readCachedUser();
+    if (cached) { state.user = cached; updateAuthUI(); }
+  }
+  let res = null;
+  let failed = true;
+  for (let i = 0; i < 3 && failed; i++) {
+    try { res = await api('/api/auth/me', { cache: 'no-store' }); failed = false; }
+    catch { if (i < 2) await new Promise((r) => setTimeout(r, 600 * (i + 1))); }
+  }
+  if (failed) { updateAuthUI(); return state.user; } // network problem: do not sign the user out
+  state.user = res.authenticated ? {
+    email: res.email,
+    role: res.role || 'user',
+    display_name: res.display_name || '',
+    avatar: (res.prefs || {}).avatar || '',
+    telegram_id: res.telegram_id || '',
+    telegram_username: res.telegram_username || '',
+  } : null;
+  writeCachedUser(state.user);
+  applyBackground(res.authenticated ? (res.prefs || {}).bg_image : '');
   updateAuthUI();
   return state.user;
 }
@@ -1074,6 +1127,7 @@ async function doLogout() {
   if (!confirm('Are you sure you want to sign out?')) return;
   try {
     await api('/api/auth/logout', { method: 'POST' });
+    writeCachedUser(null);
     state.user = null;
     applyBackground('');
     hideResumeBar();
@@ -1514,6 +1568,19 @@ function bindDetailEvents(type, item, container) {
   });
 }
 
+function detailSkeletonHtml() {
+  return `
+    <div class="detail-skel" aria-hidden="true">
+      <div class="ds-poster"></div>
+      <div class="ds-lines">
+        <div class="ds-line w70 tall"></div>
+        <div class="ds-chips"><span></span><span></span><span></span><span></span></div>
+        <div class="ds-line"></div><div class="ds-line"></div><div class="ds-line w50"></div>
+      </div>
+      <div class="ds-eps"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    </div>`;
+}
+
 async function openDetail(type, id, preview) {
   state.detailId = id;
   state.detailType = type;
@@ -1525,7 +1592,7 @@ async function openDetail(type, id, preview) {
     contentEl.innerHTML = buildDetailHtml(type, preview, null);
     bindDetailEvents(type, preview, contentEl);
   } else if (contentEl) {
-    contentEl.innerHTML = '<p class="muted">Loading…</p>';
+    contentEl.innerHTML = detailSkeletonHtml();
   }
 
   try {
@@ -1535,6 +1602,7 @@ async function openDetail(type, id, preview) {
     ]);
     if (state.detailId !== id) return;
     contentEl.innerHTML = buildDetailHtml(type, item, comments);
+    contentEl.classList.remove('swap-in'); void contentEl.offsetWidth; contentEl.classList.add('swap-in');
     bindDetailEvents(type, item, contentEl);
   } catch (err) {
     if (state.detailId !== id) return;
@@ -3570,7 +3638,7 @@ wireSeriesPage();
       const mustSwitch = !state.user || (tgId && currentTg !== tgId);
       if (mustSwitch) {
         if (state.user && currentTg && tgId && currentTg !== tgId) {
-          try { await api("/api/auth/logout", { method: "POST" }); } catch (e) {}
+          try { await api("/api/auth/logout", { method: "POST" }); writeCachedUser(null); } catch (e) {}
           state.user = null;
         }
         await api("/api/auth/telegram", {
