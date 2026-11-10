@@ -251,44 +251,6 @@
               <div id="profileActivity" class="activity-list"></div>
             </div>
             <div class="panel">
-              <h3 data-i18n="preferences">Preferences</h3>
-              <div class="pref-controls">
-                <label>Accent
-                  <select id="profileAccent">
-                    <option value="pink">Pink</option>
-                    <option value="purple">Purple</option>
-                    <option value="blue">Blue</option>
-                    <option value="green">Green</option>
-                    <option value="orange">Orange</option>
-                  </select>
-                </label>
-                <label>Language
-                  <select id="profileLang">
-                    <option value="en">English</option>
-                    <option value="hi">हिन्दी</option>
-                  </select>
-                </label>
-                <label class="chk-row"><input type="checkbox" id="profileLowData"> Low-data mode (smaller posters)</label>
-                <button type="button" id="savePrefsBtn" class="primary small">Save Preferences</button>
-              </div>
-            </div>
-            <div class="panel" id="bgPanel">
-              <h3>Customize Background</h3>
-              <p class="hint">Make ANICORE yours. Paste a link to an image or upload one from your device.</p>
-              <div class="bg-preview" id="bgPreview" aria-label="Background preview"></div>
-              <form id="bgUrlForm" class="stack">
-                <input id="bgUrl" type="url" placeholder="Image URL (https://...)" autocomplete="off">
-                <button type="submit" class="primary block">Use this link</button>
-              </form>
-              <div class="bg-actions">
-                <label class="outline small file-btn">Upload image
-                  <input type="file" id="bgFile" accept="image/jpeg,image/png,image/webp" hidden>
-                </label>
-                <button type="button" id="bgReset" class="outline small">Reset to default</button>
-              </div>
-              <p id="bgMsg" class="hint"></p>
-            </div>
-            <div class="panel">
               <h3>Request a Title</h3>
               <form id="requestForm">
                 <input id="reqTitle" placeholder="Title" maxlength="180" required>
@@ -588,6 +550,6 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=61"></script>
+  <script src="/assets/app.js?v=64"></script>
 </body>
 </html>
