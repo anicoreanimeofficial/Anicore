@@ -13,6 +13,8 @@ export interface Env {
   TELEGRAM_BOT_TOKEN?: string;
   WEBHOOK_URL?: string;
   ENABLE_AI_RECAPS?: string;
+  GOOGLE_API_KEY?: string;
+  GEMINI_MODEL?: string;
 }
 export type AppCtx = Context<{ Bindings: Env; Variables: { db: DB } }>;
 
