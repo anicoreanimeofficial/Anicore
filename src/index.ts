@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { DB } from "./db";
 import { Env, HttpError, hashPassword, now } from "./lib";
 import { auth } from "./routes/auth";
-import { content } from "./routes/content";
+import { content, purgeExpiredTrash } from "./routes/content";
 import { social } from "./routes/social";
 
 const app = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
@@ -56,6 +56,8 @@ export default {
   fetch: app.fetch,
   // Daily cron: delete notifications older than 90 days (replaces Mongo's TTL index).
   async scheduled(_e: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(new DB(env.DB).notifications.purgeOlderThan("created_at", 90));
+    const db = new DB(env.DB);
+    ctx.waitUntil(db.notifications.purgeOlderThan("created_at", 90));
+    ctx.waitUntil(purgeExpiredTrash(db));
   },
 };
