@@ -28,6 +28,7 @@ npx wrangler secret put ADMIN_PASSWORD    # your admin password
 # optional
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 npx wrangler secret put WEBHOOK_URL
+npx wrangler secret put GOOGLE_API_KEY   # Gemini key: fills episode names/descriptions in Bulk Add
 ```
 Generate a key: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`
 
