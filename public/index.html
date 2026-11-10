@@ -306,15 +306,35 @@
           </div>
           <div class="panel">
             <h3>Bulk Add Episodes</h3>
-            <p class="hint">One episode per line: <code>season|episode|title|video_url|duration</code></p>
+            <p class="hint">Pick a title, set the episode range, then fill in each URL. Duration defaults to 24min.</p>
             <form id="bulkEpForm" class="stack">
               <select id="bulkEpType">
                 <option value="anime">Anime</option>
                 <option value="tv_show">TV Show</option>
               </select>
               <select id="bulkEpContent"><option value="">Select title…</option></select>
-              <textarea id="bulkEpText" rows="6" placeholder="1|1|Episode 1|https://...|24m&#10;1|2|Episode 2|https://...|24m"></textarea>
-              <button type="submit" class="primary block">Add Episodes</button>
+              <div class="bulk-range">
+                <label>Season <input id="bulkEpSeason" type="number" min="1" value="1"></label>
+                <label>Ep range
+                  <span class="bulk-range-inputs">
+                    <input id="bulkEpFrom" type="number" min="1" value="1" aria-label="From episode">
+                    <span>–</span>
+                    <input id="bulkEpTo" type="number" min="1" value="12" aria-label="To episode">
+                  </span>
+                </label>
+                <label>Default duration <input id="bulkEpDefDur" type="text" value="24min"></label>
+                <button type="button" class="outline" id="bulkEpBuild">Set rows</button>
+              </div>
+              <div class="bulk-table-wrap">
+                <table class="bulk-table" id="bulkEpTable">
+                  <thead><tr><th>Ep no</th><th>Ep URL</th><th>Ep duration</th><th>Ep name</th><th>Description</th></tr></thead>
+                  <tbody id="bulkEpRows"><tr><td colspan="5" class="muted">Set an Ep range to create rows.</td></tr></tbody>
+                </table>
+              </div>
+              <div class="bulk-actions">
+                <button type="button" class="outline" id="bulkEpAi">✨ Fill names &amp; descriptions (Google AI)</button>
+                <button type="submit" class="primary">Add Episodes</button>
+              </div>
             </form>
             <p id="bulkEpMsg" class="hint"></p>
           </div>
