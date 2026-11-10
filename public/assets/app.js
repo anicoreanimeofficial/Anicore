@@ -251,30 +251,64 @@ function errorText(data) {
   return typeof d === 'string' ? d : '';
 }
 
-// Red loading bar at the very top of the screen while the page or any request is loading.
+// Red loading bar at the very top of the screen. It starts instantly on refresh (see index.html),
+// trickles forward while requests are running, then snaps to 100% and fades out.
 const topLoader = (() => {
-  const el = document.createElement('div');
-  el.id = 'topLoader';
-  el.setAttribute('aria-hidden', 'true');
-  document.documentElement.appendChild(el);
+  let el = document.getElementById('topLoader');
+  if (!el) { el = document.createElement('div'); el.id = 'topLoader'; el.setAttribute('aria-hidden', 'true'); document.documentElement.appendChild(el); }
   let pending = 0;
-  let timer = null;
-  function show() {
-    el.style.transition = 'none';
+  let p = 0;
+  let trickle = null;
+  let showTimer = null;
+  let hideTimer = null;
+  const set = (v, ms) => { el.style.transition = `transform ${ms}ms ease-out, opacity .3s ease`; el.style.transform = `scaleX(${v})`; };
+  function freezeBoot() {
+    if (!el.classList.contains('boot')) return false;
+    const m = getComputedStyle(el).transform;
+    el.style.transform = m === 'none' ? 'scaleX(.3)' : m;
     el.style.opacity = '1';
-    el.style.transform = 'scaleX(0)';
+    el.classList.remove('boot');
     void el.offsetWidth;
-    el.style.transition = 'transform 10s cubic-bezier(.1,.7,.2,1), opacity .2s';
-    el.style.transform = 'scaleX(.9)';
+    return true;
   }
-  function hide() {
-    el.style.transition = 'transform .25s ease, opacity .4s .2s ease';
-    el.style.transform = 'scaleX(1)';
-    el.style.opacity = '0';
+  function begin() {
+    clearTimeout(hideTimer);
+    if (!freezeBoot()) {
+      p = 0.08;
+      el.style.transition = 'none'; el.style.opacity = '1'; el.style.transform = 'scaleX(0)';
+      void el.offsetWidth;
+      set(p, 200);
+    } else {
+      p = 0.4;
+    }
+    clearInterval(trickle);
+    trickle = setInterval(() => {
+      p = Math.min(0.95, p + (0.95 - p) * 0.1 * Math.random() + 0.004);
+      set(p, 400);
+    }, 350);
+  }
+  function end() {
+    clearInterval(trickle);
+    freezeBoot();
+    set(1, 220);
+    hideTimer = setTimeout(() => {
+      el.style.opacity = '0';
+      hideTimer = setTimeout(() => { if (!pending) { el.style.transition = 'none'; el.style.transform = 'scaleX(0)'; } }, 350);
+    }, 240);
   }
   return {
-    start() { pending++; if (pending === 1) { clearTimeout(timer); timer = setTimeout(show, 100); } },
-    done() { pending = Math.max(0, pending - 1); if (pending === 0) { clearTimeout(timer); hide(); } },
+    start() {
+      pending++;
+      if (pending === 1) {
+        clearTimeout(showTimer);
+        if (el.classList.contains('boot')) return; // already running from the first paint
+        showTimer = setTimeout(begin, 80);
+      }
+    },
+    done() {
+      pending = Math.max(0, pending - 1);
+      if (pending === 0) { clearTimeout(showTimer); if (el.classList.contains('boot') || el.style.opacity === '1') end(); }
+    },
   };
 })();
 topLoader.start();
@@ -370,7 +404,17 @@ function movePill(animate = true) {
 window.addEventListener('resize', () => movePill(false));
 
 
+// Browser tab / page names. Change SITE_NAME to rename the site everywhere.
+const SITE_NAME = 'ANICORE';
+const PAGE_NAMES = { home: 'Home', search: 'Search', series: 'Anime & Series', movies: 'Movies', schedule: 'Schedule', profile: 'Profile', admin: 'Admin Studio' };
+function updatePageTitle() {
+  let name = PAGE_NAMES[state.page] || '';
+  if ((state.page === 'detail' || state.page === 'video') && state.detailTitle) name = state.detailTitle;
+  document.title = !name || state.page === 'home' ? `${SITE_NAME} – Watch Anime Online` : `${name} – ${SITE_NAME}`;
+}
+
 function saveNavState() {
+  updatePageTitle();
   try {
     sessionStorage.setItem("anicore-nav", JSON.stringify({
       page: state.page,
@@ -1584,6 +1628,7 @@ function detailSkeletonHtml() {
 async function openDetail(type, id, preview) {
   state.detailId = id;
   state.detailType = type;
+  state.detailTitle = (preview && preview.title) || '';
 
   showPage('detail');
   const contentEl = $('detailPageContent');
@@ -1601,6 +1646,8 @@ async function openDetail(type, id, preview) {
       api(`/api/comments/${type}/${id}`),
     ]);
     if (state.detailId !== id) return;
+    state.detailTitle = item.title || state.detailTitle;
+    updatePageTitle();
     contentEl.innerHTML = buildDetailHtml(type, item, comments);
     contentEl.classList.remove('swap-in'); void contentEl.offsetWidth; contentEl.classList.add('swap-in');
     bindDetailEvents(type, item, contentEl);
