@@ -1898,7 +1898,7 @@ function openExternal(url) {
       return;
     }
   } catch (e) {}
-  window.open(url, "_blank", "noopener");
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 document.addEventListener("click", (e) => {
