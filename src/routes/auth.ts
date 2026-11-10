@@ -41,6 +41,7 @@ auth.post("/api/auth/login", async (c) => {
 });
 
 auth.get("/api/auth/me", async (c) => {
+  c.header("Cache-Control", "private, no-store");
   const user = await currentUser(c);
   if (!user) return c.json({ authenticated: false });
   return c.json({
