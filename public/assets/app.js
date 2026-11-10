@@ -4345,16 +4345,49 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     } catch (e) { if (!recent.length) hint('Type to search anime, series and movies'); }
   }
 
+  let closeTimer = null;
   function open() {
-    overlay.classList.remove('hidden');
+    clearTimeout(closeTimer);
+    // The search icon itself spreads out into the search bar (shared-element morph).
+    const btn = $('searchOpenBtn');
+    const r = btn ? btn.getBoundingClientRect() : { left: window.innerWidth - 60, top: 10, width: 42, height: 42, right: window.innerWidth - 18, bottom: 52 };
+    overlay.classList.remove('hidden', 'closing', 'dropping');
+    overlay.querySelectorAll('.so-lens').forEach((n) => n.remove());
+    void overlay.offsetWidth;
+    const bar = overlay.querySelector('.so-bar');
+    if (bar) {
+      const bb = bar.getBoundingClientRect();
+      const px = (n) => Math.max(0, Math.round(n)) + 'px';
+      overlay.style.setProperty('--ct', px(r.top - bb.top));
+      overlay.style.setProperty('--cl', px(r.left - bb.left));
+      overlay.style.setProperty('--cr', px(bb.right - r.right));
+      overlay.style.setProperty('--cb', px(bb.bottom - r.bottom));
+      overlay.style.setProperty('--crad', Math.round(r.height / 2) + 'px');
+      const svg = btn?.querySelector('svg');
+      if (svg) {
+        const lens = document.createElement('span');
+        lens.className = 'so-lens';
+        lens.style.cssText = `left:${Math.round(r.left - bb.left)}px;top:${Math.round(r.top - bb.top)}px;width:${Math.round(r.width)}px;height:${Math.round(r.height)}px`;
+        lens.appendChild(svg.cloneNode(true));
+        bar.appendChild(lens);
+      }
+    }
+    document.body.classList.add('search-open');
+    overlay.classList.add('dropping');
     document.body.style.overflow = 'hidden';
     if (input.value.trim().length < 2) showIdle();
-    setTimeout(() => input.focus(), 30);
+    setTimeout(() => input.focus(), 320);
   }
   function close() {
-    overlay.classList.add('hidden');
-    document.body.style.overflow = '';
     input.blur();
+    document.body.style.overflow = '';
+    overlay.classList.remove('dropping');
+    overlay.classList.add('closing');
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      overlay.classList.add('hidden');
+      document.body.classList.remove('search-open');
+    }, 300);
   }
   async function run() {
     const q = input.value.trim();

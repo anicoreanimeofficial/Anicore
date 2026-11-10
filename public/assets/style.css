@@ -3406,3 +3406,37 @@ html.low-data .hero-slide.is-next, html.low-data .hero-slide.is-prev { display: 
   border-radius: 0 0 20px 20px; box-shadow: 0 24px 60px rgba(0,0,0,.55);
 }
 .so-body .so-hint { margin: 22px 0; }
+
+/* The search icon spreads into the search popup */
+.search-overlay { --ct: 0px; --cl: 0px; --cr: 0px; --cb: 0px; --crad: 21px; }
+body.search-open #searchOpenBtn { opacity: 0; }
+.so-bar { position: relative; }
+.search-overlay.dropping { animation: soFade .4s ease backwards; }
+.search-overlay.dropping .so-bar { animation: soMorph .65s cubic-bezier(.3,1.15,.35,1) backwards; }
+.search-overlay.dropping .so-bar > :not(.so-lens) { animation: soKids .35s .2s ease backwards; }
+.search-overlay.dropping .so-body { transform-origin: top center; animation: soBodyIn .6s .22s cubic-bezier(.22,.9,.28,1) backwards; }
+.search-overlay.closing { animation: soFadeOut .3s ease forwards; }
+.search-overlay.closing .so-bar { animation: soMorph .3s cubic-bezier(.5,0,.75,0) reverse forwards; }
+.search-overlay.closing .so-bar > :not(.so-lens) { opacity: 0; transition: opacity .12s ease; }
+.search-overlay.closing .so-body { animation: soBodyOut .18s ease forwards; }
+@keyframes soFade { from { background-color: rgba(5,5,10,0); -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }
+@keyframes soFadeOut { to { background-color: rgba(5,5,10,0); -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }
+@keyframes soMorph {
+  from { clip-path: inset(var(--ct) var(--cr) var(--cb) var(--cl) round var(--crad)); }
+  to   { clip-path: inset(0 0 0 0 round 20px 20px 0 0); }
+}
+@keyframes soKids { from { opacity: 0; transform: scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes soBodyIn { from { opacity: 0; clip-path: inset(0 0 100% 0); transform: translateY(-10px); } to { opacity: 1; clip-path: inset(0); transform: none; } }
+@keyframes soBodyOut { to { opacity: 0; transform: translateY(-8px); } }
+.so-lens {
+  position: absolute; display: grid; place-items: center; color: var(--text); pointer-events: none;
+  opacity: 0; animation: soLens .45s ease backwards;
+}
+.so-lens svg { width: 19px; height: 19px; }
+.search-overlay.dropping .so-lens { opacity: 0; }
+@keyframes soLens { 0% { opacity: 1; } 55% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .search-overlay.dropping, .search-overlay.dropping .so-bar, .search-overlay.dropping .so-bar > *, .search-overlay.dropping .so-body,
+  .search-overlay.closing, .search-overlay.closing .so-bar, .search-overlay.closing .so-body { animation: none; }
+  .so-lens { display: none; }
+}
