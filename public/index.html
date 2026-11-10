@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
   <meta name="telegram-web-app" content="true">
@@ -108,10 +107,6 @@
           <div class="section-heading-row"><h3 class="section-title">Continue Watching</h3><span class="section-kicker">PICK UP WHERE YOU LEFT OFF</span></div>
           <div id="continueGrid" class="media-grid horizontal"></div>
         </section>
-        <div class="home-genre-section">
-          <div class="section-heading-row"><h3 class="section-title">Explore by Genre</h3><button type="button" class="text-button" data-page="series">All genres</button></div>
-          <div id="homeGenreChips" class="home-genre-chips" aria-label="Browse genres"></div>
-        </div>
         <div id="topAiringSection" class="hidden">
           <h3 class="section-title top-title"><span class="top-bar" aria-hidden="true"></span>Top 10 Popular <span class="top-live" aria-hidden="true">&#9679;</span></h3>
           <div id="topAiringRow" class="top-row" aria-label="Top airing series"></div>
@@ -267,6 +262,7 @@
                     <option value="hi">हिन्दी</option>
                   </select>
                 </label>
+                <label class="chk-row"><input type="checkbox" id="profileLowData"> Low-data mode (smaller posters)</label>
                 <button type="button" id="savePrefsBtn" class="primary small">Save Preferences</button>
               </div>
             </div>
@@ -310,6 +306,20 @@
         <div class="section">
           <h2 id="adminTitle">Admin Studio</h2>
           
+          <div class="panel">
+            <h3>Manage Library</h3>
+            <div class="lib-tools">
+              <select id="libType" aria-label="Library type">
+                <option value="anime">Anime</option>
+                <option value="tv_show">TV Shows</option>
+                <option value="movie">Movies</option>
+                <option value="trash">Trash (30 days)</option>
+              </select>
+              <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
+            </div>
+            <div id="libList"></div>
+            <button id="libMore" class="outline block hidden" type="button">Load More</button>
+          </div>
           <div class="panel">
             <h3>Import from Anilist</h3>
             <form id="anilistForm" class="stack">
@@ -430,19 +440,6 @@
             <p id="uploaderMsg" class="hint"></p>
             <div id="uploaderList"></div>
           </div>
-          <div class="panel">
-            <h3>Manage Library</h3>
-            <div class="lib-tools">
-              <select id="libType" aria-label="Library type">
-                <option value="anime">Anime</option>
-                <option value="tv_show">TV Shows</option>
-                <option value="movie">Movies</option>
-              </select>
-              <input type="search" id="libSearch" placeholder="Search library..." aria-label="Search library">
-            </div>
-            <div id="libList"></div>
-            <button id="libMore" class="outline block hidden" type="button">Load More</button>
-          </div>
           <div class="panel admin-only">
             <h3>Requests</h3>
             <div id="adminRequests"></div>
@@ -484,7 +481,7 @@
       </section>
     </main>
 
-    <footer>© <span id="yearNow"></span> ANICORE<p class="footer-note">All titles and artwork belong to their respective owners. Rights holders can request removal at any time.</p></footer>
+    <footer>© <span id="yearNow"></span> ANICORE</footer>
   </div>
 
 
