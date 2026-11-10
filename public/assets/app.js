@@ -3584,22 +3584,6 @@ function bindHero(root) {
   }, { passive: true });
 }
 
-// ===================== AC intro =====================
-(function initSplash() {
-  const el = document.getElementById('splash');
-  if (!el) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.remove(); return; }
-  let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    try { sessionStorage.setItem('anicore-splash', '1'); } catch (e) {}
-    el.classList.add('out');
-    setTimeout(() => el.remove(), 450);
-  };
-  document.getElementById('splashSkip')?.addEventListener('click', finish);
-  setTimeout(finish, 3300);
-})();
 
 
 // ============================================================
@@ -4771,36 +4755,6 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     }, 12000);
   }
   skeletonRows();
-
-  // ---------- 4. Pull-to-refresh on Home ----------
-  const ptr = el('div', 'ptr', '<span class="ptr-spin"></span>');
-  document.body.appendChild(ptr);
-  let py = 0, pdy = 0, pulling = false, refreshing = false;
-  document.addEventListener('touchstart', (e) => {
-    if (state.page !== 'home' || window.scrollY > 0 || refreshing || e.touches.length !== 1) return;
-    if (e.target.closest('.hero, .media-grid.horizontal, .top-row, .home-genre-chips, #searchOverlay')) return;
-    py = e.touches[0].clientY; pdy = 0; pulling = true;
-  }, { passive: true });
-  document.addEventListener('touchmove', (e) => {
-    if (!pulling) return;
-    pdy = e.touches[0].clientY - py;
-    if (pdy <= 0) { ptr.style.transform = ''; ptr.style.opacity = '0'; return; }
-    const d = Math.min(pdy * 0.5, 80);
-    ptr.style.opacity = String(Math.min(d / 50, 1));
-    ptr.style.transform = `translate(-50%, ${d}px) rotate(${d * 4}deg)`;
-  }, { passive: true });
-  document.addEventListener('touchend', () => {
-    if (!pulling) return; pulling = false;
-    if (pdy * 0.5 >= 56) {
-      refreshing = true; buzz('medium');
-      ptr.classList.add('spinning'); ptr.style.transform = 'translate(-50%, 56px)'; ptr.style.opacity = '1';
-      ROW_IDS.forEach((id) => { const g = $(id); if (g) g.innerHTML = ''; });
-      skeletonRows();
-      try { showPage('home'); } catch (e) { /* noop */ }
-      setTimeout(() => { ptr.classList.remove('spinning'); ptr.style.transform = ''; ptr.style.opacity = '0'; refreshing = false; }, 1100);
-    } else { ptr.style.transform = ''; ptr.style.opacity = '0'; }
-    pdy = 0;
-  }, { passive: true });
 
   // ---------- 5. Empty states + card data + NEW badges (wrap renderGrid) ----------
   const EMPTY_ICON = '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="10" y="14" width="44" height="34" rx="6"/><path d="M22 54h20M32 48v6"/><path d="M24 28l6 6M30 28l-6 6M38 31h6"/></svg>';
