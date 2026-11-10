@@ -2086,9 +2086,6 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
         if (video.duration) video.currentTime = (video.duration * startPercent) / 100;
       }, { once: true });
     }
-    video.addEventListener('error', () => {
-      fallback?.classList.remove('hidden');
-    }, { once: true });
 
     if (isHls(url)) {
       try {
@@ -2097,9 +2094,6 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
           const hls = new HlsLib();
           hls.loadSource(url);
           hls.attachMedia(video);
-          hls.on(HlsLib.Events.ERROR, (e, data) => {
-            if (data?.fatal) fallback?.classList.remove('hidden');
-          });
         } else {
           video.src = url;
         }
@@ -2112,8 +2106,6 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     wrap.appendChild(video);
     $('skipNote')?.classList.add('hidden');
     attachPlayerAutomation(video, wrap);
-    wireTgVideoFullscreen(video, wrap);
-    addTgFloatBtn(wrap);
     // Browsers can reject autoplay; the user can still press play.
     video.play?.()?.catch?.(() => {});
   } else {
@@ -2124,21 +2116,8 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; clipboard-write; fullscreen');
       iframe.src = normalizeEmbedUrl(url);
       wrap.appendChild(iframe);
-      // A host that refuses framing ("refused to connect") can't be detected from here,
-      // so always offer a one-tap way out under embedded players.
       if (openLink) openLink.href = normalizeEmbedUrl(url);
-      fallback?.classList.remove('hidden');
       $('skipNote')?.classList.remove('hidden');
-      addTgFloatBtn(wrap);
-      if (isTelegram) {
-        const fsBtn = document.createElement("button");
-        fsBtn.type = "button";
-        fsBtn.className = "outline small tg-expand-btn";
-        fsBtn.textContent = "⛶ Full screen";
-        fsBtn.style.margin = "8px 14px";
-        fsBtn.addEventListener("click", () => setTgPlayerExpanded(true));
-        if (!document.querySelector(".tg-expand-btn")) wrap.parentNode?.insertBefore(fsBtn, wrap.nextSibling);
-      }
     };
 
     if (posterSrc && !playerPref.get('autoplayNext')) {
