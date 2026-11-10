@@ -409,6 +409,61 @@ content.post("/api/admin/bulk-episodes", async (c) => {
   return c.json({ message: `Added ${added} episodes`, total: existing.length });
 });
 
+// Fill episode names + descriptions with Google's Gemini API (key = GOOGLE_API_KEY secret).
+content.post("/api/admin/ai-episodes", async (c) => {
+  await requireUploader(c);
+  const key = c.env.GOOGLE_API_KEY;
+  if (!key) throw bad("GOOGLE_API_KEY is not set. Run: npx wrangler secret put GOOGLE_API_KEY");
+  const d = parse(await json(c), {
+    content_type: R.oneOf(["anime", "tv_show"] as const), content_id: R.str(), title: R.str({ def: "" }),
+    season: R.int({ def: 1 }),
+    episodes: (v: any) => {
+      if (!Array.isArray(v) || !v.length || v.length > 50) throw bad("episodes must be a list of 1-50 numbers");
+      return v.map((n) => { const x = Math.trunc(Number(n)); if (!x || x < 1) throw bad("invalid episode number"); return x; });
+    },
+  });
+  const doc = await getContentColl(c, d.content_type).findOne({ _id: objectId(d.content_id) });
+  if (!doc) throw new HttpError(404, "Content not found");
+  const title = String(doc.title || d.title);
+  const prompt =
+    `You are filling in episode metadata for the ${d.content_type === "anime" ? "anime" : "TV show"} "${title}" (season ${d.season}).\n` +
+    (doc.description ? `Series synopsis: ${String(doc.description).slice(0, 800)}\n` : "") +
+    `For each of these episode numbers: ${d.episodes.join(", ")}\n` +
+    `Return the official episode title and a 1-2 sentence spoiler-light description (max 220 chars). ` +
+    `If you do not know the real title, use "Episode N" and leave the description empty. Never invent plot details.`;
+  const model = c.env.GEMINI_MODEL || "gemini-2.5-flash";
+  let res: Response;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.3, responseMimeType: "application/json",
+          responseSchema: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: { episode: { type: "INTEGER" }, title: { type: "STRING" }, description: { type: "STRING" } },
+              required: ["episode", "title", "description"],
+            },
+          },
+        },
+      }),
+    });
+  } catch (e) { throw new HttpError(502, `Google API unreachable: ${e}`); }
+  const body: any = await res.json().catch(() => ({}));
+  if (!res.ok) throw new HttpError(502, `Google API error: ${body?.error?.message || res.status}`);
+  let rows: any[] = [];
+  try { rows = JSON.parse(body?.candidates?.[0]?.content?.parts?.[0]?.text || "[]"); } catch { throw new HttpError(502, "Google API returned unreadable output"); }
+  const wanted = new Set(d.episodes);
+  const episodes = (Array.isArray(rows) ? rows : [])
+    .filter((r) => wanted.has(Number(r?.episode)))
+    .map((r) => ({ episode: Number(r.episode), title: String(r.title || "").slice(0, 200), description: String(r.description || "").slice(0, 1000) }));
+  return c.json({ episodes });
+});
+
 content.patch("/api/admin/content/:type/:id/schedule", async (c) => {
   await requireAdmin(c);
   const d = parse(await json(c), { scheduled_at: R.optStr(40), published: R.bool(true) });
