@@ -226,13 +226,13 @@ const I18N = {
   en: {
     home: "Home", search: "Search", series: "Series", anime: "Anime", tv: "TV Shows", movies: "Movies",
     profile: "Profile", admin: "Admin", recommended: "Recommended for You",
-    continue: "Continue Watching", schedule: "Schedule", activity: "Your Activity", preferences: "Preferences",
+    schedule: "Schedule", activity: "Your Activity", preferences: "Preferences",
     signIn: "Sign In", logout: "Logout", save: "Save Preferences",
   },
   hi: {
     home: "होम", search: "खोजें", series: "सीरीज़", anime: "एनिमे", tv: "टीवी शो", movies: "फ़िल्में",
     profile: "प्रोफ़ाइल", admin: "एडमिन", recommended: "आपके लिए सुझाव",
-    continue: "देखना जारी रखें", schedule: "शेड्यूल", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
+    schedule: "शेड्यूल", activity: "आपकी गतिविधि", preferences: "प्राथमिकताएँ",
     signIn: "साइन इन", logout: "लॉग आउट", save: "सेव करें",
   },
 };
@@ -589,8 +589,6 @@ function showPage(page) {
     videoContext = null;
     document.querySelectorAll('.tg-expand-btn').forEach((b) => b.remove());
   }
-  if (page === 'video') hideResumeBar();
-  else if (state.page === 'video' && state.user) setTimeout(loadContinueWatching, 400);
 
   if (page !== state.page) buzz('light'); // every page change, including Back/Forward
   if (page !== state.page) { topLoader.start(); setTimeout(() => topLoader.done(), 500); } // always show the red bar when moving between pages
@@ -624,7 +622,6 @@ function showPage(page) {
   if (page === 'home') {
     loadRecommendations();
     loadHome();
-    loadContinueWatching();
   }
   if (page === 'schedule') loadSchedule();
   if (page === 'profile') { loadProfileActivity(); } loadProfile();
@@ -886,105 +883,6 @@ async function loadHome() {
   }
   if (!hero.items.length) $('hero')?.classList.add('hidden');
 }
-
-function continueProgress(item) {
-  // Overall progress through the series: finished episodes plus the part of the current one.
-  const total = Number(item.total_episodes) || 0;
-  const n = Number(item.episode_number) || 0;
-  if (total && n) return Math.min(100, (((n - 1) + (Number(item.progress_percent) || 0) / 100) / total) * 100);
-  return Number(item.progress_percent) || 0;
-}
-
-async function loadContinueWatching() {
-  const section = $('continueSection');
-  const grid = $('continueGrid');
-  if (!state.user) {
-    hideResumeBar();
-    section?.classList.add('hidden');
-    return;
-  }
-  try {
-    const items = await api('/api/continue-watching');
-    if (items.length) {
-      showResumeBar(items[0]);
-      if (section && grid) {
-        section.classList.remove('hidden');
-        grid.innerHTML = '';
-        items.slice(0, 8).forEach((item) => {
-          const type = item.content_type || item.type || 'anime';
-          const card = document.createElement('button');
-          card.type = 'button';
-          card.className = 'continue-card';
-          const pct = Math.max(0, Math.min(100, continueProgress(item)));
-          const poster = safeUrl(item.poster || item.content_poster) || PLACEHOLDER;
-          card.innerHTML = `<img loading="lazy" alt=""><span class="continue-card-copy"><strong></strong><small>${epName({ season: item.season, episode: Number(item.episode) || 1 })} · ${Math.round(pct)}% watched</small><i><b style="width:${pct}%"></b></i></span><span class="continue-play">▶</span>`;
-          card.querySelector('img').src = poster;
-          card.querySelector('img').alt = item.title || 'Continue watching';
-          card.querySelector('strong').textContent = item.title || 'Continue watching';
-          card.addEventListener('click', () => openDetail(type, item.content_id || item._id, item));
-          grid.appendChild(card);
-        });
-      }
-    } else {
-      hideResumeBar();
-      section?.classList.add('hidden');
-    }
-  } catch {
-    hideResumeBar();
-    section?.classList.add('hidden');
-  }
-}
-
-// --- Floating resume bar (latest title, sits above the nav) ---
-
-let resumeItem = null;
-
-function durationMinutes(text) {
-  const t = String(text || '').toLowerCase();
-  const h = (t.match(/(\d+)\s*h/) || [])[1];
-  const m = (t.match(/(\d+)\s*m/) || [])[1] || (!h && (t.match(/^\d+$/) || [])[0]);
-  const total = (Number(h) || 0) * 60 + (Number(m) || 0);
-  return total || 0;
-}
-
-function resumeDismissKey(item) {
-  return `anicore-resume-dismissed:${item.content_id}:${item.season}:${item.episode}`;
-}
-
-function hideResumeBar() {
-  resumeItem = null;
-  $('resumeBar')?.classList.add('hidden');
-}
-
-function showResumeBar(item) {
-  const bar = $('resumeBar');
-  if (!bar || !item || state.page === 'video') { hideResumeBar(); return; }
-  try { if (sessionStorage.getItem(resumeDismissKey(item))) { hideResumeBar(); return; } } catch (e) { /* noop */ }
-  resumeItem = item;
-
-  const pct = Math.round(continueProgress(item));
-  const epPct = Number(item.progress_percent) || 0;
-  const mins = durationMinutes(item.duration);
-  $('resumeEp').textContent = epBadge({ season: item.season, episode: item.episode || 1 });
-  $('resumeLeft').textContent = mins
-    ? `${Math.max(1, Math.round(mins * (1 - epPct / 100)))} min left`
-    : (item.up_next ? 'Up next' : 'Resume');
-  $('resumeTitle').textContent = item.title || 'Untitled';
-  $('resumeFill').style.width = `${Math.max(pct, 3)}%`;
-  $('resumePct').textContent = `${pct}%`;
-  const img = $('resumeImg');
-  img.onerror = () => { img.onerror = null; img.src = PLACEHOLDER; };
-  img.src = safeUrl(item.poster) || safeUrl(item.thumbnail) || safeUrl(item.banner) || PLACEHOLDER;
-  bar.classList.remove('hidden');
-}
-
-$('resumeMain')?.addEventListener('click', () => {
-  if (resumeItem) resumeWatching({ ...resumeItem, _id: resumeItem.content_id, _type: resumeItem.content_type });
-});
-$('resumeClose')?.addEventListener('click', () => {
-  if (resumeItem) { try { sessionStorage.setItem(resumeDismissKey(resumeItem), '1'); } catch (e) { /* noop */ } }
-  hideResumeBar();
-});
 
 async function loadList(type, reset = false) {
   const l = LISTS[type];
@@ -1255,7 +1153,6 @@ $('authForm')?.addEventListener('submit', async (e) => {
     await checkUser();
     toast(created ? 'Account created!' : 'Welcome back!');
     if ($('page-profile')?.classList.contains('active')) loadProfile();
-    loadContinueWatching();
   } catch (err) {
     showAuthError(err.message || 'Failed to authenticate. Please try again.');
   } finally {
@@ -1271,7 +1168,6 @@ async function doLogout() {
     writeCachedUser(null);
     state.user = null;
     applyBackground('');
-    hideResumeBar();
     updateAuthUI();
     showPage('home');
     toast('Signed out');
@@ -1729,7 +1625,6 @@ function bindDetailEvents(type, item, container) {
           }),
         });
         toast('Progress saved');
-        loadContinueWatching();
       } catch (err) { toast(err.message, 'error'); }
     });
   });
@@ -2452,7 +2347,7 @@ async function openVideoFromLink(type, ref, s, e) {
 }
 
 
-// --- Continue Watching: save + resume ---
+// --- Save watch progress (used to resume inside the player) ---
 
 function saveWatchProgress(percent = 0) {
   if (!state.user || !videoContext || videoContext.type === 'movie') return;
@@ -2468,25 +2363,6 @@ function saveWatchProgress(percent = 0) {
       progress_percent: Math.max(0, Math.min(100, Number(percent) || 0)),
     }),
   }).catch(() => {});
-}
-
-async function resumeWatching(item) {
-  const type = item._type || item.content_type;
-  const id = item._id || item.content_id;
-  try {
-    const full = await api(`/api/content/${type}/${id}`);
-    rememberAir(full);
-    const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
-    if (!eps.length) { openDetail(type, id, item); return; }
-    let idx = eps.findIndex((e) => Number(e.season) === Number(item.season) && Number(e.episode) === Number(item.episode));
-    if (idx === -1) idx = 0;
-    const ep = eps[idx];
-    state.detailId = id;
-    state.detailType = type;
-    openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, item.progress_percent, full.season_thumbnails || {});
-  } catch (err) {
-    toast(err.message || 'Could not resume', 'error');
-  }
 }
 
 function loadVideoEpisode() {
@@ -3889,7 +3765,6 @@ wireSeriesPage();
 
   await loadGenres();
   loadHome();
-  loadContinueWatching();
   requestAnimationFrame(() => { movePill(false); requestAnimationFrame(() => movePill(true)); });
 })();
 

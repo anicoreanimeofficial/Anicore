@@ -1561,7 +1561,6 @@ html[data-theme="light"] {
 .media-grid,
 #homeSeriesGrid,
 #homeMovieGrid,
-#continueGrid,
 #recommendGrid,
 #seriesGrid,
 #movieGrid,
@@ -2458,71 +2457,6 @@ body {
   background: linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.1) 55%, transparent 100%);
 }
 
-.resume-bar {
-  position: fixed;
-  z-index: 60;
-  left: 50%;
-  bottom: calc(96px + env(safe-area-inset-bottom));
-  transform: translateX(-50%);
-  width: min(94%, 520px);
-  display: flex; align-items: center;
-  border-radius: 20px;
-  background: rgba(18, 14, 28, .82);
-  border: 1px solid rgba(255, 255, 255, .14);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, .5);
-  animation: resumeIn .35s cubic-bezier(.2, .9, .3, 1);
-  color: #fff;
-}
-.resume-bar.hidden { display: none !important; }
-@keyframes resumeIn { from { opacity: 0; transform: translate(-50%, 20px); } to { opacity: 1; transform: translate(-50%, 0); } }
-@media (min-width: 900px) {
-  .resume-bar { bottom: 24px; left: calc(50% + 120px); }
-}
-.resume-main {
-  flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 6px 10px 10px;
-  background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
-}
-.resume-thumb {
-  position: relative; flex: none;
-  width: 72px; height: 72px; border-radius: 14px; overflow: hidden; background: #17101e;
-}
-.resume-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.resume-play {
-  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 34px; height: 34px; display: grid; place-items: center; padding-left: 2px;
-  border-radius: 50%; background: var(--pink); color: #fff; font-size: 13px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
-}
-.resume-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.resume-top { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.resume-ep {
-  padding: 2px 8px; border-radius: 6px;
-  background: color-mix(in srgb, var(--pink) 28%, transparent); color: var(--pink);
-  font-weight: 800; letter-spacing: .02em;
-}
-.resume-left { color: rgba(255, 255, 255, .7); white-space: nowrap; }
-.resume-title {
-  font-size: 15px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.resume-track {
-  position: relative; display: block; height: 4px; margin-right: 44px;
-  border-radius: 4px; background: rgba(255, 255, 255, .18);
-}
-.resume-fill { display: block; height: 100%; border-radius: 4px; background: var(--pink); }
-.resume-pct { position: absolute; right: -44px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 800; color: var(--pink); }
-.resume-close {
-  flex: none; align-self: flex-start; margin: 10px 10px 0 0;
-  width: 32px; height: 32px; padding: 0; border-radius: 50%;
-  display: grid; place-items: center;
-  background: rgba(255, 255, 255, .1); border: none; color: #fff; font-size: 18px; line-height: 1; cursor: pointer;
-}
-
-
 /* =========================================================
    TOP AIRING (v32)
    ========================================================= */
@@ -3167,16 +3101,6 @@ body.tg-webapp.tg-player-expanded .tg-fs-float { display: none; }
 .home-genre-chip:hover, .home-genre-chip:focus-visible { border-color: var(--pink); color: #fff; background: rgba(255,63,130,.17); }
 #homeSeriesGrid.media-grid.horizontal, #homeAnimeGrid.media-grid.horizontal, #homeMovieGrid.media-grid.horizontal, #recommendGrid.media-grid.horizontal { padding-top: 15px; padding-bottom: 20px; }
 #homeSeriesGrid.media-grid.horizontal .media-card, #homeAnimeGrid.media-grid.horizontal .media-card, #homeMovieGrid.media-grid.horizontal .media-card, #recommendGrid.media-grid.horizontal .media-card { flex: 0 0 clamp(128px, 16vw, 176px); scroll-snap-align: start; }
-.continue-card { flex: 0 0 clamp(220px, 29vw, 300px); min-width: 0; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--panel); text-align: left; cursor: pointer; scroll-snap-align: start; }
-.continue-poster { position: relative; display: block; aspect-ratio: 16/9; overflow: hidden; background: #17101e; }
-.continue-poster img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .35s ease; }
-.continue-card:hover img { transform: scale(1.045); }
-.continue-poster i { position: absolute; inset: 0; display: grid; place-items: center; color: white; font-size: 23px; font-style: normal; text-shadow: 0 2px 12px #000; background: rgba(0,0,0,.16); }
-.continue-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.28); }
-.continue-progress span { display: block; height: 100%; background: var(--pink); }
-.continue-meta { display: grid; gap: 3px; padding: 10px 12px 12px; }
-.continue-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
-.continue-meta small { color: var(--muted); font-size: 11px; }
 .home-upcoming-list { padding: 12px 5% 4px; }
 
 .top-title { padding-left: 5%; }
@@ -3184,7 +3108,6 @@ body.tg-webapp.tg-player-expanded .tg-fs-float { display: none; }
   .home-search-wrap { width: 92%; margin-top: 8px; }
   .section-kicker { font-size: 8px; }
   #homeSeriesGrid.media-grid.horizontal .media-card, #homeAnimeGrid.media-grid.horizontal .media-card, #homeMovieGrid.media-grid.horizontal .media-card, #recommendGrid.media-grid.horizontal .media-card { flex-basis: 132px; }
-  .continue-card { flex-basis: 230px; }
 }
 
 /* ============================================================
@@ -3550,15 +3473,6 @@ body.tg-webapp:not(.tg-player-expanded) #page-video .player-wrap {
 #page-video .player-wrap video,
 #page-video .player-wrap iframe { border-radius: inherit; }
 
-/* Continue Watching cards: match the markup the app builds (image + copy + play) */
-.continue-card { position: relative; display: block; }
-.continue-card > img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; object-position: center 30%; transition: transform .35s ease; }
-.continue-card-copy { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 3px; padding: 30px 12px 10px; background: linear-gradient(to top, rgba(0,0,0,.88), rgba(0,0,0,0)); }
-.continue-card-copy strong { font-size: 14px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.continue-card-copy small { font-size: 11px; color: #d6d2de; }
-.continue-card-copy i { display: block; height: 4px; margin-top: 4px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.28); font-style: normal; }
-.continue-card-copy i b { display: block; height: 100%; background: var(--pink); border-radius: 99px; }
-.continue-play { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%); width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; color: #fff; font-size: 15px; background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,.25); }
 
 /* Bulk episode table */
 .bulk-range { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
@@ -3613,7 +3527,6 @@ body.tg-webapp:not(.tg-player-expanded) #page-video .player-wrap {
     z-index: 210;
   }
   .app-shell { margin-left: 0; padding-top: var(--topbar-h); }
-  .resume-bar { left: 50%; }
 }
 
 
