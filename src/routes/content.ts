@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { DB, Doc, Sort } from "../db";
 import {
-  AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, currentUser,
+  AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, epKey, seasonOf, currentUser,
   escapeRe, exactRegex, getContentColl, logMod, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
   requireAdmin, requireUploader, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
   blobPut, blobGet,
@@ -226,7 +226,7 @@ async function inheritSeasonThumb(coll: any, id: string, ep: Doc) {
   if ((ep.thumbnail || "").trim()) return;
   const doc = (await coll.findOne({ _id: id })) || {};
   const map = doc.season_thumbnails || {};
-  const thumb = map[String(Math.trunc(Number(ep.season) || 1))] || map.all;
+  const thumb = map[String(seasonOf(ep))] || map.all;
   if (thumb) ep.thumbnail = thumb;
 }
 
@@ -400,9 +400,9 @@ content.post("/api/admin/bulk-episodes", async (c) => {
       duration: ep.duration, video_url: ep.video_url ? validVideoUrl(ep.video_url) : "", quality_links: {}, thumbnail: "",
     });
     added++;
-    if (ep.video_url && (!newest || cmpTuple([ep.season, ep.episode], newest) > 0)) newest = [ep.season, ep.episode];
+    if (ep.video_url && ep.season !== 0 && ep.episode < 1000 && (!newest || cmpTuple([ep.season, ep.episode], newest) > 0)) newest = [ep.season, ep.episode];
   }
-  existing.sort((a, b) => cmpTuple([a.season ?? 1, a.episode ?? 0], [b.season ?? 1, b.episode ?? 0]));
+  existing.sort((a, b) => cmpTuple(epKey(a), epKey(b)));
   await coll.updateOne({ _id: doc._id }, { $set: { episodes: existing } });
   if (added && newest && isReleased(doc))
     c.executionCtx.waitUntil(notifyNewEpisodes(c.get("db"), d.content_type, d.content_id, doc.title || "", newest[0], newest[1], added));
@@ -486,7 +486,7 @@ content.post("/api/admin/:type/:id/season-thumbnail", async (c) => {
   if (!["anime", "tv_show"].includes(type)) throw bad("Only series support seasons");
   const data = await json(c);
   const applyAll = String(data.season).trim().toLowerCase() === "all";
-  const season = applyAll ? 1 : Math.trunc(Number(data.season || 1));
+  const season = applyAll ? 1 : (data.season == null || data.season === "" || !Number.isFinite(Number(data.season)) ? 1 : Math.trunc(Number(data.season)));
   const thumb = validUrl(data.thumbnail || "");
   if (!thumb) throw bad("Valid thumbnail URL required");
   const coll = getContentColl(c, type);
@@ -496,11 +496,11 @@ content.post("/api/admin/:type/:id/season-thumbnail", async (c) => {
   const map: Record<string, string> = { ...(doc.season_thumbnails || {}) };
   const overwrite = data.overwrite !== false;
   const episodes: Doc[] = doc.episodes || [];
-  if (applyAll) { map.all = thumb; for (const e of episodes) map[String(Math.trunc(Number(e.season) || 1))] = thumb; }
+  if (applyAll) { map.all = thumb; for (const e of episodes) map[String(seasonOf(e))] = thumb; }
   else map[String(season)] = thumb;
   let count = 0;
   for (const e of episodes) {
-    if (!applyAll && Math.trunc(Number(e.season) || 1) !== season) continue;
+    if (!applyAll && seasonOf(e) !== season) continue;
     if (overwrite || !(e.thumbnail || "").trim()) { e.thumbnail = thumb; count++; }
   }
   await coll.updateOne({ _id: id }, { $set: { season_thumbnails: map, episodes, updated_at: now() } });
@@ -547,7 +547,7 @@ function scheduleCard(doc: Doc, type: string) {
   return {
     content_type: type, content_id: doc._id, title: doc.title || "", poster: doc.poster || "", status: doc.status || "",
     genres: (doc.genres || []).slice(0, 3), air_weekday: doc.air_weekday ?? null, air_time: doc.air_time || "",
-    latest_episode: eps.reduce((m, e) => Math.max(m, e.episode || 0), 0),
+    latest_episode: eps.reduce((m, e) => ((e.episode || 0) < 1000 ? Math.max(m, e.episode || 0) : m), 0),
     scheduled_at: doc.scheduled_at ?? null, published: doc.published !== false,
   };
 }

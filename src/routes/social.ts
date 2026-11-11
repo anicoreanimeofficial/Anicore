@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { DB, Doc } from "../db";
 import {
-  AppCtx, Env, HttpError, R, bad, cmpTuple, currentUser, fmtUtc, getContentColl, json, logMod, muteRemaining, notifyUserIds, now,
+  AppCtx, Env, HttpError, R, bad, cmpTuple, epKey, currentUser, fmtUtc, getContentColl, json, logMod, muteRemaining, notifyUserIds, now,
   objectId, pageParams, parse, requireAdmin, requireUser, visibleQuery, escapeRe,
 } from "../lib";
 
@@ -94,7 +94,7 @@ social.get("/api/continue-watching", async (c) => {
     const coll = db.content(row.content_type);
     const doc = coll && (await coll.findOne({ $and: [{ _id: row.content_id }, visibleQuery()] }));
     if (!doc) continue;
-    const episodes: Doc[] = [...(doc.episodes || [])].sort((a, b) => cmpTuple([a.season ?? 1, a.episode ?? 0], [b.season ?? 1, b.episode ?? 0]));
+    const episodes: Doc[] = [...(doc.episodes || [])].sort((a, b) => cmpTuple(epKey(a), epKey(b)));
     let season = row.season ?? 1, episode = row.episode ?? 1, percent = row.progress_percent ?? 0;
     let index: number | null = episodes.findIndex((e) => e.season === season && e.episode === episode);
     if (index < 0) index = null;
