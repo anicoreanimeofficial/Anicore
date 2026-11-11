@@ -1,6 +1,6 @@
 # Deploy Anicore on Cloudflare only
 
-Stack: **Worker** (API + site) · **D1** (database) · **D1** (uploaded images too) · custom domain.
+Stack: **Worker** (API + site) · **D1** (database and uploaded images) · custom domain.
 No Render, no MongoDB.
 
 ## 1. Install
@@ -9,11 +9,11 @@ npm install
 npx wrangler login
 ```
 
-## 2. Create the database and bucket
+## 2. Create the database
 ```bash
 npx wrangler d1 create anicore          # copy the database_id it prints
 ```
-Paste the `database_id` into `wrangler.jsonc` (replace `PASTE_DATABASE_ID_HERE`).
+Paste the `database_id` it prints into `wrangler.jsonc` (`d1_databases[0].database_id`). Skip this if you are redeploying to the database already listed there.
 
 ## 3. Create the tables
 ```bash
@@ -46,6 +46,7 @@ You get a `https://anicore.<your-subdomain>.workers.dev` URL. Open it and sign i
 3. SSL/TLS → set to **Full (strict)**, and turn on **Always Use HTTPS**.
 
 ## Local testing
+Edit `.dev.vars` and set a `SECRET_KEY` of 32+ characters (required because `ENVIRONMENT` is `production` in `wrangler.jsonc`).
 ```bash
 cp .dev.vars.example .dev.vars
 npm run db:migrate:local
@@ -59,3 +60,6 @@ npm run dev
 - Old password hashes (scrypt) are not compatible, so existing users would need to reset or re-register.
 - Notifications older than 90 days are deleted by a daily cron (replaces MongoDB's TTL index).
 - Uploads (posters, avatars, backgrounds, max ~1.3MB each) live in D1 and are served from `/assets/uploads/...`.
+- Failed sign-ins are rate limited (8 per email + IP, then a 15-minute lock). Records are purged by the daily cron.
+- Episodes are stored inside each title's row; D1 rows max out at 2 MB, so the API refuses edits past ~1.8 MB.
+- Run `npm run db:migrate` again after updating: migration `0003` adds an index.
