@@ -47,7 +47,7 @@ function render(html: string, origin: string, seg: string, type: string, d: Doc,
   const m = se ? /^s(\d+)e(\d+)$/.exec(se) : null;
   if (m) { title = `${d.title} S${m[1]} E${m[2]} – Watch Online | ANICORE`; url = `${canonical}/${se}`; }
   const description = trim(d.description || `Watch ${d.title} online on ANICORE – ${kind}${genres.length ? " · " + genres.join(", ") : ""}.`, 160);
-  const image = absUrl(origin, d.poster || "") || absUrl(origin, d.banner || "") || "https://i.ibb.co/9HxH5T2d/Mz-Uul-PLj.jpg";
+  const image = absUrl(origin, d.poster || "") || absUrl(origin, d.banner || "") || `${origin}/assets/og-image.png`;
 
   let out = html;
   out = swap(out, /<title>[^<]*<\/title>/, `<title>${esc(title)}</title>`);

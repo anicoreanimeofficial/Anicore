@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { DB, Doc } from "../db";
 import {
-  AppCtx, Env, HttpError, R, bad, currentUser, fmtUtc, getContentColl, json, logMod, muteRemaining, notifyUserIds, now,
+  AppCtx, Env, HttpError, R, bad, currentUser, fmtUtc, getContentColl, json, loadTitles, logMod, muteRemaining, notifyUserIds, now,
   objectId, pageParams, parse, requireAdmin, requireUser, escapeRe,
 } from "../lib";
 
@@ -23,10 +23,10 @@ social.get("/api/watchlist", async (c) => {
   const user = await requireUser(c);
   const db = c.get("db");
   const rows = await db.watchlist.find({ user_id: user._id }, { sort: [["created_at", -1]] });
+  const titles = await loadTitles(db, rows);
   const out: any[] = [];
   for (const row of rows) {
-    const coll = db.content(row.content_type);
-    const doc = coll && (await coll.findOne({ _id: row.content_id }));
+    const doc = titles.get(`${row.content_type}:${row.content_id}`);
     if (!doc) continue;
     out.push({ content_type: row.content_type, content_id: row.content_id, title: doc.title || "", poster: doc.poster || "", avg_rating: doc.avg_rating || 0, created_at: row.created_at });
   }
