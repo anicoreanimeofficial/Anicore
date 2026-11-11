@@ -273,7 +273,7 @@ export async function notifyNewEpisodes(db: DB, type: string, id: string, title:
     const ids = await db.watchlist.distinct("user_id", { content_type: type, content_id: id });
     if (!ids.length) return;
     const users = await db.users.find({ _id: { $in: ids }, banned: { $ne: true }, "prefs.notify_episodes": { $ne: false } });
-    const body = count === 1 ? (Number(season) === 0 ? `Special ${episode} is now available.` : `Season ${season}, Episode ${episode} is now available.`) : `${count} new episodes were added.`;
+    const body = count === 1 ? (Number(season) === 0 ? `Special ${episode} is now available.` : episode >= 1000 ? `Season ${season} ${episode >= 2000 ? "Special" : "OVA"} ${episode % 1000} is now available.` : `Season ${season}, Episode ${episode} is now available.`) : `${count} new episodes were added.`;
     await notifyUserIds(db, users.map((u) => u._id), "episode", `New episode: ${title}`, body, type, id, season, episode);
   } catch (e) { console.log("notifyNewEpisodes failed", e); }
 }
