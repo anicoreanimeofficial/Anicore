@@ -273,7 +273,7 @@ export async function notifyNewEpisodes(db: DB, type: string, id: string, title:
     const ids = await db.watchlist.distinct("user_id", { content_type: type, content_id: id });
     if (!ids.length) return;
     const users = await db.users.find({ _id: { $in: ids }, banned: { $ne: true }, "prefs.notify_episodes": { $ne: false } });
-    const body = count === 1 ? `Season ${season}, Episode ${episode} is now available.` : `${count} new episodes were added.`;
+    const body = count === 1 ? (Number(season) === 0 ? `Special ${episode} is now available.` : `Season ${season}, Episode ${episode} is now available.`) : `${count} new episodes were added.`;
     await notifyUserIds(db, users.map((u) => u._id), "episode", `New episode: ${title}`, body, type, id, season, episode);
   } catch (e) { console.log("notifyNewEpisodes failed", e); }
 }
@@ -289,6 +289,16 @@ export function pageParams(c: AppCtx, defLimit = 20, maxLimit = 50) {
   const page = Math.max(parseInt(c.req.query("page") || "1") || 1, 1);
   const limit = Math.min(Math.max(parseInt(c.req.query("limit") || String(defLimit)) || defLimit, 1), maxLimit);
   return { page, limit };
+}
+// Season 0 = Specials / OVA: always listed after the normal seasons.
+export function seasonOf(e: any): number {
+  if (e == null || e.season == null || e.season === "") return 1;
+  const n = Math.trunc(Number(e.season));
+  return Number.isFinite(n) ? n : 1;
+}
+export function epKey(e: any): number[] {
+  const s = seasonOf(e);
+  return [s === 0 ? 1e6 : s, Number(e.episode ?? 0)];
 }
 export function cmpTuple(a: any[], b: any[]) {
   for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
