@@ -4,6 +4,7 @@ import { Env, HttpError, hashPassword, now } from "./lib";
 import { auth } from "./routes/auth";
 import { content, purgeExpiredTrash } from "./routes/content";
 import { social } from "./routes/social";
+import { seo } from "./routes/seo";
 
 const app = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
 
@@ -48,6 +49,7 @@ app.onError((err, c) => {
 });
 
 app.get("/health", (c) => c.json({ ok: true }));
+app.route("/", seo);
 app.route("/", auth);
 app.route("/", content);
 app.route("/", social);

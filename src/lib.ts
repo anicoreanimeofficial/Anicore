@@ -8,6 +8,7 @@ export interface Env {
   SECRET_KEY: string;
   ENVIRONMENT?: string;
   APP_NAME?: string;
+  SITE_URL?: string;
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD?: string;
   TELEGRAM_BOT_TOKEN?: string;
@@ -248,6 +249,9 @@ export function cleanSubtitles(tracks: any[] | null | undefined) {
   }
   return out.slice(0, 12);
 }
+export const slugify = (t: string) =>
+  String(t || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ").replace(/['\u2019]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 export const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 export const exactRegex = (s: string) => ({ $regex: `^${escapeRe(s)}$`, $options: "i" });
 
