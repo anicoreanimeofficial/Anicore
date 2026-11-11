@@ -11,10 +11,10 @@ const app = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
 let seeded = false;
 async function seedAdmin(env: Env, db: DB) {
   if (seeded) return;
-  seeded = true;
   const email = (env.ADMIN_EMAIL || "").trim().toLowerCase();
-  if (!email || !env.ADMIN_PASSWORD) return;
+  if (!email || !env.ADMIN_PASSWORD) { seeded = true; return; }
   const existing = await db.users.findOne({ email });
+  seeded = true; // only after the DB was reachable, so a missing migration doesn't block seeding forever
   if (existing) {
     // Imported admin (old MongoDB hash): set the password from ADMIN_PASSWORD so you can log in.
     if (!String(existing.password_hash || "").startsWith("pbkdf2$")) {
@@ -34,7 +34,7 @@ app.use("*", async (c, next) => {
     return c.json({ detail: "Server is missing a SECRET_KEY of at least 32 characters." }, 500);
   const db = new DB(c.env.DB);
   c.set("db", db);
-  await seedAdmin(c.env, db);
+  try { await seedAdmin(c.env, db); } catch (e) { console.log("Admin seed failed (will retry)", e); }
   await next();
 });
 
@@ -59,5 +59,6 @@ export default {
     const db = new DB(env.DB);
     ctx.waitUntil(db.notifications.purgeOlderThan("created_at", 90));
     ctx.waitUntil(purgeExpiredTrash(db));
+    ctx.waitUntil(db.c("login_fails").purgeOlderThan("first_at", 1));
   },
 };

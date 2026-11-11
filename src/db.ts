@@ -5,7 +5,7 @@ export type Doc = Record<string, any>;
 export type Filter = Record<string, any>;
 export type Sort = [string, 1 | -1][];
 
-const SQL_FIELDS = new Set(["user_id", "content_id", "email", "telegram_id"]);
+const SQL_FIELDS = new Set(["user_id", "content_id", "email", "telegram_id", "key"]);
 
 export function newId(): string {
   const b = new Uint8Array(12);
@@ -92,13 +92,27 @@ export function matches(doc: Doc, filter: Filter): boolean {
   return true;
 }
 
+const MAX_IN = 80; // D1 allows at most 100 bound parameters per query
+
 function sqlPrefilter(filter: Filter): { where: string; args: any[] } {
   let where = "";
   const args: any[] = [];
+  const add = (col: string, v: any) => {
+    if (typeof v === "string") { where += ` AND ${col} = ?`; args.push(v); }
+    else if (v && typeof v === "object" && Array.isArray(v.$in) && v.$in.length > 0 && v.$in.length <= MAX_IN
+      && v.$in.every((x: any) => typeof x === "string") && Object.keys(v).length === 1) {
+      where += ` AND ${col} IN (${v.$in.map(() => "?").join(",")})`; args.push(...v.$in);
+    }
+  };
   for (const [k, v] of Object.entries(filter || {})) {
-    if (k === "_id" && typeof v === "string") { where += " AND id = ?"; args.push(v); }
-    else if (SQL_FIELDS.has(k) && typeof v === "string") {
-      where += ` AND json_extract(data, '$.${k}') = ?`; args.push(v);
+    if (k === "_id") add("id", v);
+    else if (SQL_FIELDS.has(k)) add(`json_extract(data, '$.${k}')`, v);
+    else if (k === "$and" && Array.isArray(v)) {
+      // Every $and branch must match, so each branch's indexed fields can narrow the query.
+      for (const sub of v) {
+        const r = sqlPrefilter(sub);
+        where += r.where; args.push(...r.args);
+      }
     }
   }
   return { where, args };

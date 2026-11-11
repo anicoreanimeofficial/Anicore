@@ -226,6 +226,19 @@ export function validVideoUrl(url: string): string {
   if (!url.startsWith("https://")) throw bad("Video URL must start with https://");
   return url;
 }
+export function cleanQualityLinks(links: Record<string, any> | null | undefined) {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(links || {})) {
+    const url = validVideoUrl(String(v));
+    if (url) out[String(k).slice(0, 40)] = url;
+  }
+  return out;
+}
+/** D1 rows are limited to 2 MB; episodes live inside the title's row, so refuse growth past ~1.8 MB with a clear message. */
+export function assertRowSize(doc: Doc) {
+  if (JSON.stringify(doc).length > 1_800_000)
+    throw bad("This title has too much episode data for one record (limit ~1.8 MB). Remove some episodes, subtitles or links.");
+}
 export function cleanSubtitles(tracks: any[] | null | undefined) {
   const out: any[] = [];
   for (const t of tracks || []) {
