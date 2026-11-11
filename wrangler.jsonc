@@ -6,7 +6,7 @@
     "directory": "./public",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/assets/uploads/*", "/health"]
+    "run_worker_first": ["/api/*", "/assets/uploads/*", "/health", "/anime/*", "/tvshow/*", "/movie/*", "/sitemap.xml"]
   },
   "d1_databases": [
     {
@@ -19,6 +19,7 @@
   "triggers": { "crons": ["0 3 * * *"] },
   "vars": {
     "ENVIRONMENT": "production",
-    "APP_NAME": "Anicore"
+    "APP_NAME": "Anicore",
+    "SITE_URL": "https://anicoreanimes.online"
   }
 }
