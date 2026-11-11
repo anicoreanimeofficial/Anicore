@@ -104,14 +104,53 @@ async function titlePage(c: any, seg: string, se: string | null) {
     const page = html.replace(/<meta name="robots" content="[^"]*">/, '<meta name="robots" content="noindex">');
     return new Response(page, { status: 404, headers: { ...HTML_HEADERS, "Cache-Control": "no-store" } });
   }
-  const page = render(html, origin, seg, type, d, se && /^s\d+e\d+$/.test(se) ? se : null);
+  const ref = String(c.req.param("slug") || "");
+  const slug = slugify(d.title);
+  const okSe = se && /^s\d+e\d+$/.test(se) ? se : null;
+  if (/^[0-9a-f]{24}$/.test(ref) && slug) {
+    // Old id-style link: send people (and Google) to the readable address when it points to the same title.
+    const same = await findTitle(c.get("db"), type, slug);
+    if (same && same._id === d._id) return c.redirect(`/${seg}/${slug}${okSe ? "/" + okSe : ""}`, 301);
+  }
+  const page = render(html, origin, seg, type, d, okSe);
   return new Response(page, { headers: HTML_HEADERS });
+}
+
+// Real addresses for the main pages, each with its own title and description.
+const PAGES: Record<string, { title: string; desc: string; index: boolean }> = {
+  "/series": { title: "Anime & TV Series – Watch Online | ANICORE", desc: "Browse every anime and TV series on ANICORE. Filter by genre, year, studio and season and start watching.", index: true },
+  "/movies": { title: "Movies – Watch Online | ANICORE", desc: "Watch anime and animated movies online on ANICORE. Browse by genre, year and rating.", index: true },
+  "/schedule": { title: "Anime Release Schedule – New Episodes This Week | ANICORE", desc: "See which anime and TV episodes release on which day, plus upcoming titles coming soon to ANICORE.", index: true },
+  "/search": { title: "Search | ANICORE", desc: "Search anime, TV shows and movies on ANICORE.", index: false },
+  "/profile": { title: "Your Profile | ANICORE", desc: "Your ANICORE profile.", index: false },
+  "/admin": { title: "Studio | ANICORE", desc: "ANICORE studio.", index: false },
+};
+for (const [path, meta] of Object.entries(PAGES)) {
+  seo.get(path, async (c) => {
+    const origin = siteOrigin(c.env, c.req.url);
+    let out = await shell(c);
+    const url = origin + path;
+    out = swap(out, /<title>[^<]*<\/title>/, `<title>${esc(meta.title)}</title>`);
+    out = swap(out, /<meta name="description" content="[^"]*">/, `<meta name="description" content="${esc(meta.desc)}">`);
+    out = swap(out, /<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${esc(url)}">`);
+    out = swap(out, /<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${esc(url)}">`);
+    out = swap(out, /<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${esc(meta.title)}">`);
+    out = swap(out, /<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${esc(meta.desc)}">`);
+    out = swap(out, /<meta name="twitter:title" content="[^"]*">/, `<meta name="twitter:title" content="${esc(meta.title)}">`);
+    out = swap(out, /<meta name="twitter:description" content="[^"]*">/, `<meta name="twitter:description" content="${esc(meta.desc)}">`);
+    if (!meta.index) out = swap(out, /<meta name="robots" content="[^"]*">/, '<meta name="robots" content="noindex, nofollow">');
+    out = out.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, "");
+    out = out.replace(/<noscript>[\s\S]*?<\/noscript>/, () => `<noscript><h1>${esc(meta.title)}</h1><p>${esc(meta.desc)}</p><p><a href="${esc(origin)}/">ANICORE – Watch Anime Online</a></p></noscript>`);
+    return new Response(out, { headers: HTML_HEADERS });
+  });
 }
 
 seo.get("/sitemap.xml", async (c) => {
   const origin = siteOrigin(c.env, c.req.url);
   const db = c.get("db");
   const urls: string[] = [`  <url><loc>${origin}/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>`];
+  for (const path of ["/series", "/movies", "/schedule"])
+    urls.push(`  <url><loc>${origin}${path}</loc><changefreq>daily</changefreq><priority>0.9</priority></url>`);
   for (const [seg, type] of Object.entries(SEG_TYPE)) {
     const docs = await db.content(type)!.find(visibleQuery(), { sort: [["views", -1]], limit: 2000 });
     const seen = new Set<string>();
