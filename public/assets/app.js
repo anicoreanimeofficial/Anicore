@@ -3,7 +3,12 @@
 const $ = (id) => document.getElementById(id);
 const BOOT_NAV = (() => {
   try {
-    // A shared link wins: #/detail/<type>/<id> or #/<page>
+    // A shared link wins: /anime/<name>[/s1e3], or the older #/detail/<type>/<id> and #/<page> links
+    const pm = location.pathname.match(/^\/(anime|tvshow|movie)\/([A-Za-z0-9_-]+)(?:\/s(\d+)e(\d+))?\/?$/);
+    if (pm) {
+      const t = pm[1] === 'tvshow' ? 'tv_show' : pm[1];
+      return pm[3] != null ? { page: 'video', detailType: t, detailId: pm[2], watchS: +pm[3], watchE: +pm[4] } : { page: 'detail', detailType: t, detailId: pm[2] };
+    }
     const w = location.hash.match(/^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/);
     if (w) return { page: 'video', detailType: w[1], detailId: w[2], watchS: +w[3], watchE: +w[4] };
     const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
@@ -21,9 +26,12 @@ function slugify(t) {
 }
 // Address-bar part for a title page: the anime name when known, otherwise the id.
 function detailRef(id, title) { return slugify(title) || id; }
-// Video page link: #/watch/<type>/<anime-name>/s1e3
-const WATCH_RE = /^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/;
-const watchHash = (type, id, title, s, e) => `#/watch/${type}/${detailRef(id, title)}/s${s}e${e}`;
+// Real, indexable page addresses: /anime/<name>, /tvshow/<name>, /movie/<name>, and /anime/<name>/s1e3 for the player.
+const TYPE_SEG = { anime: 'anime', tv_show: 'tvshow', movie: 'movie' };
+const SEG_TYPE = { anime: 'anime', tvshow: 'tv_show', movie: 'movie' };
+const detailPath = (type, ref) => `/${TYPE_SEG[type] || type}/${ref}`;
+const watchPath = (type, id, title, s, e) => `${detailPath(type, detailRef(id, title))}/s${s}e${e}`;
+const WATCH_RE = /^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/; // older hash links still work
 function parseHash(h) {
   let m = (h || '').match(WATCH_RE);
   if (m) return { page: 'video', detailType: m[1], detailId: m[2], watchS: +m[3], watchE: +m[4] };
@@ -31,6 +39,15 @@ function parseHash(h) {
   if (m) return { page: 'detail', detailType: m[1], detailId: m[2] };
   m = (h || '').match(/^#\/([a-z]+)$/);
   return m ? { page: m[1] } : null;
+}
+// Current address -> page. Real paths (/anime/naruto/s1e3) first, then the older #/ hash links.
+function parseLocation() {
+  const m = location.pathname.match(/^\/(anime|tvshow|movie)\/([A-Za-z0-9_-]+)(?:\/s(\d+)e(\d+))?\/?$/);
+  if (m) {
+    const detailType = SEG_TYPE[m[1]];
+    return m[3] != null ? { page: 'video', detailType, detailId: m[2], watchS: +m[3], watchE: +m[4] } : { page: 'detail', detailType, detailId: m[2] };
+  }
+  return parseHash(location.hash);
 }
 
 // Haptic feedback: Telegram native haptics, or phone vibration. Respects on/off + intensity.
@@ -518,19 +535,20 @@ function saveNavState() {
   // Give every page its own link in the address bar
   try {
     let h = state.page === 'home' ? '' : '#/' + state.page;
+    let path = '/';
     let ws = null, we = null;
     if (state.page === 'video' && videoContext && state.detailId && state.detailType) {
       const cur = videoContext.episodes[videoContext.currentIndex] || {};
       ws = cur.season; we = cur.episode;
-      h = watchHash(state.detailType, state.detailId, state.detailTitle, ws, we);
+      path = watchPath(state.detailType, state.detailId, state.detailTitle, ws, we); h = '';
     } else if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
-      h = '#/detail/' + state.detailType + '/' + detailRef(state.detailId, state.detailTitle);
+      path = detailPath(state.detailType, detailRef(state.detailId, state.detailTitle)); h = '';
     }
     const key = (state.page === 'detail' || state.page === 'video')
       ? `${state.page}:${state.detailType}:${state.detailId}` : state.page;
     const idx = (history.state && history.state.idx) || 0; // how many in-app pages sit behind this one
     const entry = { key, idx, page: state.page, detailType: state.detailType, detailId: state.detailId, watchS: ws, watchE: we };
-    const url = location.pathname + location.search + h;
+    const url = path + location.search + h;
     // Each page the user opens gets its own history entry so the phone's Back button steps back
     // through the app instead of leaving the site. Back/forward itself must not add entries.
     if (navFromHistory || !history.state || !history.state.key) {
@@ -547,7 +565,7 @@ let navFromHistory = false;
 function navigateFromHistory() {
   let st = history.state;
   if (!st || !st.key) {
-    st = parseHash(location.hash) || { page: 'home' };
+    st = parseLocation() || { page: 'home' };
   }
   navFromHistory = true;
   try {
@@ -1499,11 +1517,11 @@ function recapHtml(item) {
 
 function contentShareUrl(type, id, title) {
   const base = (location.origin || "https://anicore-f6f4.onrender.com").replace(/\/$/, "");
-  return `${base}/#/detail/${type}/${detailRef(id, title)}`;
+  return `${base}${detailPath(type, detailRef(id, title))}`;
 }
 
 async function shareContent(type, id, title) {
-  const url = contentShareUrl(type, id);
+  const url = contentShareUrl(type, id, title);
   const text = title ? `${title} on ANICORE` : "Watch on ANICORE";
   try {
     if (window.Telegram && Telegram.WebApp && Telegram.WebApp.openTelegramLink) {
@@ -1660,7 +1678,7 @@ function detailSkeletonHtml() {
 }
 
 async function openDetail(type, id, preview) {
-  // A name link (#/detail/anime/some-title) is turned into the real id first.
+  // A name link (/anime/some-title) is turned into the real id first.
   if (!isRealId(id)) {
     try { id = (await api(`/api/resolve/${type}/${encodeURIComponent(id)}`))._id; }
     catch (err) { toast('Title not found.', 'error'); showPage('home'); return; }
@@ -1689,7 +1707,7 @@ async function openDetail(type, id, preview) {
     state.detailTitle = item.title || state.detailTitle;
     updatePageTitle();
     try { // show the anime name in the address bar
-      const u = location.pathname + location.search + '#/detail/' + type + '/' + detailRef(id, state.detailTitle);
+      const u = detailPath(type, detailRef(id, state.detailTitle)) + location.search;
       if (history.state && history.state.key) history.replaceState(history.state, '', u);
     } catch (e) {}
     contentEl.innerHTML = buildDetailHtml(type, item, comments);
@@ -2328,7 +2346,7 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
   buzz('medium');
 }
 
-// Opens the player straight from a #/watch/<type>/<name>/s1e3 link (page refresh, shared link, Back/Forward).
+// Opens the player straight from a /anime/<name>/s1e3 link (page refresh, shared link, Back/Forward).
 async function openVideoFromLink(type, ref, s, e) {
   try {
     let id = ref;
@@ -2406,7 +2424,7 @@ function loadVideoEpisode() {
   // New episode -> new link (replace, so Back still leaves the player in one step)
   if (state.page === 'video') {
     try {
-      const u = location.pathname + location.search + watchHash(videoContext.type, videoContext.contentId, videoContext.contentTitle, ep.season, ep.episode);
+      const u = watchPath(videoContext.type, videoContext.contentId, videoContext.contentTitle, ep.season, ep.episode) + location.search;
       history.replaceState({ ...(history.state || {}), watchS: ep.season, watchE: ep.episode }, '', u);
       const nav = JSON.parse(sessionStorage.getItem('anicore-nav') || '{}');
       sessionStorage.setItem('anicore-nav', JSON.stringify({ ...nav, watchS: ep.season, watchE: ep.episode }));
@@ -3694,7 +3712,7 @@ wireSeriesPage();
   initTelegramWebApp();
   // Mark the page we landed on as the first history entry, so Back can return to it.
   try {
-    const hp = parseHash(location.hash);
+    const hp = parseLocation();
     const page = hp && PAGE_ORDER.includes(hp.page) ? hp.page : 'home';
     history.replaceState({
       key: hp && hp.detailId ? `${page}:${hp.detailType}:${hp.detailId}` : page, idx: 0, page,
