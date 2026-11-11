@@ -3,7 +3,7 @@ import { DB, Doc, Sort } from "../db";
 import {
   AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, epKey, seasonOf, currentUser,
   escapeRe, exactRegex, getContentColl, logMod, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
-  requireAdmin, requireUploader, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
+  requireAdmin, requireUploader, slugify, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
   blobPut, blobGet, cleanQualityLinks, assertRowSize,
 } from "../lib";
 
@@ -119,10 +119,6 @@ content.get("/api/content/:type/:id/similar", async (c) => {
 });
 
 // Pretty links: #/detail/anime/<title-slug> -> real id
-const slugify = (t: string) =>
-  String(t || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/&/g, " and ").replace(/['\u2019]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
 content.get("/api/resolve/:type/:slug", async (c) => {
   const coll = getContentColl(c, c.req.param("type"));
   const want = c.req.param("slug").toLowerCase();
