@@ -251,6 +251,21 @@ function applyI18n() {
 
 // --- Helpers ---
 
+// --- Season 0 = OVA / Specials ---
+function seasonNum(v, def = 1) {
+  if (v === '' || v == null) return def;
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) ? n : def;
+}
+function epSortKey(s) { return Number(s) === 0 ? 1e6 : (Number(s) || 0); }
+function cmpEp(a, b) { return (epSortKey(a.season) - epSortKey(b.season)) || (a.episode - b.episode); }
+function seasonLabel(n) { return Number(n) === 0 ? 'Specials / OVA' : `Season ${n}`; }
+function epCode(ep, compact = false) {
+  const s = Number(ep.season);
+  if (s === 0) return compact ? `SP${ep.episode}` : `SP ${ep.episode}`;
+  return compact ? `S${ep.season}E${ep.episode}` : `S${ep.season} · E${ep.episode}`;
+}
+
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -1470,7 +1485,7 @@ function seasonThumb(episodes, season, content) {
 
 function episodesHtml(episodes, type, contentId, contentCtx) {
   if (!episodes?.length) return '';
-  const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+  const sorted = [...episodes].sort((a, b) => cmpEp(a, b));
   const seasons = [...new Set(sorted.map((e) => e.season))];
   const epHtml = (ep) => {
     const thumb = safeUrl(ep.thumbnail) || seasonThumb(sorted, ep.season, contentCtx) || '';
@@ -1479,7 +1494,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       ${thumb ? `<img class="ep-thumb" src="${esc(thumb)}" alt="" loading="lazy" decoding="async">` : ''}
       <div class="ep-body">
         <div class="ep-header">
-          <strong>S${esc(ep.season)} · E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
+          <strong>${esc(epCode(ep))}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}${ep.duration ? `<span class="muted"> · ${esc(ep.duration)}</span>` : ''}
         </div>
         <div class="ep-actions">
           ${ep.video_url ? `<button type="button" class="outline medium ep-play"
@@ -1499,7 +1514,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     <div class="season-block">
       <div class="season-head">
         ${st ? `<img class="season-thumb" src="${esc(st)}" alt="" loading="lazy" decoding="async">` : ''}
-        <div><strong>Season ${esc(s)}</strong><div class="muted small-muted">${list.length} episode${list.length === 1 ? '' : 's'}</div></div>
+        <div><strong>${esc(seasonLabel(s))}</strong><div class="muted small-muted">${list.length} episode${list.length === 1 ? '' : 's'}</div></div>
       </div>
       <div class="episodes">${list.map(epHtml).join('')}</div>
     </div>`;
@@ -1880,7 +1895,7 @@ function attachPlayerAutomation(video, wrap) {
     box.className = 'player-next';
     box.innerHTML = `
       <p>Up next</p>
-      <strong>S${esc(nextEp.season)} · E${esc(nextEp.episode)}${nextEp.title ? ' — ' + esc(nextEp.title) : ''}</strong>
+      <strong>${esc(epCode(nextEp))}${nextEp.title ? ' — ' + esc(nextEp.title) : ''}</strong>
       <span class="player-next-count"></span>
       <div class="player-next-actions">
         <button type="button" class="outline small" data-act="cancel">Cancel</button>
@@ -2260,7 +2275,7 @@ function renderVideoEpList() {
   box.innerHTML = `
     <div class="ep-list">
       ${seasons.length > 1 ? `<div class="ep-seasons">${seasons.map((n) =>
-        `<button type="button" class="ep-season-btn ${n === videoContext.listSeason ? 'active' : ''}" data-season="${esc(n)}">Season ${esc(n)}</button>`).join('')}</div>` : ''}
+        `<button type="button" class="ep-season-btn ${n === videoContext.listSeason ? 'active' : ''}" data-season="${esc(n)}">${esc(seasonLabel(n))}</button>`).join('')}</div>` : ''}
       <input type="search" id="epFilter" class="ep-filter" placeholder="Filter episodes..." autocomplete="off" value="${esc(videoContext.epFilter || '')}">
       <div class="ep-rows" id="epRows"></div>
       ${nextAt ? `<div class="ep-next">${bell}<span><strong>Episode ${esc(nextNo)}</strong> in <strong id="epNextIn">${fmtCountdown(nextAt - Date.now())}</strong> <span class="ep-next-date">· ${nextAt.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${pad2(nextAt.getHours())}:${pad2(nextAt.getMinutes())}</span></span></div>` : ''}
@@ -2271,13 +2286,14 @@ function renderVideoEpList() {
     const rows = $('epRows');
     const html = episodes.map((ep, i) => {
       if (ep.season !== videoContext.listSeason) return '';
-      const name = ep.title || `Episode ${ep.episode}`;
+      const isSp = Number(ep.season) === 0;
+      const name = ep.title || (isSp ? `Special ${ep.episode}` : `Episode ${ep.episode}`);
       if (q && !(`episode ${ep.episode} ${ep.episode} ${name}`.toLowerCase().includes(q))) return '';
       const playing = i === currentIndex;
       const off = !ep.video_url;
       return `
         <button type="button" class="ep-row ${playing ? 'playing' : ''} ${off ? 'off' : ''}" data-idx="${i}" ${off ? 'disabled' : ''}>
-          <span class="ep-badge">EP ${esc(ep.episode)}</span>
+          <span class="ep-badge">${isSp ? 'SP' : 'EP'} ${esc(ep.episode)}</span>
           <span class="ep-info"><span class="ep-name">${esc(name)}</span>${ep.duration ? `<span class="ep-dur">${esc(ep.duration)}</span>` : ''}</span>
           ${playing ? '<span class="ep-playing">PLAYING</span>' : ''}
         </button>`;
@@ -2316,7 +2332,7 @@ function renderVideoEpList() {
 }
 
 function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0, seasonThumbnails = null) {
-  const sorted = [...episodes].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+  const sorted = [...episodes].sort((a, b) => cmpEp(a, b));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
   if (idx === -1) { toast('Episode not found', 'error'); return; }
   const ep = sorted[idx];
@@ -2351,7 +2367,7 @@ async function openVideoFromLink(type, ref, s, e) {
     if (!isRealId(id)) id = (await api(`/api/resolve/${type}/${encodeURIComponent(ref)}`))._id;
     const full = await api(`/api/content/${type}/${id}`);
     rememberAir(full);
-    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     const ep = eps.find((x) => Number(x.season) === Number(s) && Number(x.episode) === Number(e) && x.video_url);
     if (!ep) { openDetail(type, id); return; }
     try { if (history.state) history.replaceState({ ...history.state, key: `video:${type}:${id}`, detailId: id }, '', location.href); } catch (err) {}
@@ -2387,7 +2403,7 @@ async function resumeWatching(item) {
   try {
     const full = await api(`/api/content/${type}/${id}`);
     rememberAir(full);
-    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     if (!eps.length) { openDetail(type, id, item); return; }
     let idx = eps.findIndex((e) => Number(e.season) === Number(item.season) && Number(e.episode) === Number(item.episode));
     if (idx === -1) idx = 0;
@@ -2404,7 +2420,7 @@ function loadVideoEpisode() {
   if (!videoContext) return;
   const ep = videoContext.episodes[videoContext.currentIndex];
   $('videoTitle').textContent = videoContext.contentTitle;
-  const sub = `S${ep.season} · E${ep.episode}${ep.title ? ' — ' + ep.title : ''}${ep.duration ? ' · ' + ep.duration : ''}`;
+  const sub = `${epCode(ep)}${ep.title ? ' — ' + ep.title : ''}${ep.duration ? ' · ' + ep.duration : ''}`;
   $('videoSubtitle').textContent = sub;
 
   // Season / episode thumbnail above player
@@ -2472,7 +2488,7 @@ function updateVideoNav() {
     prevBtn.hidden = false;
     prevBtn.classList.remove('hidden-nav-btn');
     prevBtn.disabled = false;
-    prevBtn.textContent = `← S${prevEp.season}E${prevEp.episode}`;
+    prevBtn.textContent = `← ${epCode(prevEp, true)}`;
   } else {
     prevBtn.hidden = true;
     prevBtn.classList.add('hidden-nav-btn');
@@ -2483,7 +2499,7 @@ function updateVideoNav() {
     nextBtn.hidden = false;
     nextBtn.classList.remove('hidden-nav-btn');
     nextBtn.disabled = false;
-    nextBtn.textContent = `S${nextEp.season}E${nextEp.episode} →`;
+    nextBtn.textContent = `${epCode(nextEp, true)} →`;
   } else {
     nextBtn.hidden = true;
     nextBtn.classList.add('hidden-nav-btn');
@@ -2620,11 +2636,19 @@ async function loadLibrary(reset = false) {
     data.items.forEach((item) => {
       const row = document.createElement('div');
       row.className = 'lib-row';
+      const chips = [
+        item.status ? `<span class="lib-chip">${esc(item.status)}</span>` : '',
+        `<span class="lib-chip">${item.year || '—'}</span>`,
+        `<span class="lib-chip">★ ${item.avg_rating || '—'}</span>`,
+        item.hero ? `<span class="lib-chip hot">🎬 Hero${item.hero_order ? ' #' + item.hero_order : ''}</span>` : '',
+        item.top_airing ? `<span class="lib-chip hot">🔥 Top${item.top_rank ? ' #' + item.top_rank : ''}</span>` : '',
+        item.published === false && item.scheduled_at ? `<span class="lib-chip">⏳ ${esc(new Date(item.scheduled_at).toLocaleString())}</span>` : '',
+      ].join('');
       row.innerHTML = `
         <img src="${esc(safeUrl(item.poster) || PLACEHOLDER)}" alt="">
-        <div>
+        <div class="lib-main">
           <h4>${esc(item.title)}</h4>
-          <p>${esc(item.status || '')} · ${item.year || '—'} · ★ ${item.avg_rating || '—'}${item.hero ? ` · 🎬 Hero${item.hero_order ? ' #' + item.hero_order : ''}` : ''}${item.top_airing ? ` · 🔥 Top${item.top_rank ? ' #' + item.top_rank : ''}` : ''}${item.published === false && item.scheduled_at ? ` · ⏳ goes live ${esc(new Date(item.scheduled_at).toLocaleString())}` : ''}</p>
+          <div class="lib-chips">${chips}</div>
         </div>
         <div class="lib-actions">
           ${type !== 'movie' ? `<button type="button" class="outline ep-btn"
@@ -2771,13 +2795,13 @@ async function refreshEpisodeList() {
   const { type, id } = currentEpisodeTarget;
   try {
     const doc = await api(`/api/content/${type}/${id}`);
-    const eps = (doc.episodes || []).sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const eps = (doc.episodes || []).sort((a, b) => cmpEp(a, b));
     const el = $('episodeList');
     if (!eps.length) { el.innerHTML = '<p class="muted">No episodes yet. Add your first above.</p>'; return; }
     el.innerHTML = eps.map((ep) => `
       <div class="ep-admin-row">
         <div>
-          <strong>S${esc(ep.season)}E${esc(ep.episode)}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}
+          <strong>${esc(epCode(ep, true))}</strong>${ep.title ? ` — ${esc(ep.title)}` : ''}
           ${ep.video_url
             ? `<p class="muted" style="margin:2px 0 0;font-size:12px;overflow-wrap:anywhere">${esc(ep.video_url)}</p>`
             : '<p class="muted" style="margin:2px 0 0;font-size:12px">⚠ No video link</p>'}
@@ -2869,7 +2893,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
   if (iframeMatch) rawVideo = iframeMatch[1];
 
   const payload = {
-    season: Number($('epSeason').value) || 1,
+    season: seasonNum($('epSeason').value),
     episode: Number($('epNumber').value),
     title: $('epTitle').value.trim(),
     duration: $('epDuration').value.trim(),
@@ -3003,7 +3027,7 @@ async function runThumbTool(season, url) {
   if (!url.startsWith('https://') && !url.startsWith('/assets/')) return toast('Enter a valid thumbnail URL (https://...)', 'error');
   try {
     await applySeasonThumbnail(currentEpisodeTarget.type, currentEpisodeTarget.id, season, url);
-    toast(season === 'all' ? 'Thumbnail set on all episodes' : `Season ${season} thumbnail saved`);
+    toast(season === 'all' ? 'Thumbnail set on all episodes' : `${seasonLabel(season)} thumbnail saved`);
     await refreshEpisodeList();
     loadLibrary(true);
   } catch (err) { toast(err.message || 'Failed to set thumbnail', 'error'); }
@@ -3250,7 +3274,7 @@ async function autoFetchWikipediaEpisode() {
   if (!currentEpisodeTarget) return toast("Open Manage Episodes first", "error");
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 1;
-  const season = Number($("epSeason")?.value) || 1;
+  const season = seasonNum($("epSeason")?.value);
   const urlBox = $("epWikiUrl");
   if (urlBox && !urlBox.value.trim()) {
     try { urlBox.value = sessionStorage.getItem("anicore-wiki-url") || ""; } catch (e) {}
@@ -3362,7 +3386,7 @@ async function autoFetchEpisodeMeta() {
   if (!currentEpisodeTarget) return toast("Open Manage Episodes from a title first", "error");
   const title = currentEpisodeTarget.title || ($("aTitle")?.value || "");
   const ep = Number($("epNumber")?.value) || 0;
-  const season = Number($("epSeason")?.value) || 1;
+  const season = seasonNum($("epSeason")?.value);
   if (!ep) return toast("Enter episode number first", "error");
   const btn = $("epAutoFetch");
   if (btn) { btn.disabled = true; btn.textContent = "Fetching…"; }
@@ -3557,7 +3581,7 @@ async function heroWatch(item) {
   if (type === 'movie') { openDetail(type, item._id, item); return; }
   try {
     const full = await api(`/api/content/${type}/${item._id}`);
-    const eps = [...(full.episodes || [])].sort((a, b) => (a.season - b.season) || (a.episode - b.episode));
+    const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     const ep = eps.find((e) => e.video_url);
     if (!ep) { openDetail(type, item._id, item); return; }
     state.detailId = item._id;
@@ -3922,7 +3946,7 @@ async function loadProfileActivity() {
     if (!box) return;
     const rows = [];
     (data.progress || []).slice(0, 5).forEach((p) => {
-      rows.push(`<div class="activity-item">▶ Continue S${p.season || 1}E${p.episode || 1} · ${esc(p.content_type)} · ${Math.round(p.progress_percent || 0)}%</div>`);
+      rows.push(`<div class="activity-item">▶ Continue ${epCode({ season: p.season ?? 1, episode: p.episode || 1 }, true)} · ${esc(p.content_type)} · ${Math.round(p.progress_percent || 0)}%</div>`);
     });
     (data.ratings || []).slice(0, 5).forEach((r) => {
       rows.push(`<div class="activity-item">★ Rated ${esc(r.rating)}/10 · ${esc(r.content_type)}</div>`);
@@ -4063,7 +4087,7 @@ async function fillBulkWithAi() {
         method: 'POST',
         body: JSON.stringify({
           content_type: $('bulkEpType').value, content_id: sel.value, title,
-          season: Number($('bulkEpSeason')?.value) || 1,
+          season: seasonNum($('bulkEpSeason')?.value),
           episodes: part.map((tr) => Number(tr.dataset.ep)),
         }),
       });
@@ -4087,7 +4111,7 @@ async function submitBulkEpisodes(e) {
   e.preventDefault();
   const content_type = $('bulkEpType')?.value || 'anime';
   const content_id = $('bulkEpContent')?.value;
-  const season = Number($('bulkEpSeason')?.value) || 1;
+  const season = seasonNum($('bulkEpSeason')?.value);
   const msg = $('bulkEpMsg');
   if (!content_id) { if (msg) msg.textContent = 'Select a title first.'; return; }
   const episodes = [];
@@ -5153,7 +5177,7 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
           const k = wlKey(w.content_type, w.content_id); const n = (d.episodes || []).length; counts[k] = n;
           if (base && base[k] != null && n > base[k]) {
             const latest = [...(d.episodes || [])].sort((a, b) => (b.season - a.season) || (b.episode - a.episode))[0];
-            fresh.push({ type: w.content_type, id: w.content_id, title: w.title || d.title, poster: w.poster || d.poster, label: latest ? `S${latest.season} · E${latest.episode} is out` : 'New episode' });
+            fresh.push({ type: w.content_type, id: w.content_id, title: w.title || d.title, poster: w.poster || d.poster, label: latest ? `${epCode(latest)} is out` : 'New episode' });
           }
         } catch (e) { /* skip */ }
       }));
@@ -5265,7 +5289,7 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
       const idx = nextPlayableIndex(); if (idx === -1 || wrap.querySelector('.player-next')) return;
       const nx = videoContext.episodes[idx];
       const box = el('div', 'player-next', `<p>Up next</p><strong></strong><span class="player-next-count"></span><div class="player-next-actions"><button type="button" class="outline small" data-act="cancel">Cancel</button><button type="button" class="primary small" data-act="now">Play now</button></div>`);
-      box.querySelector('strong').textContent = `S${nx.season} · E${nx.episode}${nx.title ? ' — ' + nx.title : ''}`;
+      box.querySelector('strong').textContent = `${epCode(nx)}${nx.title ? ' — ' + nx.title : ''}`;
       wrap.appendChild(box);
       let left = 5; const cnt = box.querySelector('.player-next-count'); cnt.textContent = `Playing in ${left}s`;
       const go = () => { clearInterval(tm); box.remove(); playNextEpisode(); };
