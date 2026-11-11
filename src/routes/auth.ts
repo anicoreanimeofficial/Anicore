@@ -16,12 +16,30 @@ async function startSession(c: AppCtx, user: { _id: string; email: string; role?
   setCookie(c, COOKIE_NAME, token, cookieOptions(c.env));
 }
 
+// Brute-force protection: 8 failed sign-ins per email+IP lock that pair out for 15 minutes.
+const MAX_FAILS = 8, LOCK_MS = 15 * 60 * 1000;
+const failKey = (c: AppCtx, email: string) => `${email}|${c.req.header("CF-Connecting-IP") || "unknown"}`;
+async function assertNotLocked(c: AppCtx, key: string) {
+  const row = await c.get("db").c("login_fails").findOne({ key });
+  if (row && row.count >= MAX_FAILS && Date.now() - new Date(row.first_at).getTime() < LOCK_MS)
+    throw new HttpError(429, "Too many failed sign-ins. Try again in a few minutes.");
+}
+async function recordFail(c: AppCtx, key: string) {
+  const coll = c.get("db").c("login_fails");
+  const row = await coll.findOne({ key });
+  if (!row || Date.now() - new Date(row.first_at).getTime() >= LOCK_MS)
+  { await coll.deleteMany({ key }); await coll.insert({ key, count: 1, first_at: now() }); }
+  else await coll.updateOne({ _id: row._id }, { $inc: { count: 1 } });
+}
+
 auth.post("/api/auth/register", async (c) => {
   const d = parse(await json(c), credRules(6));
   const email = d.email.toLowerCase().trim();
   const db = c.get("db");
   if (await db.users.findOne({ email })) throw new HttpError(409, "Email already registered");
-  const user = await db.users.insert({ email, password_hash: await hashPassword(d.password), role: "user", created_at: now() });
+  let user;
+  try { user = await db.users.insert({ email, password_hash: await hashPassword(d.password), role: "user", created_at: now() }); }
+  catch { throw new HttpError(409, "Email already registered"); } // lost a race against the unique email index
   await startSession(c, user as any);
   return c.json({ message: "Registered successfully" });
 });
@@ -29,9 +47,14 @@ auth.post("/api/auth/register", async (c) => {
 auth.post("/api/auth/login", async (c) => {
   const d = parse(await json(c), credRules(1));
   const email = d.email.toLowerCase().trim();
+  const key = failKey(c, email);
+  await assertNotLocked(c, key);
   const user = await c.get("db").users.findOne({ email });
-  if (!user || !(await verifyPassword(d.password, user.password_hash || "")))
+  if (!user || !(await verifyPassword(d.password, user.password_hash || ""))) {
+    await recordFail(c, key);
     throw new HttpError(401, "Invalid email or password");
+  }
+  await c.get("db").c("login_fails").deleteMany({ key });
   if (user.banned) {
     const reason = user.ban_reason || "";
     throw new HttpError(403, "This account has been suspended." + (reason ? ` Reason: ${reason}` : ""));
@@ -95,7 +118,7 @@ auth.post("/api/auth/telegram", async (c) => {
   const email = `tg_${tgId}@telegram.local`;
   const db = c.get("db");
 
-  let user = await db.users.findOne({ $or: [{ telegram_id: tgId }, { email }] });
+  let user = (await db.users.findOne({ telegram_id: tgId })) || (await db.users.findOne({ email }));
   if (!user) {
     user = await db.users.insert({
       email, password_hash: await hashPassword(`tg:${tgId}:${crypto.randomUUID()}`), role: "user",
@@ -159,7 +182,7 @@ function imageRoutes(kind: "background" | "avatar", prefKey: string, max: number
     const user = await requireUser(c);
     const obj = await blobGet(c.env, r2key(user._id));
     if (!obj) throw new HttpError(404, `No uploaded ${kind}`);
-    return new Response(obj.bytes, { headers: {
+    return new Response(obj.bytes as unknown as BodyInit, { headers: {
       "Content-Type": obj.type || "image/jpeg",
       "Cache-Control": "private, max-age=31536000, immutable",
     } });

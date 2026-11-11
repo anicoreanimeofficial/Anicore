@@ -1,14 +1,11 @@
 import { Hono } from "hono";
 import { DB, Doc } from "../db";
 import {
-  AppCtx, Env, HttpError, R, bad, cmpTuple, epKey, currentUser, fmtUtc, getContentColl, json, logMod, muteRemaining, notifyUserIds, now,
-  objectId, pageParams, parse, requireAdmin, requireUser, visibleQuery, escapeRe,
+  AppCtx, Env, HttpError, R, bad, currentUser, fmtUtc, getContentColl, json, logMod, muteRemaining, notifyUserIds, now,
+  objectId, pageParams, parse, requireAdmin, requireUser, escapeRe,
 } from "../lib";
 
 export const social = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
-
-const TYPES = ["anime", "tv_show", "movie"] as const;
-const typeRule = R.oneOf(TYPES);
 
 // ---------- watchlist ----------
 social.post("/api/watchlist/:type/:id", async (c) => {
@@ -69,7 +66,7 @@ social.post("/api/comments/:id/report", async (c) => {
   return c.json({ message: "Thanks, a moderator will take a look." });
 });
 
-// ---------- progress / continue watching ----------
+// ---------- watch progress (resume position inside the player) ----------
 social.post("/api/progress", async (c) => {
   const user = await requireUser(c);
   const d = parse(await json(c), {
@@ -81,45 +78,6 @@ social.post("/api/progress", async (c) => {
     { user_id: user._id, content_type: d.content_type, content_id: d.content_id },
     { $set: { season: d.season, episode: d.episode, progress_percent: d.progress_percent, updated_at: now() } }, { upsert: true });
   return c.json({ message: "Progress saved" });
-});
-
-social.get("/api/continue-watching", async (c) => {
-  const user = await requireUser(c);
-  const db = c.get("db");
-  const limit = Math.min(Math.max(parseInt(c.req.query("limit") || "12") || 12, 1), 30);
-  const rows = await db.progress.find({ user_id: user._id }, { sort: [["updated_at", -1]], limit: limit * 2 });
-  const result: any[] = [];
-  for (const row of rows) {
-    if (result.length >= limit) break;
-    const coll = db.content(row.content_type);
-    const doc = coll && (await coll.findOne({ $and: [{ _id: row.content_id }, visibleQuery()] }));
-    if (!doc) continue;
-    const episodes: Doc[] = [...(doc.episodes || [])].sort((a, b) => cmpTuple(epKey(a), epKey(b)));
-    let season = row.season ?? 1, episode = row.episode ?? 1, percent = row.progress_percent ?? 0;
-    let index: number | null = episodes.findIndex((e) => e.season === season && e.episode === episode);
-    if (index < 0) index = null;
-    let upNext = false;
-    if (percent >= 95) {
-      if (index !== null && index + 1 < episodes.length) {
-        index += 1; season = episodes[index].season; episode = episodes[index].episode; percent = 0; upNext = true;
-      } else continue;
-    }
-    const cur = index !== null ? episodes[index] : {};
-    result.push({
-      content_type: row.content_type, content_id: row.content_id, title: doc.title || "", poster: doc.poster || "", banner: doc.banner || "",
-      thumbnail: cur.thumbnail || "", episode_title: cur.title || "", duration: cur.duration || "", season, episode,
-      progress_percent: percent, episode_number: index !== null ? index + 1 : null, total_episodes: episodes.length,
-      up_next: upNext, updated_at: row.updated_at,
-    });
-  }
-  return c.json(result);
-});
-
-social.delete("/api/continue-watching/:type/:id", async (c) => {
-  const user = await requireUser(c);
-  getContentColl(c, c.req.param("type"));
-  await c.get("db").progress.deleteOne({ user_id: user._id, content_type: c.req.param("type"), content_id: c.req.param("id") });
-  return c.json({ message: "Removed" });
 });
 
 // ---------- ratings ----------

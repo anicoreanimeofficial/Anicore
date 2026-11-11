@@ -4,7 +4,7 @@ import {
   AppCtx, CONTENT_TYPES, Env, HttpError, R, Rules, applyScheduleFields, bad, cmpTuple, contentRules, epKey, seasonOf, currentUser,
   escapeRe, exactRegex, getContentColl, logMod, isReleased, json, notifyNewEpisodes, now, objectId, pageParams, parse,
   requireAdmin, requireUploader, validUrl, validVideoUrl, visibleQuery, withVisibility, cleanSubtitles,
-  blobPut, blobGet,
+  blobPut, blobGet, cleanQualityLinks, assertRowSize,
 } from "../lib";
 
 export const content = new Hono<{ Bindings: Env; Variables: { db: DB } }>();
@@ -170,6 +170,7 @@ async function insertContent(c: AppCtx, type: string, body: any, withEpisodes: b
   const item = parse(body, contentRules(type === "movie"));
   item.poster = validUrl(item.poster);
   item.banner = validUrl(item.banner);
+  if (item.quality_links) item.quality_links = cleanQualityLinks(item.quality_links);
   item.published = true;
   applyScheduleFields(item);
   item.created_at = now();
@@ -216,12 +217,6 @@ const episodeRules = (): Rules => ({
   subtitles: (v: any) => (Array.isArray(v) ? v : []),
 });
 
-function cleanQualityLinks(links: Record<string, any>) {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(links || {})) out[k] = validVideoUrl(String(v));
-  return out;
-}
-
 async function inheritSeasonThumb(coll: any, id: string, ep: Doc) {
   if ((ep.thumbnail || "").trim()) return;
   const doc = (await coll.findOne({ _id: id })) || {};
@@ -239,10 +234,15 @@ async function addEpisode(c: AppCtx, type: "anime" | "tv_show") {
   ep.subtitles = cleanSubtitles(ep.subtitles);
   ep.quality_links = cleanQualityLinks(ep.quality_links);
   const coll = getContentColl(c, type);
+  const current = await coll.findOne({ _id: id });
+  if (!current) throw new HttpError(404, type === "anime" ? "Anime not found" : "TV show not found");
+  if ((current.episodes || []).some((e: Doc) => seasonOf(e) === seasonOf(ep) && Number(e.episode) === ep.episode))
+    throw new HttpError(409, `Season ${seasonOf(ep)} episode ${ep.episode} already exists. Edit it instead.`);
   await inheritSeasonThumb(coll, id, ep);
-  const matched = await coll.updateOne({ _id: id }, { $push: { episodes: ep } });
-  if (!matched) throw new HttpError(404, type === "anime" ? "Anime not found" : "TV show not found");
-  const parent = (await coll.findOne({ _id: id })) || {};
+  const episodes = [...(current.episodes || []), ep];
+  assertRowSize({ ...current, episodes });
+  await coll.updateOne({ _id: id }, { $set: { episodes } });
+  const parent = current;
   if (isReleased(parent) && ep.video_url)
     c.executionCtx.waitUntil(notifyNewEpisodes(c.get("db"), type, id, parent.title || (type === "anime" ? "Anime" : "TV show"), ep.season, ep.episode));
   return c.json({ message: "Episode added" });
@@ -262,13 +262,14 @@ content.put("/api/admin/:type/:id/episodes/:season/:episode", async (c) => {
   const rules = episodeRules();
   const updates = parse(await json(c), rules, true);
   const episodes: Doc[] = doc.episodes || [];
-  const ep = episodes.find((e) => e.season === season && e.episode === episode);
+  const ep = episodes.find((e) => seasonOf(e) === season && Number(e.episode) === episode);
   if (!ep) throw new HttpError(404, "Episode not found");
   if ("video_url" in updates) updates.video_url = validVideoUrl(updates.video_url);
   if (updates.thumbnail) updates.thumbnail = validUrl(updates.thumbnail) || updates.thumbnail;
   if ("subtitles" in updates) updates.subtitles = cleanSubtitles(updates.subtitles);
   if (updates.quality_links && Object.keys(updates.quality_links).length) updates.quality_links = cleanQualityLinks(updates.quality_links);
   Object.assign(ep, updates);
+  assertRowSize({ ...doc, episodes });
   await coll.updateOne({ _id: id }, { $set: { episodes } });
   return c.json({ message: "Episode updated" });
 });
@@ -278,9 +279,12 @@ content.delete("/api/admin/:type/:id/episodes/:season/:episode", async (c) => {
   const type = c.req.param("type");
   if (!["anime", "tv_show"].includes(type)) throw bad("Only anime and tv_show have episodes");
   const coll = getContentColl(c, type);
-  const matched = await coll.updateOne({ _id: objectId(c.req.param("id")) },
-    { $pull: { episodes: { season: Number(c.req.param("season")), episode: Number(c.req.param("episode")) } } });
-  if (!matched) throw new HttpError(404, "Not found");
+  const doc = await coll.findOne({ _id: objectId(c.req.param("id")) });
+  if (!doc) throw new HttpError(404, "Not found");
+  const season = Number(c.req.param("season")), episode = Number(c.req.param("episode"));
+  const kept = (doc.episodes || []).filter((e: Doc) => !(seasonOf(e) === season && Number(e.episode) === episode));
+  if (kept.length === (doc.episodes || []).length) throw new HttpError(404, "Episode not found");
+  await coll.updateOne({ _id: doc._id }, { $set: { episodes: kept } });
   return c.json({ message: "Episode deleted" });
 });
 
@@ -291,6 +295,7 @@ content.put("/api/admin/content/:type/:id", async (c) => {
   const fields = parse(await json(c), contentRules(true), true);
   for (const k of ["poster", "banner"]) if (k in fields) fields[k] = validUrl(fields[k]);
   if (type !== "movie") delete fields.quality_links;
+  else if ("quality_links" in fields) fields.quality_links = cleanQualityLinks(fields.quality_links);
   applyScheduleFields(fields);
   fields.updated_at = now();
   const matched = await coll.updateOne({ _id: objectId(c.req.param("id")) }, { $set: fields });
@@ -366,7 +371,7 @@ content.post("/api/admin/bulk-import", async (c) => {
   await requireUploader(c);
   const items = await json(c);
   if (!Array.isArray(items)) throw bad("Expected a list of items");
-  let added = 0;
+  let added = 0, skipped = 0;
   for (const raw of items.slice(0, 100)) {
     const type = R.oneOf(MEDIA)(raw?.content_type, "content_type");
     const base = parse(raw, {
@@ -374,10 +379,10 @@ content.post("/api/admin/bulk-import", async (c) => {
       poster: R.str({ def: "" }), banner: R.str({ def: "" }), status: R.str({ def: "Ongoing" }),
     });
     if (type === "movie") base.quality_links = R.obj()(raw.quality_links, "quality_links");
-    await insertContent(c, type, base, type !== "movie");
-    added++;
+    try { await insertContent(c, type, base, type !== "movie"); added++; }
+    catch (e) { if (e instanceof HttpError && e.status === 409) skipped++; else throw e; }
   }
-  return c.json({ message: `Imported ${added} items` });
+  return c.json({ message: `Imported ${added} items` + (skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : "") });
 });
 
 content.post("/api/admin/bulk-episodes", async (c) => {
@@ -394,7 +399,7 @@ content.post("/api/admin/bulk-episodes", async (c) => {
   let newest: [number, number] | null = null;
   for (const raw of d.episodes) {
     const ep = parse(raw, { season: R.int({ def: 1 }), episode: R.int(), title: R.str({ def: "" }), video_url: R.str({ def: "" }), duration: R.str({ def: "" }), description: R.str({ def: "" }) });
-    if (existing.some((e) => e.season === ep.season && e.episode === ep.episode)) continue;
+    if (existing.some((e) => seasonOf(e) === ep.season && Number(e.episode) === ep.episode)) continue;
     existing.push({
       season: ep.season, episode: ep.episode, title: ep.title || `Episode ${ep.episode}`, description: ep.description,
       duration: ep.duration, video_url: ep.video_url ? validVideoUrl(ep.video_url) : "", quality_links: {}, thumbnail: "",
@@ -403,6 +408,7 @@ content.post("/api/admin/bulk-episodes", async (c) => {
     if (ep.video_url && ep.season !== 0 && ep.episode < 1000 && (!newest || cmpTuple([ep.season, ep.episode], newest) > 0)) newest = [ep.season, ep.episode];
   }
   existing.sort((a, b) => cmpTuple(epKey(a), epKey(b)));
+  assertRowSize({ ...doc, episodes: existing });
   await coll.updateOne({ _id: doc._id }, { $set: { episodes: existing } });
   if (added && newest && isReleased(doc))
     c.executionCtx.waitUntil(notifyNewEpisodes(c.get("db"), d.content_type, d.content_id, doc.title || "", newest[0], newest[1], added));
@@ -593,13 +599,25 @@ content.get("/api/search", async (c) => {
   const { page, limit } = pageParams(c, 24);
   const types = (CONTENT_TYPES as string[]).includes(type) ? [type] : CONTENT_TYPES;
   const results: Doc[] = [];
+  const sort = SORTS[sortKey] || SORTS.newest;
+  const need = page * limit; // enough from each type to build the requested page after merging
   for (const t of types) {
-    const query = buildFilterQuery(c, false);
-    const items = await c.get("db").content(t)!.find(query, { sort: SORTS[sortKey] || SORTS.newest, skip: (page - 1) * limit, limit });
+    const items = await c.get("db").content(t)!.find(buildFilterQuery(c, false), { sort, limit: need });
     for (const it of items) results.push({ ...it, content_type: t });
   }
-  if (!type) results.sort((a, b) => (String(a.created_at || "") < String(b.created_at || "") ? 1 : -1) * (sortKey === "oldest" ? -1 : 1));
-  return c.json({ items: results.slice(0, limit), q });
+  if (types.length > 1) {
+    results.sort((a, b) => {
+      for (const [f, dir] of sort) {
+        const x = a[f] ?? null, y = b[f] ?? null;
+        if (x === y) continue;
+        if (x === null) return -dir; // missing values sort lowest, same as the DB layer
+        if (y === null) return dir;
+        return (x < y ? -1 : 1) * dir;
+      }
+      return 0;
+    });
+  }
+  return c.json({ items: results.slice((page - 1) * limit, page * limit), q });
 });
 
 content.get("/api/recommendations", async (c) => {
@@ -757,7 +775,7 @@ content.post("/api/upload/image", async (c) => {
 content.get("/assets/uploads/:name", async (c) => {
   const obj = await blobGet(c.env, `uploads/${c.req.param("name")}`);
   if (!obj) return c.text("Not found", 404);
-  return new Response(obj.bytes, { headers: {
+  return new Response(obj.bytes as unknown as BodyInit, { headers: {
     "Content-Type": obj.type || "application/octet-stream",
     "Cache-Control": "public, max-age=31536000, immutable",
   } });
