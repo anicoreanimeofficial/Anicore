@@ -13,9 +13,11 @@ const BOOT_NAV = (() => {
     if (w) return { page: 'video', detailType: w[1], detailId: w[2], watchS: +w[3], watchE: +w[4] };
     const d = location.hash.match(/^#\/detail\/([a-z_]+)\/([A-Za-z0-9_-]+)$/);
     if (d) return { page: 'detail', detailType: d[1], detailId: d[2] };
+    const pg = location.pathname.match(/^\/(series|movies|schedule|search|profile|admin)\/?$/);
+    if (pg) return { page: pg[1] };
     const p = location.hash.match(/^#\/([a-z]+)$/);
     if (p) return { page: p[1] };
-    return JSON.parse(sessionStorage.getItem('anicore-nav') || 'null');
+    return null;
   } catch (e) { return null; }
 })();
 
@@ -31,6 +33,10 @@ const TYPE_SEG = { anime: 'anime', tv_show: 'tvshow', movie: 'movie' };
 const SEG_TYPE = { anime: 'anime', tvshow: 'tv_show', movie: 'movie' };
 const detailPath = (type, ref) => `/${TYPE_SEG[type] || type}/${ref}`;
 const watchPath = (type, id, title, s, e) => `${detailPath(type, detailRef(id, title))}/s${s}e${e}`;
+const PAGE_PATH = { home: '/', series: '/series', movies: '/movies', schedule: '/schedule', search: '/search', profile: '/profile', admin: '/admin' };
+// Every in-app move is a real page load. Only the first page the browser opens may be drawn in place.
+let allowSwap = false;
+function gotoUrl(url) { location.assign(url); }
 const WATCH_RE = /^#\/watch\/([a-z_]+)\/([A-Za-z0-9_-]+)\/s(\d+)e(\d+)$/; // older hash links still work
 function parseHash(h) {
   let m = (h || '').match(WATCH_RE);
@@ -47,6 +53,8 @@ function parseLocation() {
     const detailType = SEG_TYPE[m[1]];
     return m[3] != null ? { page: 'video', detailType, detailId: m[2], watchS: +m[3], watchE: +m[4] } : { page: 'detail', detailType, detailId: m[2] };
   }
+  const pg = location.pathname.match(/^\/(series|movies|schedule|search|profile|admin)\/?$/);
+  if (pg) return { page: pg[1] };
   return parseHash(location.hash);
 }
 
@@ -72,23 +80,7 @@ function syncHapticControls() {
   if (onEl) onEl.checked = s.on;
   if (lvEl) { lvEl.value = s.level; lvEl.disabled = !s.on; }
 }
-function buzz(kind = 'light') {
-  try {
-    const s = hapticSettings();
-    if (!s.on) return;
-    // Web browser only — navigator.vibrate (no Telegram haptics)
-    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
-    const t = Date.now();
-    if (t - _lastBuzz < 40) return;
-    _lastBuzz = t;
-    const vibScale = { light: 0.55, medium: 1, heavy: 1.55 }[s.level] || 1;
-    const base = { light: 12, soft: 8, medium: 22, rigid: 30, heavy: 40, select: 6, success: [12, 40, 12], warning: [20, 50, 20], error: [30, 50, 30, 50, 30] };
-    let pat = base[kind] || 12;
-    if (Array.isArray(pat)) pat = pat.map((n) => Math.max(4, Math.round(n * vibScale)));
-    else pat = Math.max(4, Math.round(pat * vibScale));
-    navigator.vibrate(pat);
-  } catch (e) { /* noop */ }
-}
+function buzz() { /* haptics removed: the site behaves like a normal website */ }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
 const APP_JS_VERSION = 'v53';
@@ -481,6 +473,7 @@ function toggleTheme() {
 // --- Navigation ---
 
 function movePill(animate = true) {
+  return; // the sliding pill was removed; the active tab is highlighted by colour only
   const pill = $('navPill');
   const nav = $('bottomNav');
   if (!pill || !nav) return;
@@ -534,8 +527,8 @@ function saveNavState() {
   } catch (e) {}
   // Give every page its own link in the address bar
   try {
-    let h = state.page === 'home' ? '' : '#/' + state.page;
-    let path = '/';
+    let h = '';
+    let path = PAGE_PATH[state.page] || '/';
     let ws = null, we = null;
     if (state.page === 'video' && videoContext && state.detailId && state.detailType) {
       const cur = videoContext.episodes[videoContext.currentIndex] || {};
@@ -544,19 +537,8 @@ function saveNavState() {
     } else if ((state.page === 'detail' || state.page === 'video') && state.detailId && state.detailType) {
       path = detailPath(state.detailType, detailRef(state.detailId, state.detailTitle)); h = '';
     }
-    const key = (state.page === 'detail' || state.page === 'video')
-      ? `${state.page}:${state.detailType}:${state.detailId}` : state.page;
-    const idx = (history.state && history.state.idx) || 0; // how many in-app pages sit behind this one
-    const entry = { key, idx, page: state.page, detailType: state.detailType, detailId: state.detailId, watchS: ws, watchE: we };
-    const url = path + location.search + h;
-    // Each page the user opens gets its own history entry so the phone's Back button steps back
-    // through the app instead of leaving the site. Back/forward itself must not add entries.
-    if (navFromHistory || !history.state || !history.state.key) {
-      history.replaceState(entry, '', url);
-    } else if (history.state.key !== key) {
-      entry.idx = idx + 1;
-      history.pushState(entry, '', url);
-    }
+    const entry = { key: state.page, page: state.page, detailType: state.detailType, detailId: state.detailId, watchS: ws, watchE: we };
+    history.replaceState(entry, '', path + location.search + h);
   } catch (e) {}
 }
 
@@ -572,11 +554,11 @@ function navigateFromHistory() {
     document.querySelectorAll('.modal:not(.hidden)').forEach((m) => m.classList.add('hidden'));
     if ((st.page === 'detail' || st.page === 'video') && st.detailId && st.detailType) {
       if (st.page === 'video' && st.watchS != null && st.watchE != null) openVideoFromLink(st.detailType, st.detailId, st.watchS, st.watchE);
-      else openDetail(st.detailType, st.detailId);
+      else { allowSwap = true; openDetail(st.detailType, st.detailId); }
     } else if (PAGE_ORDER.includes(st.page) && st.page !== 'detail' && st.page !== 'video') {
-      showPage(st.page);
+      allowSwap = true; showPage(st.page);
     } else {
-      showPage('home');
+      allowSwap = true; showPage('home');
     }
   } finally {
     navFromHistory = false;
@@ -600,6 +582,20 @@ function showPage(page) {
   const target = $(`page-${page}`);
   if (!target) return;
 
+  // A normal website loads a new page for every link: send the browser there instead of swapping in place.
+  const swap = allowSwap; allowSwap = false;
+  if (!swap && page !== state.page) {
+    if (page === 'detail' || page === 'video') {
+      if (state.detailId && state.detailType) {
+        const cur = page === 'video' && videoContext ? (videoContext.episodes[videoContext.currentIndex] || {}) : null;
+        gotoUrl(cur && cur.episode != null
+          ? watchPath(state.detailType, state.detailId, state.detailTitle, cur.season, cur.episode)
+          : detailPath(state.detailType, detailRef(state.detailId, state.detailTitle)));
+        return;
+      }
+    } else if (PAGE_PATH[page]) { gotoUrl(PAGE_PATH[page]); return; }
+  }
+
   // Leaving video → cleanup
   if (state.page === 'video' && page !== 'video') {
     setTgPlayerExpanded(false);
@@ -608,13 +604,7 @@ function showPage(page) {
     document.querySelectorAll('.tg-expand-btn').forEach((b) => b.remove());
   }
 
-  if (page !== state.page) buzz('light'); // every page change, including Back/Forward
-  if (page !== state.page) { topLoader.start(); setTimeout(() => topLoader.done(), 500); } // always show the red bar when moving between pages
-  const dir = PAGE_ORDER.indexOf(page) >= PAGE_ORDER.indexOf(state.page) ? 'from-right' : 'from-left';
   document.querySelectorAll('.page').forEach((p) => p.classList.toggle('active', p === target));
-  target.classList.remove('from-left', 'from-right');
-  void target.offsetWidth;
-  if (page !== state.page) target.classList.add(dir);
   state.page = page;
   if (window.tgSyncBack) tgSyncBack();
   saveNavState();
@@ -661,6 +651,7 @@ function showPage(page) {
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-page]');
   if (el) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button > 0) return; // let the browser open it in a new tab
     e.preventDefault();
     showPage(el.dataset.page);
   }
@@ -1678,16 +1669,19 @@ function detailSkeletonHtml() {
 }
 
 async function openDetail(type, id, preview) {
+  const swap = allowSwap; allowSwap = false;
+  if (!swap) { gotoUrl(detailPath(type, detailRef(id, preview && preview.title))); return; }
   // A name link (/anime/some-title) is turned into the real id first.
   if (!isRealId(id)) {
     try { id = (await api(`/api/resolve/${type}/${encodeURIComponent(id)}`))._id; }
-    catch (err) { toast('Title not found.', 'error'); showPage('home'); return; }
+    catch (err) { toast('Title not found.', 'error'); gotoUrl('/'); return; }
     try { if (history.state) history.replaceState({ ...history.state, key: `detail:${type}:${id}`, detailId: id }, '', location.href); } catch (e) {}
   }
   state.detailId = id;
   state.detailType = type;
   state.detailTitle = (preview && preview.title) || '';
 
+  allowSwap = true;
   showPage('detail');
   const contentEl = $('detailPageContent');
 
@@ -1716,12 +1710,14 @@ async function openDetail(type, id, preview) {
   } catch (err) {
     if (state.detailId !== id) return;
     toast(err.message || 'Failed to load details.', 'error');
-    showPage('home');
+    gotoUrl('/');
   }
 }
 
 $('detailBack')?.addEventListener('click', () => {
-  if (history.state && history.state.idx > 0) history.back(); else showPage('home');
+  let internal = false;
+  try { internal = !!document.referrer && new URL(document.referrer).origin === location.origin; } catch (e) {}
+  if (internal && history.length > 1) history.back(); else gotoUrl('/');
 });
 
 // --- Video Player ---
@@ -2318,6 +2314,8 @@ function renderVideoEpList() {
 }
 
 function openVideo(type, contentId, contentTitle, episodes, season, episode, poster, resumePercent = 0, seasonThumbnails = null) {
+  const swap = allowSwap; allowSwap = false;
+  if (!swap) { gotoUrl(watchPath(type, contentId, contentTitle, season, episode)); return; }
   const sorted = [...episodes].sort((a, b) => cmpEp(a, b));
   const idx = sorted.findIndex((e) => Number(e.season) === Number(season) && Number(e.episode) === Number(episode));
   if (idx === -1) { toast('Episode not found', 'error'); return; }
@@ -2342,8 +2340,8 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
   state.detailType = type;
   state.detailTitle = contentTitle || state.detailTitle;
   loadVideoEpisode();
+  allowSwap = true;
   showPage('video');
-  buzz('medium');
 }
 
 // Opens the player straight from a /anime/<name>/s1e3 link (page refresh, shared link, Back/Forward).
@@ -2355,12 +2353,13 @@ async function openVideoFromLink(type, ref, s, e) {
     rememberAir(full);
     const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     const ep = eps.find((x) => Number(x.season) === Number(s) && Number(x.episode) === Number(e) && x.video_url);
-    if (!ep) { openDetail(type, id); return; }
+    if (!ep) { allowSwap = true; openDetail(type, id); return; }
     try { if (history.state) history.replaceState({ ...history.state, key: `video:${type}:${id}`, detailId: id }, '', location.href); } catch (err) {}
+    allowSwap = true;
     openVideo(type, id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
   } catch (err) {
     toast('Could not open this video.', 'error');
-    showPage('home');
+    gotoUrl('/');
   }
 }
 
@@ -3775,11 +3774,18 @@ wireSeriesPage();
   if (saved?.page && saved.page !== 'home') {
     if ((saved.page === 'detail' || saved.page === 'video') && saved.detailId && saved.detailType) {
       if (saved.page === 'video' && saved.watchS != null && saved.watchE != null) openVideoFromLink(saved.detailType, saved.detailId, saved.watchS, saved.watchE);
-      else openDetail(saved.detailType, saved.detailId);
+      else { allowSwap = true; openDetail(saved.detailType, saved.detailId); }
     } else if (PAGE_ORDER.includes(saved.page) && saved.page !== 'video') {
+      allowSwap = true;
       showPage(saved.page);
+      if (saved.page === 'search') {
+        const q = new URLSearchParams(location.search).get('q') || '';
+        const gs = $('globalSearch');
+        if (q && gs) { gs.value = q; try { runGlobalSearch(); } catch (e) { /* noop */ } }
+      }
     }
   }
+  allowSwap = false;
 
   await loadGenres();
   loadHome();
@@ -4668,9 +4674,7 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     const q = input.value.trim();
     saveRecent(q);
     close();
-    showPage('search');
-    const gs = $('globalSearch');
-    if (gs) { gs.value = q; runGlobalSearch(); }
+    gotoUrl('/search' + (q ? '?q=' + encodeURIComponent(q) : ''));
   }
 
   $('searchOpenBtn')?.addEventListener('click', open);
