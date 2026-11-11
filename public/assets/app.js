@@ -33,22 +33,57 @@ function parseHash(h) {
   return m ? { page: m[1] } : null;
 }
 
-// Haptic feedback: Telegram's native haptics inside the mini app, the vibration motor in a phone browser.
+// Haptic feedback: Telegram native haptics, or phone vibration. Respects on/off + intensity.
 let _lastBuzz = 0;
+function hapticSettings() {
+  try {
+    const on = localStorage.getItem('anicore_haptic_on');
+    const level = localStorage.getItem('anicore_haptic_level') || 'medium';
+    return { on: on === null ? true : on === '1', level: ['light', 'medium', 'heavy'].includes(level) ? level : 'medium' };
+  } catch (e) { return { on: true, level: 'medium' }; }
+}
+function setHapticSettings({ on, level }) {
+  try {
+    if (on != null) localStorage.setItem('anicore_haptic_on', on ? '1' : '0');
+    if (level) localStorage.setItem('anicore_haptic_level', level);
+  } catch (e) { /* noop */ }
+  syncHapticControls();
+}
+function syncHapticControls() {
+  const s = hapticSettings();
+  const onEl = $('hapticOn'), lvEl = $('hapticLevel');
+  if (onEl) onEl.checked = s.on;
+  if (lvEl) { lvEl.value = s.level; lvEl.disabled = !s.on; }
+}
 function buzz(kind = 'light') {
   try {
-    const t = Date.now(); // one buzz per tap, even when several handlers fire
+    const s = hapticSettings();
+    if (!s.on) return;
+    const t = Date.now();
     if (t - _lastBuzz < 40) return;
     _lastBuzz = t;
+    // Map requested kind through intensity preference
+    const impactMap = {
+      light:  { light: 'soft',  medium: 'light',  heavy: 'medium' },
+      soft:   { light: 'soft',  medium: 'soft',   heavy: 'light' },
+      medium: { light: 'light', medium: 'medium', heavy: 'heavy' },
+      rigid:  { light: 'medium',medium: 'rigid',  heavy: 'heavy' },
+      heavy:  { light: 'medium',medium: 'heavy',  heavy: 'heavy' },
+      select: { light: 'select',medium: 'select', heavy: 'select' },
+    };
+    const vibScale = { light: 0.55, medium: 1, heavy: 1.55 }[s.level] || 1;
     const h = window.Telegram?.WebApp?.HapticFeedback;
     if (h) {
       if (kind === 'success' || kind === 'warning' || kind === 'error') h.notificationOccurred(kind);
       else if (kind === 'select') h.selectionChanged();
-      else h.impactOccurred(kind);
+      else h.impactOccurred((impactMap[kind] || impactMap.light)[s.level] || 'light');
       return;
     }
-    const pat = { light: 12, soft: 8, medium: 22, rigid: 30, heavy: 40, select: 6, success: [12, 40, 12], warning: [20, 50, 20], error: [30, 50, 30, 50, 30] };
-    navigator.vibrate?.(pat[kind] || 12);
+    const base = { light: 12, soft: 8, medium: 22, rigid: 30, heavy: 40, select: 6, success: [12, 40, 12], warning: [20, 50, 20], error: [30, 50, 30, 50, 30] };
+    let pat = base[kind] || 12;
+    if (Array.isArray(pat)) pat = pat.map((n) => Math.max(4, Math.round(n * vibScale)));
+    else pat = Math.max(4, Math.round(pat * vibScale));
+    navigator.vibrate?.(pat);
   } catch (e) { /* noop */ }
 }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
@@ -2625,6 +2660,8 @@ async function loadLibrary(reset = false) {
         $('aStatus').value = item.status || 'Ongoing';
         $('aPoster').value = item.poster || '';
         $('aBanner').value = item.banner || '';
+        if ($('aPosterTag')) $('aPosterTag').value = item.poster_tag || 'AUTO';
+        if ($('aDuration')) $('aDuration').value = item.duration || '';
         fillScheduleFields(item);
         $('aHero').checked = !!item.hero;
         $('aHeroOrder').value = item.hero_order || '';
@@ -2680,6 +2717,8 @@ $('adminForm')?.addEventListener('submit', async (e) => {
     status: $('aStatus').value,
     poster: $('aPoster').value.trim(),
     banner: $('aBanner').value.trim(),
+    poster_tag: ($('aPosterTag')?.value || 'AUTO').trim() || 'AUTO',
+    duration: ($('aDuration')?.value || '').trim(),
     ...readScheduleFields(),
     hero: $('aHero').checked,
     hero_order: Number($('aHeroOrder').value) || 0,
@@ -4720,6 +4759,21 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   document.addEventListener('focusin', (e) => {
     if (e.target && e.target.matches && e.target.matches('input[type=text], input[type=search], input[type=email], input[type=password], input[type=url], input[type=number], textarea')) buzz('soft');
   }, true);
+
+  // Haptic preference controls (sidebar)
+  const bindHapticUi = () => {
+    syncHapticControls();
+    $('hapticOn')?.addEventListener('change', (e) => {
+      setHapticSettings({ on: e.target.checked });
+      if (e.target.checked) buzz('medium');
+    });
+    $('hapticLevel')?.addEventListener('change', (e) => {
+      setHapticSettings({ level: e.target.value });
+      buzz('medium');
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindHapticUi);
+  else bindHapticUi();
   // forms
   document.addEventListener('submit', () => buzz('medium'), true);
   // swipe between pages / tabs on touch (end of a horizontal swipe)
@@ -4761,11 +4815,20 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   function addBadge(card, it, type) {
     const now = Date.now();
     const upd = Date.parse(it.updated_at || ''), cre = Date.parse(it.created_at || '');
-    let label = '';
-    if (type !== 'movie' && upd && now - upd < DAY) label = 'NEW EP';
-    else if (cre && now - cre < 7 * DAY) label = 'NEW';
+    let label = String(it.poster_tag || '').trim();
+    // Empty / AUTO → compute from dates; explicit None/OFF clears
+    if (!label || label.toUpperCase() === 'AUTO') {
+      label = '';
+      if (type !== 'movie' && upd && now - upd < DAY) label = 'NEW EP';
+      else if (cre && now - cre < 7 * DAY) label = 'NEW';
+      // SERIES / MOVIE only when admin sets them explicitly
+    } else if (['NONE', 'OFF', '—', '-'].includes(label.toUpperCase())) {
+      label = '';
+    }
     if (!label) return;
-    const b = el('span', 'new-badge' + (label === 'NEW EP' ? ' ep' : ''), label);
+    const kind = label.toUpperCase();
+    const cls = 'new-badge' + (kind === 'NEW EP' ? ' ep' : kind === 'SERIES' ? ' series' : kind === 'MOVIE' ? ' movie' : '');
+    const b = el('span', cls, label);
     card.querySelector('.poster-wrap')?.appendChild(b);
   }
   const origRenderGrid = renderGrid;
