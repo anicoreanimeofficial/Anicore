@@ -61,6 +61,15 @@
           <option value="blue">Blue</option>
           <option value="green">Green</option>
           <option value="orange">Orange</option>
+          <option value="red">Red</option>
+        </select>
+      </div>
+      <div class="pref-row haptic-row" title="Haptic feedback">
+        <label class="haptic-toggle"><input type="checkbox" id="hapticOn" checked> Haptics</label>
+        <select id="hapticLevel" class="small" aria-label="Haptic intensity">
+          <option value="light">Light</option>
+          <option value="medium" selected>Medium</option>
+          <option value="heavy">Heavy</option>
         </select>
       </div>
       <button type="button" id="sideSignIn" class="outline small">Sign In</button>
@@ -352,6 +361,17 @@
                 <option>Completed</option>
                 <option>Upcoming</option>
               </select>
+              <div class="row">
+                <select id="aPosterTag" aria-label="Poster tag">
+                  <option value="AUTO">Tag: Auto</option>
+                  <option value="NEW">NEW</option>
+                  <option value="NEW EP">NEW EP</option>
+                  <option value="SERIES">SERIES</option>
+                  <option value="MOVIE">MOVIE</option>
+                  <option value="NONE">None</option>
+                </select>
+                <input id="aDuration" placeholder="Duration (e.g. 24min)" maxlength="40">
+              </div>
               <div class="row">
                 <select id="aSeason" aria-label="Season">
                   <option value="">Season (optional)</option>
