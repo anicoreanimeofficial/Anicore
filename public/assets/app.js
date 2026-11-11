@@ -59,31 +59,17 @@ function buzz(kind = 'light') {
   try {
     const s = hapticSettings();
     if (!s.on) return;
+    // Web browser only — navigator.vibrate (no Telegram haptics)
+    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return;
     const t = Date.now();
     if (t - _lastBuzz < 40) return;
     _lastBuzz = t;
-    // Map requested kind through intensity preference
-    const impactMap = {
-      light:  { light: 'soft',  medium: 'light',  heavy: 'medium' },
-      soft:   { light: 'soft',  medium: 'soft',   heavy: 'light' },
-      medium: { light: 'light', medium: 'medium', heavy: 'heavy' },
-      rigid:  { light: 'medium',medium: 'rigid',  heavy: 'heavy' },
-      heavy:  { light: 'medium',medium: 'heavy',  heavy: 'heavy' },
-      select: { light: 'select',medium: 'select', heavy: 'select' },
-    };
     const vibScale = { light: 0.55, medium: 1, heavy: 1.55 }[s.level] || 1;
-    const h = window.Telegram?.WebApp?.HapticFeedback;
-    if (h) {
-      if (kind === 'success' || kind === 'warning' || kind === 'error') h.notificationOccurred(kind);
-      else if (kind === 'select') h.selectionChanged();
-      else h.impactOccurred((impactMap[kind] || impactMap.light)[s.level] || 'light');
-      return;
-    }
     const base = { light: 12, soft: 8, medium: 22, rigid: 30, heavy: 40, select: 6, success: [12, 40, 12], warning: [20, 50, 20], error: [30, 50, 30, 50, 30] };
     let pat = base[kind] || 12;
     if (Array.isArray(pat)) pat = pat.map((n) => Math.max(4, Math.round(n * vibScale)));
     else pat = Math.max(4, Math.round(pat * vibScale));
-    navigator.vibrate?.(pat);
+    navigator.vibrate(pat);
   } catch (e) { /* noop */ }
 }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
@@ -3656,15 +3642,7 @@ function initTelegramWebApp() {
     } catch (e) {}
 
     // Haptic helper
-    window.tgHaptic = (type) => {
-      try {
-        if (!TG.HapticFeedback) return;
-        if (type === "success") TG.HapticFeedback.notificationOccurred("success");
-        else if (type === "error") TG.HapticFeedback.notificationOccurred("error");
-        else if (type === "light") TG.HapticFeedback.impactOccurred("light");
-        else TG.HapticFeedback.selectionChanged();
-      } catch (e) {}
-    };
+    window.tgHaptic = (type) => { buzz(type === 'success' || type === 'error' ? type : (type === 'light' ? 'light' : 'select')); };
 
     // Back button → app navigation
     const bb = TG.BackButton;
