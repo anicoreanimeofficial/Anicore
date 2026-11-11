@@ -3936,3 +3936,21 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 
 /* ---- Specials / OVA hint ---- */
 .ep-sp-hint { grid-column: 1 / -1; margin: 2px 0 0; font-size: 12px; }
+
+
+/* ---- Detail page: one card per season, episode rows like the watch page ---- */
+.season-card { margin: 0 0 16px; padding: 14px; border: 1px solid rgba(255,255,255,.1); border-radius: 22px; background: rgba(255,255,255,.03); }
+.season-card-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.season-poster { width: 64px; height: 90px; flex: 0 0 auto; object-fit: cover; border-radius: 12px; background: #0d0b14; border: 1px solid rgba(255,255,255,.14); }
+.season-card-head h4 { margin: 0 0 4px; font-size: 18px; }
+.season-card .ep-rows { max-height: none; overflow: visible; }
+.detail-ep { flex-wrap: wrap; gap: 10px; padding: 10px 12px; cursor: default; }
+.detail-ep .ep-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px; width: auto; margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transform: none; }
+.detail-ep .ep-main.off { cursor: default; opacity: .55; }
+.detail-ep .ep-go { flex: 0 0 auto; font-size: 14px; color: #ff5a6e; }
+.detail-ep .ep-check { flex: 0 0 auto; width: 38px; height: 38px; min-height: 0; margin: 0; padding: 0; border-radius: 50%; border: 1px solid rgba(255,255,255,.18); background: transparent; box-shadow: none; color: inherit; font-size: 15px; cursor: pointer; }
+.detail-ep .ep-links { flex-basis: 100%; }
+.ep-row.ep-ova .ep-badge, .ep-row.ep-special .ep-badge { background: rgba(168,85,247,.22); color: #d8b4fe; }
+.ep-row.ep-ova.playing .ep-badge, .ep-row.ep-special.playing .ep-badge { background: #8b5cf6; color: #fff; }
+.ep-more { display: block; width: 100%; margin: 12px 0 0; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: inherit; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: none; }
+.ep-more.hidden { display: none; }
