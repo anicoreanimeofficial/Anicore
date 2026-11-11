@@ -44,7 +44,7 @@ app.onError((err, c) => {
     // Match FastAPI's shape for validation errors so the frontend shows the message.
     return c.json(err.status === 422 ? { detail: [{ msg: err.detail }] } : { detail: err.detail }, err.status as any);
   }
-  console.log("Unhandled error:", err);
+  console.log("Unhandled error on", c.req.method, c.req.path, "->", err instanceof Error ? `${err.name}: ${err.message}` : err);
   return c.json({ detail: "Internal server error. Please try again." }, 500);
 });
 

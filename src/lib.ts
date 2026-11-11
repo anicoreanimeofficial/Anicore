@@ -20,17 +20,27 @@ export interface Env {
 export type AppCtx = Context<{ Bindings: Env; Variables: { db: DB } }>;
 
 // ---------- image storage (D1 "blobs" table, base64) ----------
+// Creates the images table on first use, so uploads still work if migration 0002 was never applied.
+let blobsReady = false;
+async function ensureBlobs(env: Env) {
+  if (blobsReady) return;
+  await env.DB.prepare("CREATE TABLE IF NOT EXISTS blobs (key TEXT PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL)").run();
+  blobsReady = true;
+}
 export async function blobPut(env: Env, key: string, type: string, bytes: Uint8Array) {
+  await ensureBlobs(env);
   let bin = "";
   for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   await env.DB.prepare("INSERT OR REPLACE INTO blobs (key, type, data) VALUES (?, ?, ?)").bind(key, type, btoa(bin)).run();
 }
 export async function blobGet(env: Env, key: string): Promise<{ type: string; bytes: Uint8Array } | null> {
+  await ensureBlobs(env);
   const row = await env.DB.prepare("SELECT type, data FROM blobs WHERE key = ?").bind(key).first<{ type: string; data: string }>();
   if (!row) return null;
   return { type: row.type, bytes: Uint8Array.from(atob(row.data), (ch) => ch.charCodeAt(0)) };
 }
 export async function blobDelete(env: Env, key: string) {
+  await ensureBlobs(env);
   await env.DB.prepare("DELETE FROM blobs WHERE key = ?").bind(key).run();
 }
 
@@ -214,6 +224,26 @@ export async function requireUploader(c: AppCtx): Promise<Doc> {
 
 // ---------- content helpers ----------
 export const now = () => new Date().toISOString();
+
+/** Fetch many titles with a few queries (one per type, 80 ids each) instead of one query per row.
+ *  Key of the returned map is `${content_type}:${content_id}`. */
+export async function loadTitles(db: DB, refs: { content_type?: string; content_id?: string }[]): Promise<Map<string, Doc>> {
+  const byType = new Map<string, Set<string>>();
+  for (const r of refs) {
+    if (typeof r.content_type !== "string" || typeof r.content_id !== "string" || !isId(r.content_id)) continue;
+    if (!byType.has(r.content_type)) byType.set(r.content_type, new Set());
+    byType.get(r.content_type)!.add(r.content_id);
+  }
+  const out = new Map<string, Doc>();
+  for (const [type, ids] of byType) {
+    const coll = db.content(type);
+    if (!coll) continue;
+    const all = [...ids];
+    for (let i = 0; i < all.length; i += 80)
+      for (const d of await coll.find({ _id: { $in: all.slice(i, i + 80) } })) out.set(`${type}:${d._id}`, d);
+  }
+  return out;
+}
 
 export function validUrl(url: string): string {
   url = (url || "").trim();
