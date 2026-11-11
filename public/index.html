@@ -25,7 +25,7 @@
     #topLoader.boot { opacity: 1; animation: topBoot 8s cubic-bezier(.1,.6,.2,1) forwards; }
     @keyframes topBoot { from { transform: scaleX(0); } to { transform: scaleX(.85); } }
   </style>
-  <link rel="stylesheet" href="/assets/style.css?v=63">
+  <link rel="stylesheet" href="/assets/style.css?v=64">
 </head>
 <body class="">
 <div id="topLoader" class="boot" aria-hidden="true"></div>
@@ -306,7 +306,8 @@
               </select>
               <select id="bulkEpContent"><option value="">Select title…</option></select>
               <div class="bulk-range">
-                <label>Season <input id="bulkEpSeason" type="number" min="0" value="1" title="0 = OVA / Specials"></label>
+                <label>Season <input id="bulkEpSeason" type="number" min="1" value="1"></label>
+                <label>Type <select id="bulkKind"><option value="episode">Episode</option><option value="ova">OVA</option><option value="special">Special</option></select></label>
                 <label>Ep range
                   <span class="bulk-range-inputs">
                     <input id="bulkEpFrom" type="number" min="1" value="1" aria-label="From episode">
@@ -518,9 +519,14 @@
       <form id="episodeForm" novalidate>
         <input type="hidden" id="epId">
         <div class="row">
-          <input id="epSeason" type="number" min="0" value="1" placeholder="Season (0 = OVA / Specials)" title="Season number. Use 0 for OVA / Specials" required>
+          <input id="epSeason" type="number" min="1" value="1" placeholder="Season" required>
           <input id="epNumber" type="number" min="1" placeholder="Episode" required>
-          <p class="muted ep-sp-hint">Tip: Season <strong>0</strong> = OVA / Specials (shown after the normal seasons).</p>
+          <select id="epKind" title="Type">
+            <option value="episode">Episode</option>
+            <option value="ova">OVA</option>
+            <option value="special">Special</option>
+          </select>
+          <p class="muted ep-sp-hint">Choose <strong>OVA</strong> or <strong>Special</strong> to add it inside this season. It shows after the episodes with the OVA label.</p>
         </div>
         <input id="epTitle" placeholder="Episode title (optional)">
         <input id="epDuration" placeholder="Duration (e.g. 24m)">
@@ -586,6 +592,6 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=66"></script>
+  <script src="/assets/app.js?v=67"></script>
 </body>
 </html>
