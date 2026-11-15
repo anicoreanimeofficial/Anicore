@@ -1,0 +1,14 @@
+# Cloudflare Worker environment variables for local dev
+# Copy this to .dev.vars and set your secrets
+
+# SECRET_KEY must be 32+ chars, used for JWT signing and password hashing salt
+SECRET_KEY=REPLACE_WITH_SECURE_RANDOM_STRING_OF_32_CHARS
+
+# Worker is in production mode in wrangler.jsonc, so we need these for seeding the admin account
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=Admin@Secure123Password
+
+# Optional
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+WEBHOOK_URL=YOUR_WEBHOOK_URL
+GOOGLE_API_KEY=YOUR_GOOGLE_API_KEY
