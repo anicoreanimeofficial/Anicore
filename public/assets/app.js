@@ -700,13 +700,24 @@ function showSkeleton(gridId, count = 8) {
 
 function renderGrid(grid, items, type, { append = false, empty = 'Nothing here yet.' } = {}) {
   if (!append) grid.innerHTML = '';
-  if (!items.length) {
+  // Multi-season titles expand into one card per season, each with its own poster.
+  const flat = [];
+  for (const item of items || []) {
+    const seasons = [...new Set((item.episodes || []).map((e) => Number(e.season)))].filter((s) => Number.isFinite(s));
+    if (seasons.length > 1) {
+      const map = item.season_thumbnails || {};
+      for (const s of seasons) flat.push({ ...item, _season: s, poster: map[String(s)] || map[s] || map.all || item.poster });
+    } else {
+      flat.push(item);
+    }
+  }
+  if (!flat.length) {
     if (!append) grid.innerHTML = `<p class="muted empty">${esc(empty)}</p>`;
     return;
   }
 
   const frag = document.createDocumentFragment();
-  items.forEach((item) => {
+  flat.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'media-card';
     card.tabIndex = 0;
@@ -715,9 +726,11 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
 
     const rating = item.avg_rating ? `<span class="rating-badge">★ ${item.avg_rating}</span>` : '';
     const sub = rating || (item.year ? String(item.year) : (item.status || ''));
+    const seasonChip = item._season != null ? `<span class="season-chip">${seasonLabel(item._season)}</span>` : '';
 
     card.innerHTML = `
       <div class="poster-wrap">
+        ${seasonChip}
         <img loading="lazy" decoding="async" alt="">
       </div>
       <div class="media-info">
@@ -1440,7 +1453,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     if (sps && Number(s) !== 0) parts.push(`${sps} special${sps === 1 ? '' : 's'}`);
     const poster = seasonThumb(sorted, s, contentCtx) || safeUrl(contentCtx?.poster) || '';
     return `
-    <section class="season-card">
+    <section class="season-card" data-season="${s}">
       <div class="season-card-head">
         ${poster ? `<img class="season-poster" src="${esc(poster)}" alt="" loading="lazy" decoding="async">` : ''}
         <div><h4>${esc(seasonLabel(s))}</h4><div class="muted small-muted">${parts.join(' · ')}</div></div>
@@ -1688,6 +1701,7 @@ async function openDetail(type, id, preview) {
   if (preview && contentEl) {
     contentEl.innerHTML = buildDetailHtml(type, preview, null);
     bindDetailEvents(type, preview, contentEl);
+    scrollToSeason(contentEl, preview._season);
   } else if (contentEl) {
     contentEl.innerHTML = detailSkeletonHtml();
   }
@@ -1707,11 +1721,19 @@ async function openDetail(type, id, preview) {
     contentEl.innerHTML = buildDetailHtml(type, item, comments);
     contentEl.classList.remove('swap-in'); void contentEl.offsetWidth; contentEl.classList.add('swap-in');
     bindDetailEvents(type, item, contentEl);
+    scrollToSeason(contentEl, preview && preview._season);
   } catch (err) {
     if (state.detailId !== id) return;
     toast(err.message || 'Failed to load details.', 'error');
     gotoUrl('/');
   }
+}
+
+// Jump to a specific season card on the detail page (used when opening from a per-season card).
+function scrollToSeason(container, season) {
+  if (season == null || !container) return;
+  const target = container.querySelector(`.season-card[data-season="${season}"]`);
+  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 $('detailBack')?.addEventListener('click', () => {
