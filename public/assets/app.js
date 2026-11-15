@@ -4013,9 +4013,10 @@ function buildBulkRows() {
   bulkRows().forEach((tr) => {
     old[tr.dataset.ep] = {
       url: tr.querySelector('.b-url').value, dur: tr.querySelector('.b-dur').value,
-      name: tr.querySelector('.b-name').value, desc: tr.querySelector('.b-desc').value,
+      season: tr.querySelector('.b-season')?.value, name: tr.querySelector('.b-name').value, desc: tr.querySelector('.b-desc').value,
     };
   });
+  const seasons = bulkSeasonOptions();
   let html = '';
   for (let n = from; n <= to; n++) {
     const o = old[n] || {};
@@ -4023,12 +4024,30 @@ function buildBulkRows() {
       <td>EP ${n}</td>
       <td><input class="b-url" type="url" placeholder="https://..." value="${esc(o.url || '')}"></td>
       <td><input class="b-dur" type="text" value="${esc(o.dur || defDur)}"></td>
+      <td><select class="b-season">${seasons}</select></td>
       <td><input class="b-name" type="text" placeholder="Episode ${n}" value="${esc(o.name || '')}"></td>
       <td><textarea class="b-desc" rows="2">${esc(o.desc || '')}</textarea></td>
     </tr>`;
   }
   $('bulkEpRows').innerHTML = html;
+  bulkRows().forEach((tr) => {
+    const o = old[Number(tr.dataset.ep)] || {};
+    const sel = tr.querySelector('.b-season');
+    if (sel && o.season != null) sel.value = String(o.season);
+  });
   if (msg) msg.textContent = `${to - from + 1} rows ready. Paste the Ep URLs.`;
+}
+
+// Generate <option> elements for season select, highlighting the form's bulkEpSeason value.
+function bulkSeasonOptions() {
+  const formSeason = seasonNum($('bulkEpSeason')?.value);
+  const opts = [];
+  // Season 0 = Specials / OVA (their own season with its own poster); then seasons 1-8.
+  opts.push(`<option value="0"${0 === formSeason ? ' selected' : ''}>Specials / OVA</option>`);
+  for (let i = 1; i <= 8; i++) {
+    opts.push(`<option value="${i}"${i === formSeason ? ' selected' : ''}>Season ${i}</option>`);
+  }
+  return opts.join('');
 }
 
 // Pasting several URLs (one per line) into any URL cell spreads them down the column.
@@ -4085,7 +4104,6 @@ async function submitBulkEpisodes(e) {
   e.preventDefault();
   const content_type = $('bulkEpType')?.value || 'anime';
   const content_id = $('bulkEpContent')?.value;
-  const season = seasonNum($('bulkEpSeason')?.value);
   const msg = $('bulkEpMsg');
   if (!content_id) { if (msg) msg.textContent = 'Select a title first.'; return; }
   const episodes = [];
@@ -4093,8 +4111,9 @@ async function submitBulkEpisodes(e) {
     const video_url = tr.querySelector('.b-url').value.trim();
     if (!video_url) continue; // rows without a URL are skipped
     if (!video_url.startsWith('https://')) { if (msg) msg.textContent = `EP ${tr.dataset.ep}: URL must start with https://`; return; }
+    const rowSeason = seasonNum(tr.querySelector('.b-season')?.value);
     episodes.push({
-      season, episode: kindBase($('bulkKind')?.value) + Number(tr.dataset.ep), video_url,
+      season: rowSeason, episode: kindBase($('bulkKind')?.value) + Number(tr.dataset.ep), video_url,
       duration: tr.querySelector('.b-dur').value.trim() || '24min',
       title: tr.querySelector('.b-name').value.trim(),
       description: tr.querySelector('.b-desc').value.trim(),
