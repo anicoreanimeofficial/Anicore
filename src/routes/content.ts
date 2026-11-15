@@ -59,9 +59,22 @@ async function paginated(c: AppCtx, type: string, opts: { limit?: number; extra?
   const hidden = await isStaffRequest(c, ["true", "1"].includes((c.req.query("include_hidden") || "").toLowerCase()));
   const query = buildFilterQuery(c, hidden);
   const sort = SORTS[c.req.query("sort") || "newest"] || SORTS.newest;
-  const total = await coll.count(query);
-  const items = await coll.find(query, { sort, skip: (page - 1) * limit, limit });
-  return { items, total };
+  if (!["true", "1"].includes((c.req.query("expand_seasons") || "").toLowerCase())) {
+    const total = await coll.count(query);
+    const items = await coll.find(query, { sort, skip: (page - 1) * limit, limit });
+    return { items, total };
+  }
+  // Season-level: expand every matching title into one card per season, then paginate the expanded list.
+  const all = await coll.find(query, { sort });
+  const flat: Doc[] = [];
+  for (const item of all) {
+    const seasons = [...new Set((item.episodes || []).map((e) => seasonOf(e)))];
+    if (seasons.length > 1) {
+      const map = item.season_thumbnails || {};
+      for (const s of seasons) flat.push({ ...item, _season: s, poster: map[String(s)] || map.all || item.poster });
+    } else flat.push(item);
+  }
+  return { items: flat.slice((page - 1) * limit, page * limit), total: flat.length };
 }
 
 content.get("/api/anime", async (c) => c.json(await paginated(c, "anime")));

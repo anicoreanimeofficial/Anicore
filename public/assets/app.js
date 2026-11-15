@@ -165,6 +165,7 @@ async function loadSeries(reset = false) {
           page: "1",
           limit: "40",
           sort: sort,
+          expand_seasons: "true",
         });
         if (q) params.set("q", q);
         if (genre) params.set("genre", genre);
@@ -700,24 +701,13 @@ function showSkeleton(gridId, count = 8) {
 
 function renderGrid(grid, items, type, { append = false, empty = 'Nothing here yet.' } = {}) {
   if (!append) grid.innerHTML = '';
-  // Multi-season titles expand into one card per season, each with its own poster.
-  const flat = [];
-  for (const item of items || []) {
-    const seasons = [...new Set((item.episodes || []).map((e) => Number(e.season)))].filter((s) => Number.isFinite(s));
-    if (seasons.length > 1) {
-      const map = item.season_thumbnails || {};
-      for (const s of seasons) flat.push({ ...item, _season: s, poster: map[String(s)] || map[s] || map.all || item.poster });
-    } else {
-      flat.push(item);
-    }
-  }
-  if (!flat.length) {
+  if (!items.length) {
     if (!append) grid.innerHTML = `<p class="muted empty">${esc(empty)}</p>`;
     return;
   }
 
   const frag = document.createDocumentFragment();
-  flat.forEach((item) => {
+  items.forEach((item) => {
     const card = document.createElement('div');
     card.className = 'media-card';
     card.tabIndex = 0;
@@ -862,8 +852,8 @@ async function loadHome() {
   // Merged anime + TV into Trending Series
   try {
     const [animeData, tvData] = await Promise.all([
-      api('/api/anime?page=1&limit=10&sort=views'),
-      api('/api/tvshows?page=1&limit=10&sort=views'),
+      api('/api/anime?page=1&limit=10&sort=views&expand_seasons=true'),
+      api('/api/tvshows?page=1&limit=10&sort=views&expand_seasons=true'),
     ]);
     const animeItems = (Array.isArray(animeData) ? animeData : animeData.items || []).map((i) => ({ ...i, _type: 'anime' }));
     const tvItems = (Array.isArray(tvData) ? tvData : tvData.items || []).map((i) => ({ ...i, _type: 'tv_show' }));
@@ -880,8 +870,8 @@ async function loadHome() {
 
   try {
     const [a, t] = await Promise.all([
-      api('/api/anime?page=1&limit=10&sort=newest'),
-      api('/api/tvshows?page=1&limit=10&sort=newest'),
+      api('/api/anime?page=1&limit=10&sort=newest&expand_seasons=true'),
+      api('/api/tvshows?page=1&limit=10&sort=newest&expand_seasons=true'),
     ]);
     const items = [
       ...(Array.isArray(a) ? a : a.items || []).map((i) => ({ ...i, _type: 'anime' })),
@@ -914,7 +904,7 @@ async function loadList(type, reset = false) {
 
   l.loading = true;
   const next = l.page + 1;
-  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE, sort: l.sortVal || 'newest' });
+  const params = new URLSearchParams({ page: next, limit: PAGE_SIZE, sort: l.sortVal || 'newest', expand_seasons: 'true' });
   if (l.q) params.set('q', l.q);
   if (l.genreVal) params.set('genre', l.genreVal);
   if (l.statusVal) params.set('status', l.statusVal);
