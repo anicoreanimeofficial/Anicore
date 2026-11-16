@@ -2475,7 +2475,7 @@ body {
   scroll-snap-align: start; cursor: pointer;
 }
 .top-rank {
-  position: absolute; left: -2px; bottom: 44px; z-index: 0;
+  position: absolute; left: 18px; bottom: 44px; z-index: 0;
   font-family: "Bebas Neue", Impact, sans-serif;
   font-size: 150px; line-height: .8; letter-spacing: -6px;
   color: transparent; -webkit-text-stroke: 2px rgba(255, 255, 255, .5);
