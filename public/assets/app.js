@@ -672,20 +672,7 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-let lastScrollY = window.scrollY;
-let scrollTick = false;
-window.addEventListener('scroll', () => {
-  if (scrollTick) return;
-  scrollTick = true;
-  requestAnimationFrame(() => {
-    const y = window.scrollY;
-    if (Math.abs(y - lastScrollY) >= 8) {
-      $('bottomNav')?.classList.toggle('hidden-nav', y > lastScrollY && y > 100);
-      lastScrollY = y;
-    }
-    scrollTick = false;
-  });
-}, { passive: true });
+// Standard website scrolling: no floating app navigation to auto-hide.
 
 // --- Skeleton ---
 
