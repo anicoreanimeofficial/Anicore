@@ -4070,3 +4070,11 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 @media (max-width: 380px) {
   .avatar-preset-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Real anime character avatar gallery */
+.avatar-preset-row { display:grid; grid-template-columns:repeat(auto-fill,minmax(82px,1fr)); gap:12px; }
+.avatar-preset { min-width:0; display:flex; flex-direction:column; align-items:center; gap:6px; overflow:hidden; padding:6px; border:1px solid var(--line,rgba(255,255,255,.12)); border-radius:14px; background:rgba(255,255,255,.045); color:inherit; cursor:pointer; }
+.avatar-preset img { display:block; width:100%; aspect-ratio:1; object-fit:cover; border-radius:10px; background:#211b2b; }
+.avatar-preset-name { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; text-align:center; }
+.avatar-preset:focus-visible,.avatar-preset:hover { outline:2px solid var(--accent,#f36aa5); outline-offset:2px; }
+.avatar-loading { font-size:12px; }
