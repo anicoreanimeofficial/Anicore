@@ -452,7 +452,6 @@ function toggleTheme() {
 // --- Navigation ---
 
 function movePill(animate = true) {
-  return; // the sliding pill was removed; the active tab is highlighted by colour only
   const pill = $('navPill');
   const nav = $('bottomNav');
   if (!pill || !nav) return;
@@ -482,6 +481,8 @@ function movePill(animate = true) {
   }
 }
 window.addEventListener('resize', () => movePill(false));
+// Position the floating glass indicator on the initially selected tab.
+requestAnimationFrame(() => movePill(false));
 
 
 // Browser tab / page names. Change SITE_NAME to rename the site everywhere.
