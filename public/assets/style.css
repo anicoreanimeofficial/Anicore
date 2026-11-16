@@ -4078,3 +4078,52 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .avatar-preset-name { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; text-align:center; }
 .avatar-preset:focus-visible,.avatar-preset:hover { outline:2px solid var(--accent,#f36aa5); outline-offset:2px; }
 .avatar-loading { font-size:12px; }
+
+
+/* =========================================================
+   PURE WEBSITE LAYOUT — responsive browser-first navigation
+   ========================================================= */
+body {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overscroll-behavior-y: auto;
+}
+.bottom-nav,
+#bottomNav,
+.nav-pill,
+#navPill,
+.install-banner,
+.install-popup-overlay,
+#installPopup {
+  display: none !important;
+}
+footer { padding-bottom: 35px !important; }
+@media (max-width: 899px) {
+  body { padding-bottom: 0 !important; }
+  .app-shell { margin-left: 0 !important; padding-top: 0 !important; }
+  .app-header {
+    position: sticky;
+    top: 0;
+    min-height: 60px;
+    padding: 10px 4%;
+    z-index: 210;
+  }
+  .menu-btn { display: inline-flex !important; }
+  .mobile-brand { display: inline-flex !important; }
+  .sidebar {
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    max-height: 100vh;
+    overflow-y: auto;
+    z-index: 220;
+  }
+}
+@media (min-width: 900px) {
+  body { padding-bottom: 0 !important; }
+  .app-shell { margin-left: 0 !important; padding-top: var(--topbar-h, 64px) !important; }
+  .sidebar { display: flex !important; }
+  .mobile-brand, .menu-btn { display: none !important; }
+}
