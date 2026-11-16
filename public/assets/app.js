@@ -83,7 +83,7 @@ function syncHapticControls() {
 function buzz() { /* haptics removed: the site behaves like a normal website */ }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v53';
+const APP_JS_VERSION = 'v54';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -5163,67 +5163,30 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   };
 
   // ---------- 13. Anime portrait avatar presets ----------
-  const PRESETS = [
-    { name: 'Pink-haired girl', bg: '#f5a4c8', hair: '#f45b9a', skin: '#f6c6a8', shirt: '#6b4bd6', eyes: '#49306f', style: 0 },
-    { name: 'Black-haired boy', bg: '#9bb8df', hair: '#202536', skin: '#dca987', shirt: '#263b69', eyes: '#527ba8', style: 1 },
-    { name: 'Silver-haired girl', bg: '#b7b0ed', hair: '#e5e8f4', skin: '#f4c9ad', shirt: '#8c63c7', eyes: '#7465bd', style: 2 },
-    { name: 'Red-haired boy', bg: '#f0a17f', hair: '#a93435', skin: '#d99d7d', shirt: '#35445e', eyes: '#7b493b', style: 3 },
-    { name: 'Blue-haired girl', bg: '#86c9e8', hair: '#2879c4', skin: '#f2c5a9', shirt: '#e58cba', eyes: '#326eaa', style: 4 },
-    { name: 'Blonde-haired boy', bg: '#f2d28a', hair: '#e7b94c', skin: '#e9b997', shirt: '#416d79', eyes: '#6b7041', style: 5 },
-    { name: 'Purple-haired girl', bg: '#c6a1e8', hair: '#8050b8', skin: '#f1c5ad', shirt: '#4c477e', eyes: '#7652a5', style: 6 },
-    { name: 'Green-haired boy', bg: '#9bd3ad', hair: '#39865d', skin: '#d9a786', shirt: '#344d48', eyes: '#477c5d', style: 7 },
-    { name: 'Orange-haired girl', bg: '#f4bd83', hair: '#df783d', skin: '#f3c8a8', shirt: '#5d75a8', eyes: '#93603c', style: 8 },
-    { name: 'White-haired boy', bg: '#a8c8d8', hair: '#e9edf0', skin: '#d9aa8e', shirt: '#40566e', eyes: '#608b9b', style: 9 },
-    { name: 'Twin-tail girl', bg: '#e8a6c9', hair: '#b94c87', skin: '#f4c8b0', shirt: '#76549b', eyes: '#6d477c', style: 10 },
-    { name: 'Dark-haired girl', bg: '#a6b0d9', hair: '#302b49', skin: '#edc0a4', shirt: '#bd668a', eyes: '#544b86', style: 11 }
-  ];
-  function presetDataUrl(p) {
-    const c = document.createElement('canvas'); c.width = c.height = 320;
-    const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 320, 320);
-    grad.addColorStop(0, p.bg); grad.addColorStop(1, '#292344');
-    g.fillStyle = grad; g.fillRect(0, 0, 320, 320);
-    g.fillStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.arc(160, 142, 112, 0, Math.PI * 2); g.fill();
-    // Hair silhouette and optional side locks
-    g.fillStyle = p.hair; g.beginPath(); g.ellipse(160, 150, 91, 112, 0, 0, Math.PI * 2); g.fill();
-    if ([0,4,6,8,10,11].includes(p.style)) {
-      g.beginPath(); g.ellipse(78, 180, 28, 82, -.22, 0, Math.PI * 2); g.ellipse(242, 180, 28, 82, .22, 0, Math.PI * 2); g.fill();
-    }
-    // Neck and shoulders
-    g.fillStyle = p.skin; g.fillRect(137, 220, 46, 48);
-    g.fillStyle = p.shirt; g.beginPath(); g.moveTo(65, 320); g.quadraticCurveTo(72, 250, 137, 246); g.lineTo(183, 246); g.quadraticCurveTo(248, 250, 255, 320); g.fill();
-    // Face
-    g.fillStyle = p.skin; g.beginPath(); g.ellipse(160, 166, 67, 83, 0, 0, Math.PI * 2); g.fill();
-    // Fringe variations
-    g.fillStyle = p.hair; g.beginPath();
-    if (p.style % 3 === 0) { g.moveTo(78, 145); g.quadraticCurveTo(85, 40, 170, 58); g.quadraticCurveTo(235, 42, 242, 137); g.lineTo(207, 117); g.lineTo(188, 151); g.lineTo(164, 111); g.lineTo(137, 153); g.lineTo(117, 119); g.closePath(); }
-    else if (p.style % 3 === 1) { g.moveTo(91, 143); g.quadraticCurveTo(72, 42, 175, 55); g.quadraticCurveTo(249, 56, 229, 143); g.lineTo(194, 119); g.lineTo(174, 145); g.lineTo(153, 112); g.lineTo(124, 145); g.closePath(); }
-    else { g.moveTo(83, 151); g.quadraticCurveTo(88, 43, 165, 55); g.quadraticCurveTo(245, 45, 238, 150); g.lineTo(214, 129); g.lineTo(194, 151); g.lineTo(174, 117); g.lineTo(145, 151); g.lineTo(120, 126); g.closePath(); }
-    g.fill();
-    // Expressive anime eyes, lashes, iris gradients and facial details
-    for (const x of [132,188]) {
-      g.strokeStyle = '#493044'; g.lineWidth = 7; g.lineCap = 'round';
-      g.beginPath(); g.moveTo(x-17, 150); g.quadraticCurveTo(x, 132, x+17, 150); g.stroke();
-      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, 166, 13, 18, 0, 0, Math.PI*2); g.fill();
-      const iris = g.createRadialGradient(x-2, 162, 2, x, 169, 13);
-      iris.addColorStop(0, '#fff'); iris.addColorStop(.2, p.eyes); iris.addColorStop(1, '#241b42');
-      g.fillStyle = iris; g.beginPath(); g.ellipse(x, 169, 10, 14, 0, 0, Math.PI*2); g.fill();
-      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x-3, 162, 4, 5, -.3, 0, Math.PI*2); g.fill();
-      g.beginPath(); g.arc(x+5, 174, 2, 0, Math.PI*2); g.fill();
-      g.strokeStyle = '#493044'; g.lineWidth = 2.5;
-      g.beginPath(); g.moveTo(x-14, 148); g.lineTo(x-20, 142); g.moveTo(x+13, 148); g.lineTo(x+19, 143); g.stroke();
-    }
-    // Delicate nose, blush and small anime-style smile
-    g.fillStyle = 'rgba(226,105,125,.28)';
-    g.beginPath(); g.ellipse(108, 195, 17, 8, 0, 0, Math.PI*2); g.ellipse(212, 195, 17, 8, 0, 0, Math.PI*2); g.fill();
-    g.fillStyle = 'rgba(151,83,91,.42)'; g.beginPath(); g.arc(160, 194, 2.5, 0, Math.PI*2); g.fill();
-    g.strokeStyle = '#985d61'; g.lineWidth = 3.5; g.beginPath(); g.moveTo(149, 211); g.quadraticCurveTo(160, 222, 172, 211); g.stroke();
-    // Fine hair highlights and tapered anime strands
-    g.strokeStyle = 'rgba(255,255,255,.24)'; g.lineWidth = 3; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(105, 92); g.quadraticCurveTo(125, 65, 151, 68); g.moveTo(171, 66); g.quadraticCurveTo(207, 70, 221, 105); g.stroke();
-    // Small accessory variation
-    if (p.style % 4 === 0) { g.fillStyle = '#fff0f6'; g.beginPath(); g.arc(225, 105, 13, 0, Math.PI*2); g.fill(); g.fillStyle = '#e85b9b'; g.beginPath(); g.arc(225, 105, 7, 0, Math.PI*2); g.fill(); }
-    return c.toDataURL('image/jpeg', 0.9);
+    // Real anime character portraits are loaded from AniList's character catalogue.
+  // No generated/drawn placeholders: show actual character artwork from AniList CDN.
+  const ANIME_AVATAR_CACHE = 'anicore_real_anime_avatars_v1';
+  let animeAvatarLoad = null;
+  async function fetchAnimeAvatarCharacters() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(ANIME_AVATAR_CACHE) || 'null');
+      if (Array.isArray(cached) && cached.length && Date.now() - cached.savedAt < 86400000) return cached.items;
+    } catch (e) { /* refresh cache */ }
+    const query = `query { Page(page: 1, perPage: 24) { characters(sort: FAVOURITES_DESC) { id name { full } image { large } } } }`;
+    const response = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ query })
+    });
+    if (!response.ok) throw new Error('Anime character images are temporarily unavailable.');
+    const payload = await response.json();
+    const items = (payload.data?.Page?.characters || [])
+      .filter((c) => c.name?.full && /^https:\/\//i.test(c.image?.large || ''))
+      .slice(0, 24)
+      .map((c) => ({ id: c.id, name: c.name.full, image: c.image.large }));
+    if (!items.length) throw new Error('No anime character images were returned.');
+    try { localStorage.setItem(ANIME_AVATAR_CACHE, JSON.stringify({ savedAt: Date.now(), items })); } catch (e) {}
+    return items;
   }
   const origRenderProfileCard = renderProfileCard;
   renderProfileCard = function (editing = false) {
@@ -5232,22 +5195,40 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     const form = $('profileEditForm');
     if (!card || card.querySelector('.avatar-presets')) return;
     const box = el('section', 'avatar-presets');
-    box.setAttribute('aria-label', 'Anime character avatars');
-    box.appendChild(el('div', 'fx-group-label', 'Choose your anime character'));
+    box.setAttribute('aria-label', 'Real anime character avatars');
+    box.appendChild(el('div', 'fx-group-label', 'Choose an anime character'));
+    const status = el('p', 'muted avatar-loading', 'Loading real anime character images…');
     const row = el('div', 'avatar-preset-row');
-    PRESETS.forEach((preset) => {
-      const b = el('button', 'avatar-preset', ''); b.type = 'button'; b.title = preset.name; b.setAttribute('aria-label', preset.name);
-      const portrait = document.createElement('img');
-      portrait.src = presetDataUrl(preset); portrait.alt = preset.name; portrait.loading = 'lazy';
-      b.appendChild(portrait);
-      b.addEventListener('click', async () => {
-        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(preset) }); renderProfileCard(editing); toast('Anime avatar updated'); } catch (err) { toast(err.message, 'error'); }
-      });
-      row.appendChild(b);
-    });
-    box.appendChild(row);
+    box.append(status, row);
     const anchor = form?.querySelector('.bg-actions') || card.querySelector('#profileEditBtn') || card.querySelector('.profile-name');
     if (anchor) anchor.insertAdjacentElement('afterend', box);
+    if (!animeAvatarLoad) animeAvatarLoad = fetchAnimeAvatarCharacters().finally(() => { animeAvatarLoad = null; });
+    animeAvatarLoad.then((characters) => {
+      if (!box.isConnected) return;
+      status.remove();
+      characters.forEach((character) => {
+        const b = el('button', 'avatar-preset', '');
+        b.type = 'button'; b.title = character.name; b.setAttribute('aria-label', 'Use ' + character.name + ' as profile avatar');
+        const portrait = document.createElement('img');
+        portrait.src = character.image; portrait.alt = character.name; portrait.loading = 'lazy'; portrait.referrerPolicy = 'no-referrer';
+        portrait.onerror = () => { b.remove(); };
+        b.appendChild(portrait);
+        const caption = el('span', 'avatar-preset-name', character.name);
+        b.appendChild(caption);
+        b.addEventListener('click', async () => {
+          try {
+            toast('Saving…');
+            await saveAvatar({ url: character.image });
+            renderProfileCard(editing);
+            toast(character.name + ' avatar saved');
+          } catch (err) { toast(err.message, 'error'); }
+        });
+        row.appendChild(b);
+      });
+      if (!row.children.length) status.textContent = 'Anime character images could not be loaded. Please try again later.';
+    }).catch(() => {
+      if (box.isConnected) status.textContent = 'Could not load real anime character images. Check your connection and reopen Profile.';
+    });
   };
 
   // wrap loadProfile so stats/tabs refresh
