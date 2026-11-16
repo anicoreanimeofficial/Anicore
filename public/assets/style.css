@@ -586,8 +586,8 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
     transform: translate3d(-105%, 0, 0);
     visibility: hidden;
     transition:
-      transform .46s cubic-bezier(.16, 1, .3, 1),
-      visibility 0s linear .46s;
+      transform .62s cubic-bezier(.22, .75, .25, 1),
+      visibility 0s linear .62s;
     will-change: transform;
     backface-visibility: hidden;
   }
@@ -595,7 +595,7 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
     transform: translate3d(0, 0, 0);
     visibility: visible;
     transition:
-      transform .46s cubic-bezier(.16, 1, .3, 1),
+      transform .62s cubic-bezier(.22, .75, .25, 1),
       visibility 0s;
   }
   body::before {
@@ -2879,8 +2879,9 @@ html[data-theme="light"] {
   contain-intrinsic-size: auto 220px;
 }
 
-/* Lighter blur on the few fixed bars, and only the GPU-friendly kind */
-.app-header, .bottom-nav, .sidebar {
+/* Keep fixed-bar rendering optimizations off the animated mobile drawer.
+   A later transform on .sidebar overrides its slide-in/slide-out transform. */
+.app-header, .bottom-nav {
   --glass-blur: blur(12px);
   -webkit-backdrop-filter: blur(12px) !important;
   backdrop-filter: blur(12px) !important;
@@ -2898,7 +2899,7 @@ button, a, .media-card, .episode { touch-action: manipulation; }
   /* phones: drop heavy hover/entrance effects */
   .media-card { animation: none !important; }
   .media-card:hover { transform: none !important; }
-  .app-header, .bottom-nav, .sidebar {
+  .app-header, .bottom-nav {
     -webkit-backdrop-filter: blur(8px) !important;
     backdrop-filter: blur(8px) !important;
   }
