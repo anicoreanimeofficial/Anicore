@@ -1426,7 +1426,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     const playable = !!ep.video_url;
     const inner = `
       <span class="ep-badge">${esc(epBadge(ep))}</span>
-      <span class="ep-info"><span class="ep-name">${esc(name)}</span>${ep.duration ? `<span class="ep-dur">${esc(ep.duration)}</span>` : ''}</span>
+      <span class="ep-info">${ep.duration ? `<span class="ep-dur">${esc(ep.duration)}</span>` : ''}</span>
       ${playable ? '<span class="ep-go">▶</span>' : '<span class="ep-dur">Soon</span>'}`;
     return `
     <div class="ep-row detail-ep ${kind !== 'episode' ? 'ep-' + kind : ''}" data-search="${esc((epBadge(ep) + ' ' + name).toLowerCase())}">
@@ -2335,8 +2335,8 @@ function renderVideoEpList() {
     const matches = [];
     episodes.forEach((ep, i) => {
       if (ep.season !== videoContext.listSeason) return;
-      const name = ep.title || epName(ep);
-      if (q && !`${epBadge(ep)} ${name}`.toLowerCase().includes(q)) return;
+      const name = epBadge(ep);
+      if (q && !name.toLowerCase().includes(q)) return;
       matches.push({ ep, i, name });
     });
     // open the list automatically when the playing episode would be hidden
@@ -2464,7 +2464,7 @@ function loadVideoEpisode() {
   if (!videoContext) return;
   const ep = videoContext.episodes[videoContext.currentIndex];
   $('videoTitle').textContent = videoContext.contentTitle;
-  const sub = `${epCode(ep)}${ep.title ? ' — ' + ep.title : ''}${ep.duration ? ' · ' + ep.duration : ''}`;
+  const sub = `${epCode(ep)}${ep.duration ? ' · ' + ep.duration : ''}`;
   $('videoSubtitle').textContent = sub;
 
   // Season / episode thumbnail above player
