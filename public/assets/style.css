@@ -4015,3 +4015,58 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
   scroll-padding-left: 7%;
   scroll-padding-right: 7%;
 }
+
+
+/* Visible anime avatar gallery on the profile page */
+.avatar-presets {
+  display: block !important;
+  width: 100%;
+  margin: 18px 0 8px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,105,170,.045));
+}
+.avatar-presets .fx-group-label {
+  display: block;
+  margin: 0 0 12px;
+  color: #ffd4e5;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.avatar-preset-row {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px !important;
+}
+.avatar-preset {
+  display: block;
+  width: 100% !important;
+  max-width: none !important;
+  aspect-ratio: 1;
+  overflow: hidden;
+  padding: 0 !important;
+  border: 2px solid rgba(255,255,255,.24) !important;
+  border-radius: 16px !important;
+  background: #211b32 !important;
+  box-shadow: 0 5px 16px rgba(0,0,0,.28);
+}
+.avatar-preset img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 28%;
+}
+.avatar-preset:hover, .avatar-preset:focus-visible {
+  transform: translateY(-3px) scale(1.035);
+  border-color: #ff70a4 !important;
+  box-shadow: 0 0 0 3px rgba(255,112,164,.2), 0 8px 20px rgba(0,0,0,.3);
+}
+.bottom-nav .nav-pill, .bottom-nav #navPill {
+  transition: transform .58s cubic-bezier(.22,.75,.25,1), width .58s cubic-bezier(.22,.75,.25,1), opacity .18s ease !important;
+}
+@media (max-width: 380px) {
+  .avatar-preset-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
