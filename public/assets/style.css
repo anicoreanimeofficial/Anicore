@@ -56,10 +56,11 @@ button, input, textarea, select, a { outline: none; }
   width: var(--sidebar-w);
   padding: 24px 16px;
   background: var(--panel);
-  border-right: 1px solid var(--border);
+  border-right: 0;
   flex-direction: column;
   z-index: 200;
-  backdrop-filter: blur(20px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .side-nav { display: flex; flex-direction: column; gap: 6px; margin-top: 28px; flex: 1; }
