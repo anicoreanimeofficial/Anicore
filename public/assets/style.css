@@ -4090,14 +4090,18 @@ body {
   min-height: 100dvh;
   overscroll-behavior-y: auto;
 }
-.bottom-nav,
-#bottomNav,
-.nav-pill,
-#navPill,
 .install-banner,
 .install-popup-overlay,
 #installPopup {
   display: none !important;
+}
+@media (max-width: 899px) {
+  body { padding-bottom: calc(100px + env(safe-area-inset-bottom)) !important; }
+  .bottom-nav, #bottomNav { display: flex !important; }
+  .nav-pill, #navPill { display: block; }
+}
+@media (min-width: 900px) {
+  .bottom-nav, #bottomNav { display: none !important; }
 }
 footer { padding-bottom: 35px !important; }
 @media (max-width: 899px) {
