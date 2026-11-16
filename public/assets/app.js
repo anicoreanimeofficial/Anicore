@@ -1408,6 +1408,15 @@ function seasonThumb(episodes, season, content) {
 
 const EP_PREVIEW = 8;
 
+// When a page is opened from a season card (or a link with ?season=N) only that season is shown.
+function detailSeasonScope(preview) {
+  if (preview && preview._season != null) return Number(preview._season);
+  try {
+    const v = new URLSearchParams(location.search).get('season');
+    return v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
+  } catch (e) { return null; }
+}
+
 // OVAs / specials the admin attached to a season come last; a small divider labels each group.
 function rowsWithDividers(list, rowHtml, season) {
   let prev = 'episode';
@@ -1445,6 +1454,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     </div>`;
   };
 
+  const scope = state.detailSeason != null && seasons.some((x) => Number(x) === Number(state.detailSeason)) && seasons.length > 1 ? Number(state.detailSeason) : null;
   const card = (s) => {
     const list = sorted.filter((e) => e.season === s);
     const eps = list.filter((e) => epKind(e) === 'episode').length;
@@ -1463,8 +1473,9 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     const title = `${contentCtx?.title || ''} ${seasonLabel(s)}`.trim();
     const badge = Number(s) === 0 ? 'SP' : `S${s}`;
     const countLabel = Number(s) === 0 ? `${list.length} SP` : [`${eps} EP`, ovas ? `${ovas} OVA` : '', sps ? `${sps} SP` : ''].filter(Boolean).join(' + ');
+    const off = scope !== null && Number(s) !== scope;
     return `
-    <section class="season-card" data-season="${s}">
+    <section class="season-card${off ? ' sc-offscope hidden' : ''}" data-season="${s}">
       <button type="button" class="sc-head" aria-expanded="false">
         <span class="sc-art">
           ${art ? `<img src="${esc(art)}" alt="" loading="lazy" decoding="async">` : ''}
@@ -1485,7 +1496,10 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       </div>
     </section>`;
   };
-  return `<h3>Episodes</h3>` + seasons.map(card).join('');
+  const bar = scope !== null
+    ? `<div class="season-scope"><button type="button" class="scope-all">View all ${seasons.length} seasons</button></div>`
+    : '';
+  return `<h3>Episodes</h3>` + bar + seasons.map(card).join('');
 }
 
 // Wires the "Show all" button and the filter box on each season card.
@@ -1496,7 +1510,17 @@ function setSeasonOpen(cardEl, open) {
 
 function bindSeasonCards(container) {
   const all = [...container.querySelectorAll('.season-card')];
-  if (all.length === 1) setSeasonOpen(all[0], true); // a single season is just shown open
+  const visible = all.filter((c) => !c.classList.contains('hidden'));
+  if (visible.length === 1) setSeasonOpen(visible[0], true); // a single season is just shown open
+  container.querySelector('.scope-all')?.addEventListener('click', () => {
+    all.forEach((c) => c.classList.remove('hidden', 'sc-offscope'));
+    container.querySelector('.season-scope')?.remove();
+    state.detailSeason = null;
+    try {
+      const u = new URL(location.href); u.searchParams.delete('season');
+      history.replaceState(history.state, '', u.pathname + (u.search || '') + u.hash);
+    } catch (e) { /* noop */ }
+  });
   all.forEach((cardEl) => {
     cardEl.querySelector('.sc-head')?.addEventListener('click', () => {
       const open = !cardEl.classList.contains('open');
@@ -1724,7 +1748,11 @@ function detailSkeletonHtml() {
 
 async function openDetail(type, id, preview) {
   const swap = allowSwap; allowSwap = false;
-  if (!swap) { gotoUrl(detailPath(type, detailRef(id, preview && preview.title))); return; }
+  if (!swap) {
+    const sq = preview && preview._season != null ? `?season=${encodeURIComponent(preview._season)}` : '';
+    gotoUrl(detailPath(type, detailRef(id, preview && preview.title)) + sq);
+    return;
+  }
   // A name link (/anime/some-title) is turned into the real id first.
   if (!isRealId(id)) {
     try { id = (await api(`/api/resolve/${type}/${encodeURIComponent(id)}`))._id; }
@@ -1734,6 +1762,7 @@ async function openDetail(type, id, preview) {
   state.detailId = id;
   state.detailType = type;
   state.detailTitle = (preview && preview.title) || '';
+  state.detailSeason = detailSeasonScope(preview);
 
   allowSwap = true;
   showPage('detail');

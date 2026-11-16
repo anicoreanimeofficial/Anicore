@@ -3913,3 +3913,8 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .ep-divider { display: flex; align-items: center; gap: 12px; margin: 14px 2px 8px; color: #d8b4fe; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .ep-divider::before, .ep-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(168,85,247,.5), transparent); }
 .ep-divider.hidden { display: none; }
+
+/* Season-scoped detail page: just a small "View all seasons" button (no label text) */
+.season-scope { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+.season-scope .scope-all { all: unset; cursor: pointer; padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; font-size: 12px; font-weight: 700; }
+.season-card.hidden { display: none; }
