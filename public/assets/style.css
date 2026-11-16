@@ -3884,3 +3884,32 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 #topLoader, .nav-pill, #navPill { display: none !important; }
 .page.from-left, .page.from-right { animation: none !important; }
 .bottom-nav button:active { transform: none; }
+
+/* ---- Season cards v2: wide banner card, tags + title, episodes inside ---- */
+.season-card { padding: 0; overflow: hidden; border-radius: 18px; background: #0a0a0f; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+.season-card .sc-head { all: unset; display: block; box-sizing: border-box; width: 100%; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.season-card .sc-head:focus-visible { outline: 2px solid var(--pink, #ff3f82); outline-offset: -2px; }
+.sc-art { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: #0d0b14; }
+.sc-art img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; transition: transform .5s ease; }
+.season-card.open .sc-art img { transform: scale(1.03); }
+.sc-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 55%, rgba(0,0,0,.65)); pointer-events: none; }
+.sc-badge, .sc-count { position: absolute; bottom: 10px; z-index: 2; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #fff; background: rgba(10,8,16,.65); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.sc-badge { left: 10px; color: #ffd166; border-color: rgba(255,209,102,.5); }
+.sc-count { right: 10px; }
+.sc-info { display: block; padding: 14px 16px 2px; }
+.sc-tags { display: block; margin-bottom: 8px; color: #ff3b4d; font-size: 12px; font-weight: 600; letter-spacing: .02em; line-height: 1.35; }
+.sc-title { display: block; font-size: 20px; font-weight: 800; line-height: 1.25; color: #fff; }
+.sc-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px 16px; }
+.sc-meta { color: var(--muted, #a8a3b8); font-size: 13px; }
+.sc-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.07); font-size: 13px; font-weight: 700; color: #fff; }
+.sc-toggle i { font-style: normal; display: inline-block; transition: transform .25s ease; }
+.season-card.open .sc-toggle { background: var(--pink, #ff3f82); border-color: var(--pink, #ff3f82); }
+.season-card.open .sc-toggle i { transform: rotate(180deg); }
+.sc-body { display: none; padding: 2px 12px 14px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 14px; }
+.season-card.open .sc-body { display: block; animation: scOpen .25s ease both; }
+@keyframes scOpen { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* OVA / Special group divider inside a season card */
+.ep-divider { display: flex; align-items: center; gap: 12px; margin: 14px 2px 8px; color: #d8b4fe; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.ep-divider::before, .ep-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(168,85,247,.5), transparent); }
+.ep-divider.hidden { display: none; }

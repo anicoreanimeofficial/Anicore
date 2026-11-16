@@ -1408,6 +1408,20 @@ function seasonThumb(episodes, season, content) {
 
 const EP_PREVIEW = 8;
 
+// OVAs / specials the admin attached to a season come last; a small divider labels each group.
+function rowsWithDividers(list, rowHtml, season) {
+  let prev = 'episode';
+  return list.map((ep) => {
+    const kind = season === 0 ? 'special' : epKind(ep);
+    let head = '';
+    if (season !== 0 && kind !== prev && kind !== 'episode') {
+      head = `<div class="ep-divider ep-divider-${kind}" data-search="" data-divider="1"><span>${kind === 'ova' ? 'OVA' : 'Specials'}</span></div>`;
+    }
+    prev = kind;
+    return head + rowHtml(ep);
+  }).join('');
+}
+
 function episodesHtml(episodes, type, contentId, contentCtx) {
   if (!episodes?.length) return '';
   const sorted = [...episodes].sort(cmpEp);
@@ -1441,24 +1455,55 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       : [`${eps} episode${eps === 1 ? '' : 's'}`];
     if (ovas && Number(s) !== 0) parts.push(`${ovas} OVA`);
     if (sps && Number(s) !== 0) parts.push(`${sps} special${sps === 1 ? '' : 's'}`);
-    const poster = seasonThumb(sorted, s, contentCtx) || safeUrl(contentCtx?.poster) || '';
+    const art = seasonThumb(sorted, s, contentCtx) || safeUrl(contentCtx?.banner) || safeUrl(contentCtx?.poster) || '';
+    // red tag line like "ANIME · COMPLETED · HINDI DUB"
+    const dubs = (Array.isArray(contentCtx?.dubbed_on) ? contentCtx.dubbed_on : []).map((l) => `${l} Dub`);
+    const tags = [type === 'anime' ? 'Anime' : 'Series', contentCtx?.status, ...dubs, ...(dubs.length ? [] : (contentCtx?.genres || []).slice(0, 2))]
+      .filter(Boolean).map((t) => String(t).toUpperCase());
+    const title = `${contentCtx?.title || ''} ${seasonLabel(s)}`.trim();
+    const badge = Number(s) === 0 ? 'SP' : `S${s}`;
+    const countLabel = Number(s) === 0 ? `${list.length} SP` : [`${eps} EP`, ovas ? `${ovas} OVA` : '', sps ? `${sps} SP` : ''].filter(Boolean).join(' + ');
     return `
     <section class="season-card" data-season="${s}">
-      <div class="season-card-head">
-        ${poster ? `<img class="season-poster" src="${esc(poster)}" alt="" loading="lazy" decoding="async">` : ''}
-        <div><h4>${esc(seasonLabel(s))}</h4><div class="muted small-muted">${parts.join(' · ')}</div></div>
+      <button type="button" class="sc-head" aria-expanded="false">
+        <span class="sc-art">
+          ${art ? `<img src="${esc(art)}" alt="" loading="lazy" decoding="async">` : ''}
+          <span class="sc-badge">${esc(badge)}</span>
+          <span class="sc-count">${esc(countLabel)}</span>
+        </span>
+        <span class="sc-info">
+          <span class="sc-tags">${esc(tags.join(' · '))}</span>
+          <span class="sc-title">${esc(title)}</span>
+        </span>
+        <span class="sc-foot"><span class="sc-meta">${esc(parts.join(' · '))}</span><span class="sc-toggle">Episodes <i>▾</i></span></span>
+      </button>
+      <div class="sc-body">
+        ${list.length > EP_PREVIEW ? '<input type="search" class="ep-filter season-filter" placeholder="Filter episodes..." autocomplete="off">' : ''}
+        <div class="ep-rows">${rowsWithDividers(list, rowHtml, Number(s))}</div>
+        <p class="muted ep-none hidden">No episodes found.</p>
+        ${list.length > EP_PREVIEW ? '<button type="button" class="ep-more"></button>' : ''}
       </div>
-      ${list.length > EP_PREVIEW ? '<input type="search" class="ep-filter season-filter" placeholder="Filter episodes..." autocomplete="off">' : ''}
-      <div class="ep-rows">${list.map(rowHtml).join('')}</div>
-      <p class="muted ep-none hidden">No episodes found.</p>
-      ${list.length > EP_PREVIEW ? '<button type="button" class="ep-more"></button>' : ''}
     </section>`;
   };
   return `<h3>Episodes</h3>` + seasons.map(card).join('');
 }
 
 // Wires the "Show all" button and the filter box on each season card.
+function setSeasonOpen(cardEl, open) {
+  cardEl.classList.toggle('open', open);
+  cardEl.querySelector('.sc-head')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
 function bindSeasonCards(container) {
+  const all = [...container.querySelectorAll('.season-card')];
+  if (all.length === 1) setSeasonOpen(all[0], true); // a single season is just shown open
+  all.forEach((cardEl) => {
+    cardEl.querySelector('.sc-head')?.addEventListener('click', () => {
+      const open = !cardEl.classList.contains('open');
+      setSeasonOpen(cardEl, open);
+      if (open) setTimeout(() => cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
+    });
+  });
   container.querySelectorAll('.season-card').forEach((cardEl) => {
     const rows = [...cardEl.querySelectorAll('.detail-ep')];
     const more = cardEl.querySelector('.ep-more');
@@ -1469,9 +1514,15 @@ function bindSeasonCards(container) {
       let shown = 0;
       rows.forEach((r, i) => {
         const match = !q || (r.dataset.search || '').includes(q);
-        const visible = match && (q || expanded || i < EP_PREVIEW);
+        const extra = r.classList.contains('ep-ova') || r.classList.contains('ep-special'); // OVAs always stay visible
+        const visible = match && (q || expanded || i < EP_PREVIEW || extra);
         r.classList.toggle('hidden', !visible);
         if (visible) shown++;
+      });
+      cardEl.querySelectorAll('.ep-divider').forEach((d) => {
+        let n = d.nextElementSibling, any = false;
+        while (n && !n.classList.contains('ep-divider')) { if (!n.classList.contains('hidden')) any = true; n = n.nextElementSibling; }
+        d.classList.toggle('hidden', !any);
       });
       cardEl.querySelector('.ep-none')?.classList.toggle('hidden', shown > 0);
       if (more) {
@@ -1723,7 +1774,9 @@ async function openDetail(type, id, preview) {
 function scrollToSeason(container, season) {
   if (season == null || !container) return;
   const target = container.querySelector(`.season-card[data-season="${season}"]`);
-  target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (!target) return;
+  setSeasonOpen(target, true); // opening from a season card shows that season's episodes
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 $('detailBack')?.addEventListener('click', () => {
