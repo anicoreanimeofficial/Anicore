@@ -3346,10 +3346,11 @@ body.tg-webapp .so-bar { padding-top: max(10px, calc(env(safe-area-inset-top, 0p
 .stat-card.wide { grid-column: 1 / -1; }
 
 /* avatar presets */
-.avatar-presets { margin: 4px 0; }
-.avatar-preset-row { display: flex; flex-wrap: wrap; gap: 10px; }
-.avatar-preset { width: 48px; height: 48px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.2); font-size: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.avatar-preset:active { transform: scale(.92); }
+.avatar-presets { margin: 8px 0 12px; }
+.avatar-preset-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 12px; }
+.avatar-preset { width: 100%; aspect-ratio: 1; max-width: 76px; padding: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.22); background-size: cover; background-position: center 35%; cursor: pointer; box-shadow: 0 3px 12px rgba(0,0,0,.2); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.avatar-preset:hover, .avatar-preset:focus-visible { transform: translateY(-3px) scale(1.04); border-color: var(--accent, #ff4f9a); box-shadow: 0 0 0 3px rgba(255,79,154,.18); outline: none; }
+.avatar-preset:active { transform: scale(.94); }
 
 /* poster fly-in */
 .fly-poster { position: fixed; z-index: 9400; margin: 0; object-fit: cover; border-radius: 14px; pointer-events: none; box-shadow: 0 16px 40px rgba(0,0,0,.5); transition: transform .4s cubic-bezier(.2,.8,.2,1), opacity .4s ease .08s; will-change: transform, opacity; }
