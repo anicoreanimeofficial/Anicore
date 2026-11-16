@@ -3388,8 +3388,6 @@ body.tg-webapp .so-bar { padding-top: max(10px, calc(env(safe-area-inset-top, 0p
 .ep-rows-grid .ep-badge { min-width: 0; width: 100%; padding: 14px 4px; background: none; font-size: 15px; }
 .ep-rows-grid .ep-info, .ep-rows-grid .ep-playing { display: none; }
 .ep-row.seen { opacity: .72; }
-.ep-row.seen::after { content: "✓"; position: absolute; top: 6px; right: 8px; color: #22c55e; font-weight: 900; font-size: 13px; }
-.ep-rows:not(.ep-rows-grid) .ep-row.seen::after { top: 50%; transform: translateY(-50%); right: 16px; }
 .ep-row { position: relative; }
 
 /* Low-data mode: lighter visuals to save bandwidth and battery */
