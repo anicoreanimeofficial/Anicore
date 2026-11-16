@@ -5170,7 +5170,7 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   async function fetchAnimeAvatarCharacters() {
     try {
       const cached = JSON.parse(localStorage.getItem(ANIME_AVATAR_CACHE) || 'null');
-      if (Array.isArray(cached) && cached.length && Date.now() - cached.savedAt < 86400000) return cached.items;
+      if (Array.isArray(cached?.items) && cached.items.length && Date.now() - cached.savedAt < 86400000) return cached.items;
     } catch (e) { /* refresh cache */ }
     const query = `query { Page(page: 1, perPage: 24) { characters(sort: FAVOURITES_DESC) { id name { full } image { large } } } }`;
     const response = await fetch('https://graphql.anilist.co', {
