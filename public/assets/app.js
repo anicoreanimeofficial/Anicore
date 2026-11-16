@@ -612,7 +612,7 @@ function showPage(page) {
     loadHome();
   }
   if (page === 'schedule') loadSchedule();
-  if (page === 'profile') { loadProfileActivity(); } loadProfile();
+  if (page === 'profile') loadProfile();
   if (page === 'admin') {
     const isAdminUser = state.user?.role === 'admin';
     if ($('adminTitle')) $('adminTitle').textContent = isAdminUser ? 'Admin Studio' : 'Upload Studio';
@@ -4007,33 +4007,6 @@ function wireSearchPage() {
   });
 }
 
-async function loadProfileActivity() {
-  if (!state.user) return;
-  try {
-    const data = await api("/api/users/me/activity");
-    const box = $("profileActivity");
-    if (!box) return;
-    const rows = [];
-    (data.progress || []).slice(0, 5).forEach((p) => {
-      rows.push(`<div class="activity-item">▶ Continue ${epCode({ season: p.season ?? 1, episode: p.episode || 1 }, true)} · ${esc(p.content_type)} · ${Math.round(p.progress_percent || 0)}%</div>`);
-    });
-    (data.ratings || []).slice(0, 5).forEach((r) => {
-      rows.push(`<div class="activity-item">★ Rated ${esc(r.rating)}/10 · ${esc(r.content_type)}</div>`);
-    });
-    (data.requests || []).slice(0, 3).forEach((r) => {
-      rows.push(`<div class="activity-item">✉ Request: <strong>${esc(r.title)}</strong> · ${esc(r.status)}</div>`);
-    });
-    if (!rows.length) {
-      box.innerHTML = `<p class="muted">No recent activity yet.</p>`;
-    } else {
-      box.innerHTML = rows.join("");
-    }
-    // Prefs
-    const prefs = data.prefs || {};
-    applyTheme('dark');
-  } catch { /* ignore */ }
-}
-
 async function savePreferences() {
   if (!state.user) {
     openAuth();
@@ -5078,7 +5051,6 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     const none = grid.querySelector('.wl-none');
     if (counts.all && !counts[wlTab] && wlTab !== 'all') { if (!none) grid.appendChild(el('p', 'muted empty wl-none', 'Nothing in this list yet. Long-press a title to change its status.')); }
     else none?.remove();
-    renderStats(counts.all);
   }
   (function buildWlTabs() {
     const grid = $('watchlistGrid'); if (!grid || $('wlTabs')) return;
@@ -5091,25 +5063,6 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     grid.parentNode.insertBefore(tabs, grid);
     new MutationObserver(() => applyWlFilter()).observe(grid, { childList: true });
   })();
-
-  // ---------- 9. Stats card on profile ----------
-  function renderStats(titles) {
-    const member = $('profileMember'); if (!member || member.classList.contains('hidden')) return;
-    let panel = $('statsPanel');
-    if (!panel) { panel = el('div', 'panel'); panel.id = 'statsPanel'; member.insertBefore(panel, member.firstChild); }
-    const seen = seenMap(); let eps = 0; Object.values(seen).forEach((a) => { eps += a.length; });
-    const hours = Math.round((eps * 24) / 6) / 10;
-    const gc = LS.get('anicore_genres', {}); const top = Object.entries(gc).sort((a, b) => b[1] - a[1])[0];
-    const days = new Set(LS.get('anicore_days', [])); let streak = 0; const d = new Date();
-    if (!days.has(d.toISOString().slice(0, 10))) d.setDate(d.getDate() - 1);
-    while (days.has(d.toISOString().slice(0, 10))) { streak++; d.setDate(d.getDate() - 1); }
-    panel.innerHTML = `<h3>Your stats</h3><div class="stat-cards">
-      <div class="stat-card"><b>${eps}</b><span>Episodes watched</span></div>
-      <div class="stat-card"><b>~${hours}h</b><span>Watch time</span></div>
-      <div class="stat-card"><b>${streak}🔥</b><span>Day streak</span></div>
-      <div class="stat-card"><b>${titles || 0}</b><span>In watchlist</span></div>
-      <div class="stat-card wide"><b>${top ? esc(top[0]) : '—'}</b><span>Favourite genre</span></div></div>`;
-  }
 
   // ---------- 10. Long-press card menu ----------
   let suppressUntil = 0;
