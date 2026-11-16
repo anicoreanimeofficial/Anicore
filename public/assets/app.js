@@ -5154,27 +5154,71 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     return origToast(message, kind);
   };
 
-  // ---------- 13. Avatar presets ----------
-  const PRESETS = [['😺', '#ff3f82'], ['🦊', '#f97316'], ['🐼', '#64748b'], ['🐉', '#16a34a'], ['👻', '#8b5cf6'], ['🌸', '#ec4899'], ['⚡', '#eab308'], ['🔥', '#ef4444']];
-  function presetDataUrl(emoji, color) {
-    const c = document.createElement('canvas'); c.width = c.height = 320; const g = c.getContext('2d');
-    const grad = g.createLinearGradient(0, 0, 320, 320); grad.addColorStop(0, color); grad.addColorStop(1, '#14101c');
+  // ---------- 13. Anime portrait avatar presets ----------
+  const PRESETS = [
+    { name: 'Pink-haired girl', bg: '#f5a4c8', hair: '#f45b9a', skin: '#f6c6a8', shirt: '#6b4bd6', eyes: '#49306f', style: 0 },
+    { name: 'Black-haired boy', bg: '#9bb8df', hair: '#202536', skin: '#dca987', shirt: '#263b69', eyes: '#527ba8', style: 1 },
+    { name: 'Silver-haired girl', bg: '#b7b0ed', hair: '#e5e8f4', skin: '#f4c9ad', shirt: '#8c63c7', eyes: '#7465bd', style: 2 },
+    { name: 'Red-haired boy', bg: '#f0a17f', hair: '#a93435', skin: '#d99d7d', shirt: '#35445e', eyes: '#7b493b', style: 3 },
+    { name: 'Blue-haired girl', bg: '#86c9e8', hair: '#2879c4', skin: '#f2c5a9', shirt: '#e58cba', eyes: '#326eaa', style: 4 },
+    { name: 'Blonde-haired boy', bg: '#f2d28a', hair: '#e7b94c', skin: '#e9b997', shirt: '#416d79', eyes: '#6b7041', style: 5 },
+    { name: 'Purple-haired girl', bg: '#c6a1e8', hair: '#8050b8', skin: '#f1c5ad', shirt: '#4c477e', eyes: '#7652a5', style: 6 },
+    { name: 'Green-haired boy', bg: '#9bd3ad', hair: '#39865d', skin: '#d9a786', shirt: '#344d48', eyes: '#477c5d', style: 7 },
+    { name: 'Orange-haired girl', bg: '#f4bd83', hair: '#df783d', skin: '#f3c8a8', shirt: '#5d75a8', eyes: '#93603c', style: 8 },
+    { name: 'White-haired boy', bg: '#a8c8d8', hair: '#e9edf0', skin: '#d9aa8e', shirt: '#40566e', eyes: '#608b9b', style: 9 },
+    { name: 'Twin-tail girl', bg: '#e8a6c9', hair: '#b94c87', skin: '#f4c8b0', shirt: '#76549b', eyes: '#6d477c', style: 10 },
+    { name: 'Dark-haired girl', bg: '#a6b0d9', hair: '#302b49', skin: '#edc0a4', shirt: '#bd668a', eyes: '#544b86', style: 11 }
+  ];
+  function presetDataUrl(p) {
+    const c = document.createElement('canvas'); c.width = c.height = 320;
+    const g = c.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 320, 320);
+    grad.addColorStop(0, p.bg); grad.addColorStop(1, '#292344');
     g.fillStyle = grad; g.fillRect(0, 0, 320, 320);
-    g.font = '170px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(emoji, 160, 176);
-    return c.toDataURL('image/jpeg', 0.85);
+    g.fillStyle = 'rgba(255,255,255,.16)'; g.beginPath(); g.arc(160, 142, 112, 0, Math.PI * 2); g.fill();
+    // Hair silhouette and optional side locks
+    g.fillStyle = p.hair; g.beginPath(); g.ellipse(160, 150, 91, 112, 0, 0, Math.PI * 2); g.fill();
+    if ([0,4,6,8,10,11].includes(p.style)) {
+      g.beginPath(); g.ellipse(78, 180, 28, 82, -.22, 0, Math.PI * 2); g.ellipse(242, 180, 28, 82, .22, 0, Math.PI * 2); g.fill();
+    }
+    // Neck and shoulders
+    g.fillStyle = p.skin; g.fillRect(137, 220, 46, 48);
+    g.fillStyle = p.shirt; g.beginPath(); g.moveTo(65, 320); g.quadraticCurveTo(72, 250, 137, 246); g.lineTo(183, 246); g.quadraticCurveTo(248, 250, 255, 320); g.fill();
+    // Face
+    g.fillStyle = p.skin; g.beginPath(); g.ellipse(160, 166, 67, 83, 0, 0, Math.PI * 2); g.fill();
+    // Fringe variations
+    g.fillStyle = p.hair; g.beginPath();
+    if (p.style % 3 === 0) { g.moveTo(78, 145); g.quadraticCurveTo(85, 40, 170, 58); g.quadraticCurveTo(235, 42, 242, 137); g.lineTo(207, 117); g.lineTo(188, 151); g.lineTo(164, 111); g.lineTo(137, 153); g.lineTo(117, 119); g.closePath(); }
+    else if (p.style % 3 === 1) { g.moveTo(91, 143); g.quadraticCurveTo(72, 42, 175, 55); g.quadraticCurveTo(249, 56, 229, 143); g.lineTo(194, 119); g.lineTo(174, 145); g.lineTo(153, 112); g.lineTo(124, 145); g.closePath(); }
+    else { g.moveTo(83, 151); g.quadraticCurveTo(88, 43, 165, 55); g.quadraticCurveTo(245, 45, 238, 150); g.lineTo(214, 129); g.lineTo(194, 151); g.lineTo(174, 117); g.lineTo(145, 151); g.lineTo(120, 126); g.closePath(); }
+    g.fill();
+    // Eyes, brows, blush and smile
+    g.strokeStyle = '#593c43'; g.lineWidth = 5; g.lineCap = 'round';
+    for (const x of [132,188]) {
+      g.beginPath(); g.moveTo(x-12, 148); g.quadraticCurveTo(x, 139, x+12, 148); g.stroke();
+      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, 165, 11, 15, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = p.eyes; g.beginPath(); g.ellipse(x, 168, 7, 11, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(x+2, 163, 3, 0, Math.PI*2); g.fill();
+    }
+    g.fillStyle = 'rgba(226,105,125,.24)';
+    g.beginPath(); g.ellipse(111, 194, 14, 7, 0, 0, Math.PI*2); g.ellipse(209, 194, 14, 7, 0, 0, Math.PI*2); g.fill();
+    g.strokeStyle = '#985d61'; g.lineWidth = 3; g.beginPath(); g.moveTo(150, 211); g.quadraticCurveTo(160, 220, 171, 211); g.stroke();
+    // Small accessory variation
+    if (p.style % 4 === 0) { g.fillStyle = '#fff0f6'; g.beginPath(); g.arc(225, 105, 13, 0, Math.PI*2); g.fill(); g.fillStyle = '#e85b9b'; g.beginPath(); g.arc(225, 105, 7, 0, Math.PI*2); g.fill(); }
+    return c.toDataURL('image/jpeg', 0.9);
   }
   const origRenderProfileCard = renderProfileCard;
   renderProfileCard = function (editing = false) {
     origRenderProfileCard(editing);
     if (!editing) return;
     const form = $('profileEditForm'); if (!form || form.querySelector('.avatar-presets')) return;
-    const box = el('div', 'avatar-presets'); box.appendChild(el('div', 'fx-group-label', 'Or pick an avatar'));
+    const box = el('div', 'avatar-presets'); box.appendChild(el('div', 'fx-group-label', 'Choose an anime avatar'));
     const row = el('div', 'avatar-preset-row');
-    PRESETS.forEach(([emoji, color]) => {
-      const b = el('button', 'avatar-preset', emoji); b.type = 'button'; b.style.background = `linear-gradient(135deg, ${color}, #14101c)`;
+    PRESETS.forEach((preset) => {
+      const b = el('button', 'avatar-preset', ''); b.type = 'button'; b.title = preset.name; b.setAttribute('aria-label', preset.name);
+      b.style.backgroundImage = `url("${presetDataUrl(preset)}")`;
       b.addEventListener('click', async () => {
-        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(emoji, color) }); renderProfileCard(true); toast('Avatar updated'); } catch (err) { toast(err.message, 'error'); }
+        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(preset) }); renderProfileCard(true); toast('Avatar updated'); } catch (err) { toast(err.message, 'error'); }
       });
       row.appendChild(b);
     });
