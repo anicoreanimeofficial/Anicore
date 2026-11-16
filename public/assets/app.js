@@ -1249,9 +1249,6 @@ function renderProfileCard(editing = false) {
           <label>Display name
             <input id="profileNameInput" maxlength="30" placeholder="Your name" value="${esc(u.display_name || '')}" autocomplete="nickname">
           </label>
-          <label>Profile picture link
-            <input id="avatarUrlInput" type="url" placeholder="https://..." value="${esc((u.avatar || '').startsWith('https://') ? u.avatar : '')}" autocomplete="off">
-          </label>
           <div class="bg-actions">
             <button type="submit" class="primary small">Save</button>
             <button type="button" class="outline small" id="avatarUpload">Upload photo</button>
@@ -1334,17 +1331,7 @@ async function removeAvatar() {
 async function saveProfileForm(e) {
   e.preventDefault();
   const name = $('profileNameInput').value.trim();
-  const url = $('avatarUrlInput').value.trim();
   try {
-    if (url && url !== state.user.avatar) {
-      await new Promise((ok, fail) => {
-        const probe = new Image();
-        probe.onload = ok;
-        probe.onerror = () => fail(new Error('That link did not load as an image.'));
-        probe.src = url;
-      });
-      await saveAvatar({ url });
-    }
     const res = await api('/api/users/me/profile', { method: 'PUT', body: JSON.stringify({ display_name: name }) });
     state.user.display_name = res.display_name || '';
     renderProfileCard(false);
@@ -5172,7 +5159,7 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
       const cached = JSON.parse(localStorage.getItem(ANIME_AVATAR_CACHE) || 'null');
       if (Array.isArray(cached?.items) && cached.items.length && Date.now() - cached.savedAt < 86400000) return cached.items;
     } catch (e) { /* refresh cache */ }
-    const query = `query { Page(page: 1, perPage: 24) { characters(sort: FAVOURITES_DESC) { id name { full } image { large } } } }`;
+    const query = `query { Page(page: 1, perPage: 50) { characters(sort: FAVOURITES_DESC) { id name { full } image { large } } } }`;
     const response = await fetch('https://graphql.anilist.co', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -5182,18 +5169,31 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     const payload = await response.json();
     const items = (payload.data?.Page?.characters || [])
       .filter((c) => c.name?.full && /^https:\/\//i.test(c.image?.large || ''))
-      .slice(0, 24)
+      .slice(0, 50)
       .map((c) => ({ id: c.id, name: c.name.full, image: c.image.large }));
     if (!items.length) throw new Error('No anime character images were returned.');
     try { localStorage.setItem(ANIME_AVATAR_CACHE, JSON.stringify({ savedAt: Date.now(), items })); } catch (e) {}
     return items;
   }
   const origRenderProfileCard = renderProfileCard;
+  let assigningDefaultAnimeAvatar = false;
   renderProfileCard = function (editing = false) {
     origRenderProfileCard(editing);
     const card = $('profileInfo')?.querySelector('.profile-card');
     const form = $('profileEditForm');
-    if (!card || card.querySelector('.avatar-presets')) return;
+    if (!card) return;
+    if (!state.user.avatar && !assigningDefaultAnimeAvatar) {
+      assigningDefaultAnimeAvatar = true;
+      if (!animeAvatarLoad) animeAvatarLoad = fetchAnimeAvatarCharacters().finally(() => { animeAvatarLoad = null; });
+      animeAvatarLoad.then(async (characters) => {
+        if (state.user && !state.user.avatar && characters.length) {
+          const character = characters[Math.floor(Math.random() * characters.length)];
+          await saveAvatar({ url: character.image });
+          if (!form?.isConnected) origRenderProfileCard(false);
+        }
+      }).catch(() => {}).finally(() => { assigningDefaultAnimeAvatar = false; });
+    }
+    if (!editing || card.querySelector('.avatar-presets')) return;
     const box = el('section', 'avatar-presets');
     box.setAttribute('aria-label', 'Real anime character avatars');
     box.appendChild(el('div', 'fx-group-label', 'Choose an anime character'));
