@@ -3949,8 +3949,17 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .ep-more { display: block; width: 100%; margin: 12px 0 0; padding: 12px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); color: inherit; font-weight: 700; font-size: 14px; cursor: pointer; box-shadow: none; }
 .ep-more.hidden { display: none; }
 
-/* Website mode: no app-style effects (loading bar, sliding nav pill, page slide animations) */
-#topLoader, .nav-pill, #navPill { display: none !important; }
+/* Website mode: keep the floating glass nav indicator enabled */
+#topLoader { display: none !important; }
+#navPill, .nav-pill {
+  display: block !important;
+  opacity: 1;
+  background: linear-gradient(135deg, rgba(255,255,255,.20), rgba(255,105,170,.22) 52%, rgba(153,118,255,.20)) !important;
+  border: 1px solid rgba(255,255,255,.32) !important;
+  box-shadow: 0 5px 22px rgba(255,80,155,.18), inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(255,255,255,.08) !important;
+  backdrop-filter: blur(18px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(190%) !important;
+}
 .page.from-left, .page.from-right { animation: none !important; }
 .bottom-nav button:active { transform: none; }
 
