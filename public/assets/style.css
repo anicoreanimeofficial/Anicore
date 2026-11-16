@@ -3968,3 +3968,13 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
 }
+
+
+/* Give Trending and Recently Added posters breathing room from screen edges */
+#homeSeriesGrid.media-grid.horizontal,
+#homeAnimeGrid.media-grid.horizontal {
+  padding-left: 7% !important;
+  padding-right: 7% !important;
+  scroll-padding-left: 7%;
+  scroll-padding-right: 7%;
+}
