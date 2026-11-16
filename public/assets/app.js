@@ -90,9 +90,9 @@ console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 const state = {
   user: null,
   authMode: 'login',
-  page: 'home',
-  detailId: null,
-  detailType: null,
+  page: BOOT_NAV?.page || 'home',
+  detailId: BOOT_NAV?.detailId || null,
+  detailType: BOOT_NAV?.detailType || null,
   genres: [],
   theme: localStorage.getItem('anicore-theme') || 'dark',
 };
@@ -573,7 +573,14 @@ function showPage(page) {
           : detailPath(state.detailType, detailRef(state.detailId, state.detailTitle)));
         return;
       }
-    } else if (PAGE_PATH[page]) { gotoUrl(PAGE_PATH[page]); return; }
+    } else if (PAGE_PATH[page]) {
+      // Keep bottom-tab navigation in the current document; this prevents the Home page
+      // from flashing while a full page reload boots the requested destination.
+      try {
+        const entry = { key: page, page, detailType: null, detailId: null, watchS: null, watchE: null };
+        if (location.pathname !== PAGE_PATH[page]) history.pushState(entry, '', PAGE_PATH[page] + location.search);
+      } catch (e) { /* keep the current view if history is unavailable */ }
+    }
   }
 
   // Leaving video → cleanup
@@ -599,7 +606,7 @@ function showPage(page) {
   document.querySelectorAll('.bottom-nav button, .side-nav button').forEach((b) => {
     b.classList.toggle('active', b.dataset.page === activePage);
   });
-  movePill();
+  requestAnimationFrame(() => movePill(true));
   $('sidebar')?.classList.remove('open');
   document.body.classList.remove('sidebar-open');
 
@@ -5221,20 +5228,26 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   const origRenderProfileCard = renderProfileCard;
   renderProfileCard = function (editing = false) {
     origRenderProfileCard(editing);
-    if (!editing) return;
-    const form = $('profileEditForm'); if (!form || form.querySelector('.avatar-presets')) return;
-    const box = el('div', 'avatar-presets'); box.appendChild(el('div', 'fx-group-label', 'Choose an anime avatar'));
+    const card = $('profileInfo')?.querySelector('.profile-card');
+    const form = $('profileEditForm');
+    if (!card || card.querySelector('.avatar-presets')) return;
+    const box = el('section', 'avatar-presets');
+    box.setAttribute('aria-label', 'Anime character avatars');
+    box.appendChild(el('div', 'fx-group-label', 'Choose your anime character'));
     const row = el('div', 'avatar-preset-row');
     PRESETS.forEach((preset) => {
       const b = el('button', 'avatar-preset', ''); b.type = 'button'; b.title = preset.name; b.setAttribute('aria-label', preset.name);
-      b.style.backgroundImage = `url("${presetDataUrl(preset)}")`;
+      const portrait = document.createElement('img');
+      portrait.src = presetDataUrl(preset); portrait.alt = preset.name; portrait.loading = 'lazy';
+      b.appendChild(portrait);
       b.addEventListener('click', async () => {
-        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(preset) }); renderProfileCard(true); toast('Avatar updated'); } catch (err) { toast(err.message, 'error'); }
+        try { toast('Saving…'); await saveAvatar({ data: presetDataUrl(preset) }); renderProfileCard(editing); toast('Anime avatar updated'); } catch (err) { toast(err.message, 'error'); }
       });
       row.appendChild(b);
     });
     box.appendChild(row);
-    form.querySelector('.bg-actions')?.insertAdjacentElement('beforebegin', box);
+    const anchor = form?.querySelector('.bg-actions') || card.querySelector('#profileEditBtn') || card.querySelector('.profile-name');
+    if (anchor) anchor.insertAdjacentElement('afterend', box);
   };
 
   // wrap loadProfile so stats/tabs refresh
