@@ -600,6 +600,7 @@ function showPage(page) {
   });
   movePill();
   $('sidebar')?.classList.remove('open');
+  document.body.classList.remove('sidebar-open');
 
   if (page === 'series') {
     loadSeries(true);
@@ -636,8 +637,31 @@ document.addEventListener('click', (e) => {
   }
 });
 
-$('menuBtn')?.addEventListener('click', () => {
-  $('sidebar')?.classList.toggle('open');
+const sidebar = $('sidebar');
+const menuBtn = $('menuBtn');
+
+const setSidebarOpen = (open) => {
+  sidebar?.classList.toggle('open', open);
+  document.body.classList.toggle('sidebar-open', open);
+  menuBtn?.setAttribute('aria-expanded', String(open));
+};
+
+menuBtn?.addEventListener('click', () => {
+  setSidebarOpen(!sidebar?.classList.contains('open'));
+});
+
+// Close the drawer when the user taps anywhere outside it.
+document.addEventListener('pointerdown', (event) => {
+  if (!sidebar?.classList.contains('open')) return;
+  if (sidebar.contains(event.target) || menuBtn?.contains(event.target)) return;
+  setSidebarOpen(false);
+});
+
+// Keep the drawer state tidy when navigating with the keyboard.
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && sidebar?.classList.contains('open')) {
+    setSidebarOpen(false);
+  }
 });
 
 let lastScrollY = window.scrollY;
