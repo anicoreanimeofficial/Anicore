@@ -95,8 +95,6 @@ const state = {
   detailType: null,
   genres: [],
   theme: localStorage.getItem('anicore-theme') || 'dark',
-  accent: localStorage.getItem('anicore-accent') || 'pink',
-  language: localStorage.getItem('anicore-lang') || 'en',
 };
 
 // Install popup: start right away so a slow/failed API call can never block it
@@ -435,29 +433,9 @@ async function api(path, options = {}) {
 // --- Theme ---
 
 
-function applyAccent(accent) {
-  state.accent = accent || "pink";
-  document.documentElement.setAttribute("data-accent", state.accent);
-  localStorage.setItem("anicore-accent", state.accent);
-  const sel = $("accentSelect");
-  if (sel) sel.value = state.accent;
-  const psel = $("profileAccent");
-  if (psel) psel.value = state.accent;
-  const lc = $("profileLowData");
-  if (lc) lc.checked = lowData;
+function applyDefaultAccent() {
+  document.documentElement.setAttribute("data-accent", "pink");
 }
-
-function applyLanguage(lang) {
-  state.language = lang === "hi" ? "hi" : "en";
-  localStorage.setItem("anicore-lang", state.language);
-  document.documentElement.lang = state.language === "hi" ? "hi" : "en";
-  const sel = $("langSelect");
-  if (sel) sel.value = state.language;
-  const psel = $("profileLang");
-  if (psel) psel.value = state.language;
-  applyI18n();
-}
-
 
 function applyTheme(_theme) {
   state.theme = 'dark';
@@ -3814,8 +3792,7 @@ wireSeriesPage();
     }, '', location.href);
   } catch (e) { /* noop */ }
   applyTheme('dark');
-  applyAccent(state.accent);
-  applyLanguage(state.language);
+  applyDefaultAccent();
   if ($('yearNow')) $('yearNow').textContent = new Date().getFullYear();
 
   // Website only: remove any service worker / cache left from the old app mode
@@ -4030,8 +4007,6 @@ async function loadProfileActivity() {
     // Prefs
     const prefs = data.prefs || {};
     applyTheme('dark');
-    if (prefs.accent) applyAccent(prefs.accent);
-    if (prefs.language) applyLanguage(prefs.language);
   } catch { /* ignore */ }
 }
 
@@ -4046,16 +4021,12 @@ async function savePreferences() {
     try { localStorage.setItem(LOW_DATA_KEY, lowChk.checked ? '1' : '0'); } catch { /* ignore */ }
     if (lowChk.checked !== lowData) { lowData = lowChk.checked; document.documentElement.classList.toggle('low-data', lowData); toast(lowData ? 'Low-data mode on. Refresh to load smaller posters.' : 'Low-data mode off. Refresh to restore full quality.'); }
   }
-  const accent = $("profileAccent")?.value || state.accent;
-  const language = $("profileLang")?.value || state.language;
   try {
     await api("/api/users/me/prefs", {
       method: "PUT",
-      body: JSON.stringify({ theme, accent, language }),
+      body: JSON.stringify({ theme }),
     });
     applyTheme(theme);
-    applyAccent(accent);
-    applyLanguage(language);
     toast("Preferences saved");
   } catch (err) {
     toast(err.message, "err");
