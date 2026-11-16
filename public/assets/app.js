@@ -5193,17 +5193,27 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
     else if (p.style % 3 === 1) { g.moveTo(91, 143); g.quadraticCurveTo(72, 42, 175, 55); g.quadraticCurveTo(249, 56, 229, 143); g.lineTo(194, 119); g.lineTo(174, 145); g.lineTo(153, 112); g.lineTo(124, 145); g.closePath(); }
     else { g.moveTo(83, 151); g.quadraticCurveTo(88, 43, 165, 55); g.quadraticCurveTo(245, 45, 238, 150); g.lineTo(214, 129); g.lineTo(194, 151); g.lineTo(174, 117); g.lineTo(145, 151); g.lineTo(120, 126); g.closePath(); }
     g.fill();
-    // Eyes, brows, blush and smile
-    g.strokeStyle = '#593c43'; g.lineWidth = 5; g.lineCap = 'round';
+    // Expressive anime eyes, lashes, iris gradients and facial details
     for (const x of [132,188]) {
-      g.beginPath(); g.moveTo(x-12, 148); g.quadraticCurveTo(x, 139, x+12, 148); g.stroke();
-      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, 165, 11, 15, 0, 0, Math.PI*2); g.fill();
-      g.fillStyle = p.eyes; g.beginPath(); g.ellipse(x, 168, 7, 11, 0, 0, Math.PI*2); g.fill();
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(x+2, 163, 3, 0, Math.PI*2); g.fill();
+      g.strokeStyle = '#493044'; g.lineWidth = 7; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x-17, 150); g.quadraticCurveTo(x, 132, x+17, 150); g.stroke();
+      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, 166, 13, 18, 0, 0, Math.PI*2); g.fill();
+      const iris = g.createRadialGradient(x-2, 162, 2, x, 169, 13);
+      iris.addColorStop(0, '#fff'); iris.addColorStop(.2, p.eyes); iris.addColorStop(1, '#241b42');
+      g.fillStyle = iris; g.beginPath(); g.ellipse(x, 169, 10, 14, 0, 0, Math.PI*2); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x-3, 162, 4, 5, -.3, 0, Math.PI*2); g.fill();
+      g.beginPath(); g.arc(x+5, 174, 2, 0, Math.PI*2); g.fill();
+      g.strokeStyle = '#493044'; g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(x-14, 148); g.lineTo(x-20, 142); g.moveTo(x+13, 148); g.lineTo(x+19, 143); g.stroke();
     }
-    g.fillStyle = 'rgba(226,105,125,.24)';
-    g.beginPath(); g.ellipse(111, 194, 14, 7, 0, 0, Math.PI*2); g.ellipse(209, 194, 14, 7, 0, 0, Math.PI*2); g.fill();
-    g.strokeStyle = '#985d61'; g.lineWidth = 3; g.beginPath(); g.moveTo(150, 211); g.quadraticCurveTo(160, 220, 171, 211); g.stroke();
+    // Delicate nose, blush and small anime-style smile
+    g.fillStyle = 'rgba(226,105,125,.28)';
+    g.beginPath(); g.ellipse(108, 195, 17, 8, 0, 0, Math.PI*2); g.ellipse(212, 195, 17, 8, 0, 0, Math.PI*2); g.fill();
+    g.fillStyle = 'rgba(151,83,91,.42)'; g.beginPath(); g.arc(160, 194, 2.5, 0, Math.PI*2); g.fill();
+    g.strokeStyle = '#985d61'; g.lineWidth = 3.5; g.beginPath(); g.moveTo(149, 211); g.quadraticCurveTo(160, 222, 172, 211); g.stroke();
+    // Fine hair highlights and tapered anime strands
+    g.strokeStyle = 'rgba(255,255,255,.24)'; g.lineWidth = 3; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(105, 92); g.quadraticCurveTo(125, 65, 151, 68); g.moveTo(171, 66); g.quadraticCurveTo(207, 70, 221, 105); g.stroke();
     // Small accessory variation
     if (p.style % 4 === 0) { g.fillStyle = '#fff0f6'; g.beginPath(); g.arc(225, 105, 13, 0, Math.PI*2); g.fill(); g.fillStyle = '#e85b9b'; g.beginPath(); g.arc(225, 105, 7, 0, Math.PI*2); g.fill(); }
     return c.toDataURL('image/jpeg', 0.9);
