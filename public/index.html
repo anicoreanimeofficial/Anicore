@@ -31,7 +31,7 @@
     #topLoader.boot { opacity: 1; animation: topBoot 8s cubic-bezier(.1,.6,.2,1) forwards; }
     @keyframes topBoot { from { transform: scaleX(0); } to { transform: scaleX(.85); } }
   </style>
-  <link rel="stylesheet" href="/assets/style.css?v=79">
+  <link rel="stylesheet" href="/assets/style.css?v=80">
 </head>
 <body class="">
   <noscript><h1>Anicore – Watch Anime, TV Shows & Movies Online in Hindi Dub</h1><p>Watch anime, TV shows and movies online on Anicore. Stream popular series and the latest episodes in Hindi dub, English and more, with a weekly release schedule and new titles added regularly. Please enable JavaScript to use the site.</p></noscript>
@@ -297,8 +297,8 @@
               </div>
               <div class="bulk-table-wrap">
                 <table class="bulk-table" id="bulkEpTable">
-                  <thead><tr><th>Ep no</th><th>Ep URL</th><th>Ep duration</th><th>Ep season</th><th>Ep name</th><th>Description</th></tr></thead>
-                  <tbody id="bulkEpRows"><tr><td colspan="6" class="muted">Set an Ep range to create rows.</td></tr></tbody>
+                  <thead><tr><th>Ep no</th><th>Ep URL</th><th>Ep duration</th><th>Ep season</th></tr></thead>
+                  <tbody id="bulkEpRows"><tr><td colspan="4" class="muted">Set an Ep range to create rows.</td></tr></tbody>
                 </table>
               </div>
               <div class="bulk-actions">
@@ -498,11 +498,9 @@
           </select>
           <p class="muted ep-sp-hint">Choose <strong>OVA</strong> or <strong>Special</strong> to add it inside this season. It shows after the episodes with the OVA label.</p>
         </div>
-        <input id="epTitle" placeholder="Episode title (optional)">
-        <input id="epDuration" placeholder="Duration (e.g. 24m)">
+                <input id="epDuration" placeholder="Duration (e.g. 24m)">
         <input id="epVideo" type="text" placeholder="Video URL or <iframe src=&quot;...&quot;> HTML">
-        <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
-        <details class="ep-extras">
+                <details class="ep-extras">
           <summary>Player extras: skip intro/outro &amp; subtitles</summary>
           <div class="row">
             <input id="epIntroStart" placeholder="Intro start (e.g. 0:05)" inputmode="text">
@@ -544,6 +542,6 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=82"></script>
+  <script src="/assets/app.js?v=83"></script>
 </body>
 </html>
