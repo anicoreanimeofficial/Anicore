@@ -1631,9 +1631,7 @@ function buildDetailHtml(type, item, comments) {
     ${episodesHtml(item.episodes, type, item._id, item)}
     <div class="detail-actions">
       <button class="primary ${item.in_watchlist ? 'saved' : ''}" id="wlBtn" type="button">${item.in_watchlist ? '♥ In Watchlist' : '♡ Add to Watchlist'}</button>
-      ${state.user?.role === 'admin' ? `<button class="outline" id="shareBtn" type="button">🔗 Share link</button>` : ''}
     </div>
-    ${state.user?.role === 'admin' ? `<p class="hint share-url-hint" id="shareUrlHint">${esc(contentShareUrl(type, item._id, item.title))}</p>` : ''}
     <h3>Comments</h3>
     ${state.user
       ? `<form id="commentForm"><textarea id="commentText" rows="2" maxlength="1000" placeholder="Write a comment..." required></textarea><button class="outline block" type="submit">Post Comment</button></form>`
@@ -1660,18 +1658,6 @@ function bindDetailEvents(type, item, container) {
       if (!item.episodes) return;
       openVideo(type, item._id, item.title, item.episodes, s, e, item.banner || item.poster, 0, item.season_thumbnails || {});
     });
-  });
-
-  container.querySelector('#shareBtn')?.addEventListener('click', () => {
-    shareContent(type, item._id, item.title);
-  });
-  container.querySelector('#shareUrlHint')?.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(contentShareUrl(type, item._id, item.title));
-      toast("Link copied");
-    } catch (e) {
-      window.prompt("Copy this link:", contentShareUrl(type, item._id, item.title));
-    }
   });
 
   container.querySelector('#wlBtn')?.addEventListener('click', async (e) => {
