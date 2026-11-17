@@ -1488,8 +1488,8 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       </div>
     </section>`;
   };
-  const bar = scope !== null
-    ? `<div class="season-scope"><button type="button" class="scope-all">View all ${seasons.length} seasons</button></div>`
+  const bar = seasons.length > 1
+    ? `<div class="season-scope${scope === null ? ' hidden' : ''}"><button type="button" class="scope-all">View all ${seasons.length} seasons</button></div>`
     : '';
   return `<h3>Episodes</h3>` + bar + seasons.map(card).join('');
 }
@@ -1506,7 +1506,7 @@ function bindSeasonCards(container) {
   if (visible.length === 1) setSeasonOpen(visible[0], true); // a single season is just shown open
   container.querySelector('.scope-all')?.addEventListener('click', () => {
     all.forEach((c) => c.classList.remove('hidden', 'sc-offscope'));
-    container.querySelector('.season-scope')?.remove();
+    container.querySelector('.season-scope')?.classList.add('hidden');
     state.detailSeason = null;
     try {
       const u = new URL(location.href); u.searchParams.delete('season');
@@ -1517,6 +1517,21 @@ function bindSeasonCards(container) {
     cardEl.querySelector('.sc-head')?.addEventListener('click', () => {
       const open = !cardEl.classList.contains('open');
       setSeasonOpen(cardEl, open);
+      if (open && all.length > 1) {
+        const selectedSeason = Number(cardEl.dataset.season);
+        all.forEach((other) => {
+          const selected = other === cardEl;
+          other.classList.toggle('hidden', !selected);
+          other.classList.toggle('sc-offscope', !selected);
+        });
+        state.detailSeason = selectedSeason;
+        container.querySelector('.season-scope')?.classList.remove('hidden');
+        try {
+          const u = new URL(location.href);
+          u.searchParams.set('season', String(selectedSeason));
+          history.replaceState(history.state, '', u.pathname + (u.search || '') + u.hash);
+        } catch (e) { /* noop */ }
+      }
       if (open) setTimeout(() => cardEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60);
     });
   });
