@@ -31,7 +31,7 @@
     #topLoader.boot { opacity: 1; animation: topBoot 8s cubic-bezier(.1,.6,.2,1) forwards; }
     @keyframes topBoot { from { transform: scaleX(0); } to { transform: scaleX(.85); } }
   </style>
-  <link rel="stylesheet" href="/assets/style.css?v=78">
+  <link rel="stylesheet" href="/assets/style.css?v=79">
 </head>
 <body class="">
   <noscript><h1>Anicore – Watch Anime, TV Shows & Movies Online in Hindi Dub</h1><p>Watch anime, TV shows and movies online on Anicore. Stream popular series and the latest episodes in Hindi dub, English and more, with a weekly release schedule and new titles added regularly. Please enable JavaScript to use the site.</p></noscript>
@@ -302,7 +302,6 @@
                 </table>
               </div>
               <div class="bulk-actions">
-                <button type="button" class="outline" id="bulkEpAi">✨ Fill names &amp; descriptions (Google AI)</button>
                 <button type="submit" class="primary">Add Episodes</button>
               </div>
             </form>
@@ -507,9 +506,6 @@
         <input id="epDuration" placeholder="Duration (e.g. 24m)">
         <input id="epVideo" type="text" placeholder="Video URL or <iframe src=&quot;...&quot;> HTML">
         <textarea id="epDesc" rows="2" placeholder="Description (optional)"></textarea>
-        <button type="button" id="epAutoFetch" class="outline block">Auto-fetch ep name, duration and description</button>
-        <input id="epWikiUrl" type="url" placeholder="Wikipedia link with the episode list (optional)">
-        <button type="button" id="epWikiFetch" class="outline block">Fetch ep name from Wikipedia</button>
         <details class="ep-extras">
           <summary>Player extras: skip intro/outro &amp; subtitles</summary>
           <div class="row">
@@ -552,6 +548,6 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=81"></script>
+  <script src="/assets/app.js?v=82"></script>
 </body>
 </html>
