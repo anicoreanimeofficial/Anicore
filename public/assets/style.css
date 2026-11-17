@@ -4364,3 +4364,14 @@ footer { padding-bottom: 35px !important; }
 @media (max-width: 360px) {
   #page-detail .season-card .ep-rows { grid-template-columns: 1fr; }
 }
+
+
+/* Hide mobile navigation while a text field is active and the keyboard is in use */
+@media (max-width: 899px) {
+  body:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) .bottom-nav,
+  body:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) #bottomNav,
+  body:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) .nav-pill,
+  body:has(input:focus, textarea:focus, select:focus, [contenteditable="true"]:focus) #navPill {
+    display: none !important;
+  }
+}
