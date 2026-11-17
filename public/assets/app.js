@@ -726,10 +726,18 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
       </div>`;
 
     const img = card.querySelector('img');
+    const posterWrap = card.querySelector('.poster-wrap');
+    posterWrap?.classList.add('poster-loading');
     img.decoding = 'async';
-    img.src = safeUrl(item.poster) || PLACEHOLDER;
     img.alt = item.title || '';
-    img.addEventListener('error', () => { img.src = PLACEHOLDER; }, { once: true });
+    const finishPosterLoad = () => posterWrap?.classList.remove('poster-loading');
+    img.addEventListener('load', finishPosterLoad, { once: true });
+    img.addEventListener('error', () => {
+      img.src = PLACEHOLDER;
+      finishPosterLoad();
+    }, { once: true });
+    img.src = safeUrl(item.poster) || PLACEHOLDER;
+    if (img.complete && img.naturalWidth > 0) finishPosterLoad();
 
     card.querySelector('h3').textContent = item.title || 'Untitled';
 
