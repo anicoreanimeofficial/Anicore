@@ -1457,23 +1457,11 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       : [`${eps} episode${eps === 1 ? '' : 's'}`];
     if (ovas && Number(s) !== 0) parts.push(`${ovas} OVA`);
     if (sps && Number(s) !== 0) parts.push(`${sps} special${sps === 1 ? '' : 's'}`);
-    // red tag line like "ANIME · COMPLETED · HINDI DUB"
-    const dubs = (Array.isArray(contentCtx?.dubbed_on) ? contentCtx.dubbed_on : []).map((l) => `${l} Dub`);
-    const tags = [type === 'anime' ? 'Anime' : 'Series', contentCtx?.status, ...dubs, ...(dubs.length ? [] : (contentCtx?.genres || []).slice(0, 2))]
-      .filter(Boolean).map((t) => String(t).toUpperCase());
-    const title = `${contentCtx?.title || ''} ${seasonLabel(s)}`.trim();
-    const badge = Number(s) === 0 ? 'SP' : `S${s}`;
-    const countLabel = Number(s) === 0 ? `${list.length} SP` : [`${eps} EP`, ovas ? `${ovas} OVA` : '', sps ? `${sps} SP` : ''].filter(Boolean).join(' + ');
     const off = scope !== null && Number(s) !== scope;
     return `
     <section class="season-card${off ? ' sc-offscope hidden' : ''}" data-season="${s}">
-      <button type="button" class="sc-head" aria-expanded="false">
-        <span class="sc-info">
-          <span class="sc-season-line"><span class="sc-badge">${esc(badge)}</span><span class="sc-count">${esc(countLabel)}</span></span>
-          <span class="sc-tags">${esc(tags.join(' · '))}</span>
-          <span class="sc-title">${esc(title)}</span>
-        </span>
-        <span class="sc-foot"><span class="sc-meta">${esc(parts.join(' · '))}</span><span class="sc-toggle">Episodes <i>▾</i></span></span>
+      <button type="button" class="sc-head" aria-label="Toggle season episodes" aria-expanded="false">
+        <span class="sc-foot"><span class="sc-toggle" aria-hidden="true"><i>▾</i></span></span>
       </button>
       <div class="sc-body">
         ${list.length > EP_PREVIEW ? '<input type="search" class="ep-filter season-filter" placeholder="Filter episodes..." autocomplete="off">' : ''}
@@ -1486,7 +1474,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
   const bar = seasons.length > 1
     ? `<div class="season-scope${scope === null ? ' hidden' : ''}"><button type="button" class="scope-all">View all ${seasons.length} seasons</button></div>`
     : '';
-  return `<h3>Episodes</h3>` + bar + seasons.map(card).join('');
+  return bar + seasons.map(card).join('');
 }
 
 // Wires the "Show all" button and the filter box on each season card.
