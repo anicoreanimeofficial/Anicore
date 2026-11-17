@@ -2585,6 +2585,36 @@ body {
 }
 .mobile-brand .brand-text { font-size: 27px; }
 
+/* ANICORE wordmark: subtle animated neon shimmer */
+.brand-text {
+  display: inline-block;
+  background: linear-gradient(105deg,
+    var(--text-red, #ff3b5c) 0%,
+    #ff7898 28%,
+    #ffffff 48%,
+    #ff7898 62%,
+    var(--text-red, #ff3b5c) 100%);
+  background-size: 240% 100%;
+  background-position: 100% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: anicoreWordmarkShimmer 5s ease-in-out infinite,
+             anicoreWordmarkGlow 3s ease-in-out infinite;
+  will-change: background-position, filter;
+}
+@keyframes anicoreWordmarkShimmer {
+  0%, 12% { background-position: 100% 50%; }
+  58%, 100% { background-position: -140% 50%; }
+}
+@keyframes anicoreWordmarkGlow {
+  0%, 100% { filter: drop-shadow(0 0 4px rgba(255,59,92,.22)); }
+  50% { filter: drop-shadow(0 0 9px rgba(255,90,140,.58)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-text { animation: none; background-position: 50% 50%; }
+}
+
 /* Header: transparent (no background, blur, border or shadow) */
 .app-header,
 [data-theme="light"] .app-header {
