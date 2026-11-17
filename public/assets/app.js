@@ -3187,14 +3187,7 @@ $('themeToggleMobile')?.addEventListener('click', toggleTheme);
 
 // Media uploads + auto-fetch
 $("aAutoFetch")?.addEventListener("click", autoFetchAnimeMeta);
-(function wireMetaKey() {
-  const input = $("metaApiKey");
-  if (input) input.value = getTmdbKey();
-  $("metaApiKeySave")?.addEventListener("click", () => {
-    setTmdbKey(input?.value || "");
-    toast(getTmdbKey() ? "TMDB API key saved on this device" : "API key cleared");
-  });
-})();
+;
 
 
 
