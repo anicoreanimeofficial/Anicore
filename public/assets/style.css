@@ -4375,3 +4375,18 @@ footer { padding-bottom: 35px !important; }
     display: none !important;
   }
 }
+
+
+/* Episode rows: remove the solid black card backgrounds */
+#page-detail .season-card,
+#page-detail .season-card .sc-body,
+#page-detail .season-card .ep-rows,
+#page-detail .season-card .detail-ep {
+  background-color: transparent !important;
+}
+#page-detail .season-card .detail-ep {
+  background: rgba(255,255,255,.035) !important;
+}
+#page-detail .season-card .detail-ep:has(.ep-play):hover {
+  background: linear-gradient(145deg, rgba(255,63,130,.13), rgba(255,255,255,.045)) !important;
+}
