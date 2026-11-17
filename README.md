@@ -57,6 +57,5 @@ Full deployment walkthrough (secrets, D1 setup, custom domain): [DEPLOY.md](./DE
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Admin credentials (seeded on first run) |
 | `TELEGRAM_BOT_TOKEN` | Optional bot notifications |
 | `WEBHOOK_URL` | Optional external webhook |
-| `GOOGLE_API_KEY` | Optional Gemini key for Bulk Add naming/descriptions |
 
-Optional Worker vars: `ENVIRONMENT`, `APP_NAME`, `SITE_URL`, `ENABLE_AI_RECAPS`, `GEMINI_MODEL`.
+Optional Worker vars: `ENVIRONMENT`, `APP_NAME`, `SITE_URL`, `ENABLE_AI_RECAPS`.
