@@ -4258,3 +4258,17 @@ footer { padding-bottom: 35px !important; }
 @media (prefers-reduced-motion: reduce) {
   .brand-text { animation: none; }
 }
+
+
+/* Compact, polished watchlist action on anime detail pages */
+.detail-actions { justify-content: flex-start; align-items: center; }
+.detail-actions > #wlBtn {
+  flex: 0 1 auto; width: auto; min-width: 0; max-width: 220px;
+  min-height: 42px; padding: 10px 17px; border-radius: 12px;
+  font-size: 13px; font-weight: 700; line-height: 1.2; letter-spacing: .01em;
+  box-shadow: 0 5px 16px rgba(255, 63, 130, .16);
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.detail-actions > #wlBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255, 63, 130, .23); }
+.detail-actions > #wlBtn:active { transform: scale(.98); }
+@media (max-width: 600px) { .detail-actions > #wlBtn { max-width: 100%; min-height: 40px; padding: 9px 14px; font-size: 12px; } }
