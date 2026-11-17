@@ -4131,3 +4131,27 @@ footer { padding-bottom: 35px !important; }
   .sidebar { display: flex !important; }
   .mobile-brand, .menu-btn { display: none !important; }
 }
+
+
+/* ANICORE wordmark: subtle animated neon shimmer */
+.brand-text {
+  display: inline-block;
+  background: linear-gradient(105deg, #ff3b5c 0%, #ff8aab 28%, #fff0f5 48%, #ff4d78 68%, #ff3b5c 100%);
+  background-size: 230% 100%;
+  background-position: 100% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: anicoreWordmarkShimmer 4.2s ease-in-out infinite, anicoreWordmarkGlow 2.8s ease-in-out infinite;
+}
+@keyframes anicoreWordmarkShimmer {
+  0%, 100% { background-position: 100% 50%; }
+  50% { background-position: 0% 50%; }
+}
+@keyframes anicoreWordmarkGlow {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(255,59,92,.24)); }
+  50% { filter: drop-shadow(0 0 8px rgba(255,105,150,.62)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-text { animation: none; }
+}
