@@ -3535,8 +3535,18 @@ function heroTypeLabel(t) {
   return t === 'movie' ? 'Movie' : 'Series';
 }
 
+function heroSeason(item) {
+  return /mushoku[\s-]*tensei/i.test(String(item?.title || '')) ? 3 : null;
+}
+
+function heroSeasonEpisodes(item, episodes = item?.episodes || []) {
+  const season = heroSeason(item);
+  return season == null ? episodes : episodes.filter((ep) => Number(ep.season) === season);
+}
+
 function heroInfoHtml(item) {
-  const eps = Array.isArray(item.episodes) ? item.episodes : [];
+  const allEps = Array.isArray(item.episodes) ? item.episodes : [];
+  const eps = heroSeasonEpisodes(item, allEps);
   const r = parseFloat(item.rating);
   const chips = [];
   if (r > 0) chips.push(`<span class="hero-chip gold">★ ${Math.round(r * 10)}%</span>`);
@@ -3636,9 +3646,11 @@ async function heroWatch(item) {
   if (type === 'movie') { openDetail(type, item._id, item); return; }
   try {
     const full = await api(`/api/content/${type}/${item._id}`);
-    const eps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
+    const season = heroSeason(item);
+    const allEps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
+    const eps = season == null ? allEps : allEps.filter((e) => Number(e.season) === season);
     const ep = eps.find((e) => e.video_url);
-    if (!ep) { openDetail(type, item._id, item); return; }
+    if (!ep) { openDetail(type, item._id, season == null ? item : { ...item, _season: season }); return; }
     state.detailId = item._id;
     state.detailType = type;
     openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
@@ -3655,7 +3667,7 @@ function bindHero(root) {
       const i = Number(slide.dataset.i);
       if (i === hero.index) {
         const it = hero.items[i];
-        openDetail(it._type, it._id, it);
+        openDetail(it._type, it._id, heroSeason(it) == null ? it : { ...it, _season: heroSeason(it) });
       } else {
         heroShow(i);
         heroRestartTimer();
