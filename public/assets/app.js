@@ -2778,8 +2778,6 @@ $('adminForm')?.addEventListener('submit', async (e) => {
     year: $('aYear').value ? Number($('aYear').value) : null,
     rating: $('aRating').value.trim(),
     status: $('aStatus').value,
-    poster: $('aPoster').value.trim(),
-    banner: $('aBanner').value.trim(),
     poster_tag: ($('aPosterTag')?.value || 'AUTO').trim() || 'AUTO',
     duration: ($('aDuration')?.value || '').trim(),
     ...readScheduleFields(),
@@ -2871,6 +2869,57 @@ async function refreshEpisodeList() {
   }
 }
 
+async function moveEpisodeBatchSeason() {
+  const msg = $('batchSeasonMsg');
+  const fromSeason = Number($('batchSeasonFrom')?.value);
+  const toSeason = Number($('batchSeasonTo')?.value);
+  if (!currentEpisodeTarget) return;
+  if (!Number.isInteger(fromSeason) || fromSeason < 0 || !Number.isInteger(toSeason) || toSeason < 0) {
+    if (msg) msg.textContent = 'Enter valid season numbers.';
+    return;
+  }
+  if (fromSeason === toSeason) {
+    if (msg) msg.textContent = 'Choose two different seasons.';
+    return;
+  }
+  const btn = $('batchSeasonApply');
+  if (btn) btn.disabled = true;
+  try {
+    const { type, id, title } = currentEpisodeTarget;
+    const doc = await api(`/api/content/${type}/${id}`);
+    const all = doc.episodes || [];
+    const source = all.filter((ep) => Number(ep.season ?? 1) === fromSeason);
+    if (!source.length) throw new Error(`No episodes found in Season ${fromSeason}.`);
+    const targetKeys = new Set(all.filter((ep) => Number(ep.season ?? 1) === toSeason).map((ep) => Number(ep.episode)));
+    const conflicts = source.filter((ep) => targetKeys.has(Number(ep.episode)));
+    if (conflicts.length) {
+      const labels = conflicts.slice(0, 8).map((ep) => `EP ${epNo(ep)}`).join(', ');
+      throw new Error(`Cannot move: Season ${toSeason} already has matching episode number(s): ${labels}${conflicts.length > 8 ? ', …' : ''}. No episodes were changed.`);
+    }
+    if (!confirm(`Move all ${source.length} episodes of ${title} from Season ${fromSeason} to Season ${toSeason}? Episode numbers and video links will stay the same.`)) return;
+    let moved = 0;
+    for (const ep of source) {
+      await api(`/api/admin/${type}/${id}/episodes/${fromSeason}/${ep.episode}`, {
+        method: 'PUT',
+        body: JSON.stringify({ season: toSeason }),
+      });
+      moved++;
+      if (msg) msg.textContent = `Moving episodes… ${moved}/${source.length}`;
+    }
+    if (msg) msg.textContent = `Done — moved ${moved} episode(s) to Season ${toSeason}.`;
+    toast(`Moved ${moved} episodes to Season ${toSeason}`);
+    await refreshEpisodeList();
+    loadLibrary(true);
+  } catch (err) {
+    if (msg) msg.textContent = err.message || 'Could not change the season.';
+    toast(err.message || 'Could not change the season.', 'error');
+    await refreshEpisodeList();
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+$('batchSeasonApply')?.addEventListener('click', moveEpisodeBatchSeason);
+
 $('episodeList')?.addEventListener('click', async (e) => {
   const editBtn = e.target.closest('.ep-edit');
   const delBtn = e.target.closest('.ep-del');
@@ -2894,7 +2943,6 @@ $('episodeList')?.addEventListener('click', async (e) => {
       if ($('epKind')) $('epKind').value = epKind(ep);
       $('epTitle').value = ep.title || '';
       $('epDuration').value = ep.duration || '';
-      if ($('epThumb')) $('epThumb').value = ep.thumbnail || '';
       $('epVideo').value = ep.video_url || '';
       $('epDesc').value = ep.description || '';
       $('epIntroStart').value = fmtTimeInput(ep.intro_start);
@@ -2952,7 +3000,6 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
     title: $('epTitle').value.trim(),
     duration: $('epDuration').value.trim(),
     description: $('epDesc').value.trim(),
-    thumbnail: ($('epThumb')?.value || '').trim(),
     video_url: rawVideo,
   };
 
@@ -2993,18 +3040,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
         toast(`Intro times set on ${same.length} episode(s)`);
       } catch (err) { toast(err.message || 'Could not apply intro to season', 'error'); }
     }
-    const thumbScope = $('epThumbScope')?.value || 'episode';
-    if (thumbScope !== 'episode' && payload.thumbnail) {
-      try {
-        await applySeasonThumbnail(type, id, thumbScope === 'all' ? 'all' : payload.season, payload.thumbnail);
-        toast(thumbScope === 'all' ? 'Thumbnail set on all episodes' : 'Season thumbnail saved');
-      } catch (err) {
-        toast(err.message || 'Season thumb failed', 'error');
-      }
-    }
     $('episodeForm').reset();
-    if ($('epThumb')) $('epThumb').value = '';
-    if ($('epThumbScope')) $('epThumbScope').value = 'episode';
     $('epId').value = '';
     $('epSeason').value = 1;
     $('epSubmit').textContent = 'Add Episode';
@@ -3065,30 +3101,6 @@ function wireImageUpload(fileInputId, urlInputId) {
     }
   });
 }
-
-async function applySeasonThumbnail(type, id, season, thumbUrl) {
-  if (!thumbUrl) return;
-  await api(`/api/admin/${type}/${id}/season-thumbnail`, {
-    method: "POST",
-    body: JSON.stringify({ season: season === 'all' ? 'all' : Number(season), thumbnail: thumbUrl, overwrite: true }),
-  });
-}
-
-// Standalone thumbnail tools (no need to fill the episode form)
-async function runThumbTool(season, url) {
-  if (!currentEpisodeTarget) return toast('No content selected', 'error');
-  url = (url || '').trim();
-  if (!url.startsWith('https://') && !url.startsWith('/assets/')) return toast('Enter a valid thumbnail URL (https://...)', 'error');
-  try {
-    await applySeasonThumbnail(currentEpisodeTarget.type, currentEpisodeTarget.id, season, url);
-    toast(season === 'all' ? 'Thumbnail set on all episodes' : `${seasonLabel(season)} thumbnail saved`);
-    await refreshEpisodeList();
-    loadLibrary(true);
-  } catch (err) { toast(err.message || 'Failed to set thumbnail', 'error'); }
-}
-$('thumbAllApply')?.addEventListener('click', () => runThumbTool('all', $('thumbAllUrl').value));
-$('thumbSeasonApply')?.addEventListener('click', () => runThumbTool(Number($('thumbSeasonNum').value) || 1, $('thumbSeasonUrl').value));
-
 
 // --- Metadata: client-side Anilist (works even when Render can't reach MAL) ---
 async function anilistGraphQL(query, variables) {
@@ -4109,7 +4121,7 @@ function bulkSeasonOptions() {
   const opts = [];
   // Season 0 = Specials / OVA (their own season with its own poster); then seasons 1-8.
   opts.push(`<option value="0"${0 === formSeason ? ' selected' : ''}>Specials / OVA</option>`);
-  for (let i = 1; i <= 8; i++) {
+  for (let i = 1; i <= 50; i++) {
     opts.push(`<option value="${i}"${i === formSeason ? ' selected' : ''}>Season ${i}</option>`);
   }
   return opts.join('');
