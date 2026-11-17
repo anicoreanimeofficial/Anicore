@@ -958,7 +958,7 @@ footer { padding: 35px 20px 120px; margin-top: 30px; text-align: center; border-
 }
 
 /* =========================================================
-   UX polish — synopsis, rating, episodes, video thumb, press
+   UX polish — synopsis, rating, episodes, press
    ========================================================= */
 
 .media-card {
@@ -1060,16 +1060,7 @@ button.medium {
   font-size: 12px !important;
 }
 
-.video-thumb {
-  display: block;
-  width: 100%;
-  max-height: 160px;
-  object-fit: cover;
-  border-radius: 12px;
-  margin: 10px 0 12px;
-  background: #0d0b14;
-}
-.video-thumb.hidden { display: none; }
+
 
 .page {
   transition: opacity .22s ease, transform .22s ease;
@@ -1196,16 +1187,7 @@ button.medium {
   font-size: 12px !important;
 }
 
-.video-thumb {
-  display: block;
-  width: 100%;
-  max-height: 160px;
-  object-fit: cover;
-  border-radius: 12px;
-  margin: 10px 0 12px;
-  background: #0d0b14;
-}
-.video-thumb.hidden { display: none; }
+
 
 .page {
   transition: opacity .22s ease, transform .22s ease;
@@ -1391,7 +1373,7 @@ body {
   transition: transform .2s ease;
 }
 .player-cover:active .player-play { transform: scale(.92); }
-.video-thumb { display: none !important; }
+
 
 /* Smoothness: less motion */
 .poster-wrap img { content-visibility: auto; }
@@ -3997,13 +3979,10 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .season-card { padding: 0; overflow: hidden; border-radius: 18px; background: #0a0a0f; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
 .season-card .sc-head { all: unset; display: block; box-sizing: border-box; width: 100%; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .season-card .sc-head:focus-visible { outline: 2px solid var(--pink, #ff3f82); outline-offset: -2px; }
-.sc-art { position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden; background: #0d0b14; }
-.sc-art img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; display: block; transition: transform .5s ease; }
-.season-card.open .sc-art img { transform: scale(1.03); }
-.sc-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to bottom, transparent 55%, rgba(0,0,0,.65)); pointer-events: none; }
-.sc-badge, .sc-count { position: absolute; bottom: 10px; z-index: 2; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: #fff; background: rgba(10,8,16,.65); border: 1px solid rgba(255,255,255,.25); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.sc-badge { left: 10px; color: #ffd166; border-color: rgba(255,209,102,.5); }
-.sc-count { right: 10px; }
+.sc-season-line { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.sc-badge, .sc-count { display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:800; letter-spacing:.06em; color:#fff; background:rgba(10,8,16,.65); border:1px solid rgba(255,255,255,.25); }
+.sc-badge { color:#ffd166; border-color:rgba(255,209,102,.5); }
+.sc-count { color:var(--muted,#b8b3c4); }
 .sc-info { display: block; padding: 14px 16px 2px; }
 .sc-tags { display: block; margin-bottom: 8px; color: #ff3b4d; font-size: 12px; font-weight: 600; letter-spacing: .02em; line-height: 1.35; }
 .sc-title { display: block; font-size: 20px; font-weight: 800; line-height: 1.25; color: #fff; }
