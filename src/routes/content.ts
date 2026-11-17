@@ -424,61 +424,6 @@ content.post("/api/admin/bulk-episodes", async (c) => {
   return c.json({ message: `Added ${added} episodes`, total: existing.length });
 });
 
-// Fill episode names + descriptions with Google's Gemini API (key = GOOGLE_API_KEY secret).
-content.post("/api/admin/ai-episodes", async (c) => {
-  await requireUploader(c);
-  const key = c.env.GOOGLE_API_KEY;
-  if (!key) throw bad("GOOGLE_API_KEY is not set. Run: npx wrangler secret put GOOGLE_API_KEY");
-  const d = parse(await json(c), {
-    content_type: R.oneOf(["anime", "tv_show"] as const), content_id: R.str(), title: R.str({ def: "" }),
-    season: R.int({ def: 1 }),
-    episodes: (v: any) => {
-      if (!Array.isArray(v) || !v.length || v.length > 50) throw bad("episodes must be a list of 1-50 numbers");
-      return v.map((n) => { const x = Math.trunc(Number(n)); if (!x || x < 1) throw bad("invalid episode number"); return x; });
-    },
-  });
-  const doc = await getContentColl(c, d.content_type).findOne({ _id: objectId(d.content_id) });
-  if (!doc) throw new HttpError(404, "Content not found");
-  const title = String(doc.title || d.title);
-  const prompt =
-    `You are filling in episode metadata for the ${d.content_type === "anime" ? "anime" : "TV show"} "${title}" (season ${d.season}).\n` +
-    (doc.description ? `Series synopsis: ${String(doc.description).slice(0, 800)}\n` : "") +
-    `For each of these episode numbers: ${d.episodes.join(", ")}\n` +
-    `Return the official episode title and a 1-2 sentence spoiler-light description (max 220 chars). ` +
-    `If you do not know the real title, use "Episode N" and leave the description empty. Never invent plot details.`;
-  const model = c.env.GEMINI_MODEL || "gemini-2.5-flash";
-  let res: Response;
-  try {
-    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3, responseMimeType: "application/json",
-          responseSchema: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: { episode: { type: "INTEGER" }, title: { type: "STRING" }, description: { type: "STRING" } },
-              required: ["episode", "title", "description"],
-            },
-          },
-        },
-      }),
-    });
-  } catch (e) { throw new HttpError(502, `Google API unreachable: ${e}`); }
-  const body: any = await res.json().catch(() => ({}));
-  if (!res.ok) throw new HttpError(502, `Google API error: ${body?.error?.message || res.status}`);
-  let rows: any[] = [];
-  try { rows = JSON.parse(body?.candidates?.[0]?.content?.parts?.[0]?.text || "[]"); } catch { throw new HttpError(502, "Google API returned unreadable output"); }
-  const wanted = new Set(d.episodes);
-  const episodes = (Array.isArray(rows) ? rows : [])
-    .filter((r) => wanted.has(Number(r?.episode)))
-    .map((r) => ({ episode: Number(r.episode), title: String(r.title || "").slice(0, 200), description: String(r.description || "").slice(0, 1000) }));
-  return c.json({ episodes });
-});
-
 content.patch("/api/admin/content/:type/:id/schedule", async (c) => {
   await requireAdmin(c);
   const d = parse(await json(c), { scheduled_at: R.optStr(40), published: R.bool(true) });
@@ -692,74 +637,6 @@ content.post("/api/admin/import/anilist", async (c) => {
   if (existing) return c.json({ message: "Title already exists", id: existing._id, item: existing });
   await coll.insert(item);
   return c.json({ message: "Imported from Anilist", id: item._id, item });
-});
-
-async function jikan(path: string) {
-  const r = await fetch(`https://api.jikan.moe/v4${path}`, { headers: { "User-Agent": "Anicore/1.0", Accept: "application/json" } });
-  if (!r.ok) throw new HttpError(502, `MyAnimeList API error (${r.status})`);
-  return (await r.json()) as any;
-}
-
-content.get("/api/meta/anime", async (c) => {
-  const q = (c.req.query("q") || "").trim();
-  if (q.length < 2) throw bad("Enter at least 2 characters of the title");
-  let payload: any;
-  try { payload = await jikan(`/anime?q=${encodeURIComponent(q)}&limit=5`); }
-  catch (e) { if (e instanceof HttpError) throw e; throw new HttpError(502, `Fetch failed: ${e}`); }
-  const rows: any[] = payload.data || [];
-  if (!rows.length) throw new HttpError(404, "No anime found for that title");
-  let data = rows[0];
-  const ql = q.toLowerCase();
-  for (const row of rows) {
-    const titles = [row.title, row.title_english, row.title_japanese].filter(Boolean) as string[];
-    if (titles.some((t) => t.toLowerCase().includes(ql))) { data = row; if ((row.type || "").toUpperCase() === "TV") break; }
-  }
-  const jpg = data.images?.jpg || {}, webp = data.images?.webp || {};
-  const poster = jpg.large_image_url || webp.large_image_url || jpg.image_url || webp.image_url || "";
-  const trailer = data.trailer?.images?.maximum_image_url || "";
-  const year = data.year || data.aired?.prop?.from?.year || "";
-  return c.json({
-    mal_id: data.mal_id, title: data.title_english || data.title || q, description: (data.synopsis || "").trim().slice(0, 5000),
-    poster, banner: trailer || poster, year, genres: (data.genres || []).map((g: any) => g.name).filter(Boolean).join(", "),
-    rating: data.score != null ? String(data.score) : "", duration: data.duration || "", episodes: data.episodes, status: data.status || "", type: data.type || "",
-  });
-});
-
-content.get("/api/meta/episode", async (c) => {
-  const title = c.req.query("title") || "";
-  const episode = parseInt(c.req.query("episode") || "1") || 1;
-  const season = parseInt(c.req.query("season") || "1") || 1;
-  let mid = parseInt(c.req.query("mal_id") || "0") || 0;
-  let ep: any = {}, anime: any = {};
-  try {
-    if (!mid && title.trim()) {
-      const rows: any[] = (await jikan(`/anime?q=${encodeURIComponent(title.trim())}&limit=5`)).data || [];
-      if (rows.length) { mid = Number(rows[0].mal_id) || 0; const tv = rows.find((r) => (r.type || "").toUpperCase() === "TV"); if (tv) mid = Number(tv.mal_id) || 0; }
-    }
-    if (!mid) throw new HttpError(404, "Anime not found — type the series title or set episode after auto-fetch on the title");
-    try { anime = (await jikan(`/anime/${mid}/full`)).data || {}; } catch { try { anime = (await jikan(`/anime/${mid}`)).data || {}; } catch { anime = {}; } }
-    for (let page = 1; page <= 8 && !ep.mal_id; page++) {
-      let body: any;
-      try { body = await jikan(`/anime/${mid}/episodes?page=${page}`); } catch { break; }
-      const items: any[] = body.data || [];
-      if (!items.length) break;
-      ep = items.find((r) => Number(r.mal_id) === episode || Number(r.episode) === episode) || {};
-      if (!body.pagination?.has_next_page) break;
-    }
-    if (!ep.mal_id) { try { ep = (await jikan(`/anime/${mid}/episodes/${episode}`)).data || {}; } catch { ep = {}; } }
-  } catch (e) {
-    if (e instanceof HttpError) throw e;
-    throw new HttpError(502, `Fetch failed: ${e}`);
-  }
-  let duration: string = anime.duration || "";
-  const m = /(\d+)\s*min/.exec(duration.toLowerCase());
-  if (m) duration = `${m[1]}m`;
-  const jpg = anime.images?.jpg || {};
-  return c.json({
-    mal_id: mid, title: (ep.title || ep.title_romanji || ep.title_japanese || "").trim() || `Episode ${episode}`,
-    description: (ep.synopsis || "").trim().slice(0, 5000), duration, thumbnail: jpg.large_image_url || jpg.image_url || "",
-    season, episode, found: Object.keys(ep).length > 0,
-  });
 });
 
 // ---------- image upload (stored in D1) ----------
