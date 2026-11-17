@@ -1392,12 +1392,6 @@ function linkList(links) {
   ).join('')}</div>`;
 }
 
-function seasonThumb(episodes, season, content) {
-  const map = content?.season_thumbnails || videoContext?.season_thumbnails || {};
-  // season thumbnail first, then the whole-anime thumbnail (key "all")
-  return safeUrl(map[String(season)] || map[Number(season)]) || safeUrl(map.all) || '';
-}
-
 const EP_PREVIEW = 8;
 
 // When a page is opened from a season card (or a link with ?season=N) only that season is shown.
@@ -1457,7 +1451,6 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
       : [`${eps} episode${eps === 1 ? '' : 's'}`];
     if (ovas && Number(s) !== 0) parts.push(`${ovas} OVA`);
     if (sps && Number(s) !== 0) parts.push(`${sps} special${sps === 1 ? '' : 's'}`);
-    const art = seasonThumb(sorted, s, contentCtx) || safeUrl(contentCtx?.banner) || safeUrl(contentCtx?.poster) || '';
     // red tag line like "ANIME · COMPLETED · HINDI DUB"
     const dubs = (Array.isArray(contentCtx?.dubbed_on) ? contentCtx.dubbed_on : []).map((l) => `${l} Dub`);
     const tags = [type === 'anime' ? 'Anime' : 'Series', contentCtx?.status, ...dubs, ...(dubs.length ? [] : (contentCtx?.genres || []).slice(0, 2))]
@@ -1469,12 +1462,8 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
     return `
     <section class="season-card${off ? ' sc-offscope hidden' : ''}" data-season="${s}">
       <button type="button" class="sc-head" aria-expanded="false">
-        <span class="sc-art">
-          ${art ? `<img src="${esc(art)}" alt="" loading="lazy" decoding="async">` : ''}
-          <span class="sc-badge">${esc(badge)}</span>
-          <span class="sc-count">${esc(countLabel)}</span>
-        </span>
         <span class="sc-info">
+          <span class="sc-season-line"><span class="sc-badge">${esc(badge)}</span><span class="sc-count">${esc(countLabel)}</span></span>
           <span class="sc-tags">${esc(tags.join(' · '))}</span>
           <span class="sc-title">${esc(title)}</span>
         </span>
@@ -2194,7 +2183,7 @@ function setWatchInBrowserBtn(url) {
   btn.dataset.url = url;
 }
 
-async function mountPlayer(url, posterSrc = '', startPercent = 0) {
+async function mountPlayer(url, startPercent = 0) {
   const wrap = $('playerWrap');
   if (!wrap) return;
 
@@ -2212,7 +2201,6 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
     video.autoplay = true;
     video.playsInline = true;
     video.preload = 'metadata';
-    if (posterSrc) video.poster = posterSrc;
     video.setAttribute('playsinline', '');
     let lastSave = 0;
     video.addEventListener('timeupdate', () => {
@@ -2265,18 +2253,7 @@ async function mountPlayer(url, posterSrc = '', startPercent = 0) {
       $('skipNote')?.classList.remove('hidden');
     };
 
-    if (posterSrc && !playerPref.get('autoplayNext')) {
-      const cover = document.createElement('button');
-      cover.type = 'button';
-      cover.className = 'player-cover';
-      cover.setAttribute('aria-label', 'Play');
-      cover.style.backgroundImage = `url("${posterSrc.replace(/"/g, '%22')}")`;
-      cover.innerHTML = '<span class="player-play">&#9654;</span>';
-      cover.addEventListener('click', mountIframe, { once: true });
-      wrap.appendChild(cover);
-    } else {
-      mountIframe();
-    }
+    mountIframe();
   }
 }
 
@@ -2415,8 +2392,6 @@ function openVideo(type, contentId, contentTitle, episodes, season, episode, pos
     contentTitle,
     episodes: sorted,
     currentIndex: idx,
-    poster: poster || null,
-    season_thumbnails: seasonThumbnails || {},
     air: airInfo[contentId] || null,
     epFilter: '',
     listSeason: null,
@@ -2476,34 +2451,9 @@ function loadVideoEpisode() {
   const sub = `${epCode(ep)}${ep.duration ? ' · ' + ep.duration : ''}`;
   $('videoSubtitle').textContent = sub;
 
-  // Season / episode thumbnail above player
-  let thumbEl = $('videoThumb');
-  if (!thumbEl) {
-    const header = document.querySelector('.video-header');
-    if (header) {
-      thumbEl = document.createElement('img');
-      thumbEl.id = 'videoThumb';
-      thumbEl.className = 'video-thumb';
-      thumbEl.alt = '';
-      header.appendChild(thumbEl);
-    }
-  }
-  if (thumbEl) {
-    const src = safeUrl(ep.thumbnail) || seasonThumb(videoContext.episodes, ep.season) || safeUrl(videoContext.poster) || '';
-    if (src) {
-      thumbEl.src = src;
-      thumbEl.classList.remove('hidden');
-      thumbEl.onerror = () => thumbEl.classList.add('hidden');
-    } else {
-      thumbEl.removeAttribute('src');
-      thumbEl.classList.add('hidden');
-    }
-  }
-
-  const posterSrc = safeUrl(ep.thumbnail) || seasonThumb(videoContext.episodes, ep.season) || safeUrl(videoContext.poster) || '';
   const startPercent = videoContext.resumePercent || 0;
   videoContext.resumePercent = 0;
-  mountPlayer(ep.video_url, posterSrc, startPercent);
+  mountPlayer(ep.video_url, startPercent)
   updateVideoNav();
   renderVideoEpList();
   saveWatchProgress(startPercent);
