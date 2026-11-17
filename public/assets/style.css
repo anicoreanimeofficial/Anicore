@@ -4272,3 +4272,11 @@ footer { padding-bottom: 35px !important; }
 .detail-actions > #wlBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(255, 63, 130, .23); }
 .detail-actions > #wlBtn:active { transform: scale(.98); }
 @media (max-width: 600px) { .detail-actions > #wlBtn { max-width: 100%; min-height: 40px; padding: 9px 14px; font-size: 12px; } }
+
+/* Give Recommended for You posters breathing room from screen edges */
+#recommendGrid.media-grid.horizontal {
+  padding-left: 7% !important;
+  padding-right: 7% !important;
+  scroll-padding-left: 7%;
+  scroll-padding-right: 7%;
+}
