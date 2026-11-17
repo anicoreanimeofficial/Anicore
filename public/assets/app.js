@@ -518,7 +518,9 @@ function saveNavState() {
       path = detailPath(state.detailType, detailRef(state.detailId, state.detailTitle)); h = '';
     }
     const entry = { key: state.page, page: state.page, detailType: state.detailType, detailId: state.detailId, watchS: ws, watchE: we };
-    history.replaceState(entry, '', path + location.search + h);
+    const url = new URL(location.href);
+    if (state.page !== 'detail' && state.page !== 'video') url.searchParams.delete('season');
+    history.replaceState(entry, '', path + (url.search || '') + h);
   } catch (e) {}
 }
 
@@ -578,7 +580,11 @@ function showPage(page) {
       // from flashing while a full page reload boots the requested destination.
       try {
         const entry = { key: page, page, detailType: null, detailId: null, watchS: null, watchE: null };
-        if (location.pathname !== PAGE_PATH[page]) history.pushState(entry, '', PAGE_PATH[page] + location.search);
+        const url = new URL(location.href);
+        url.pathname = PAGE_PATH[page];
+        url.hash = '';
+        url.searchParams.delete('season');
+        if (location.pathname !== PAGE_PATH[page] || location.search !== url.search) history.pushState(entry, '', url.pathname + (url.search || ''));
       } catch (e) { /* keep the current view if history is unavailable */ }
     }
   }
@@ -3424,6 +3430,11 @@ wireSeriesPage();
   try {
     const hp = parseLocation();
     const page = hp && PAGE_ORDER.includes(hp.page) ? hp.page : 'home';
+    if (page !== 'detail' && page !== 'video') {
+      const cleanUrl = new URL(location.href);
+      cleanUrl.searchParams.delete('season');
+      if (cleanUrl.search !== location.search) history.replaceState(history.state, '', cleanUrl.pathname + (cleanUrl.search || '') + cleanUrl.hash);
+    }
     history.replaceState({
       key: hp && hp.detailId ? `${page}:${hp.detailType}:${hp.detailId}` : page, idx: 0, page,
       detailType: hp?.detailType || null, detailId: hp?.detailId || null,
