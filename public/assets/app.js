@@ -2941,10 +2941,8 @@ $('episodeList')?.addEventListener('click', async (e) => {
       $('epSeason').value = ep.season;
       $('epNumber').value = epNo(ep);
       if ($('epKind')) $('epKind').value = epKind(ep);
-      $('epTitle').value = ep.title || '';
       $('epDuration').value = ep.duration || '';
       $('epVideo').value = ep.video_url || '';
-      $('epDesc').value = ep.description || '';
       $('epIntroStart').value = fmtTimeInput(ep.intro_start);
       $('epIntroEnd').value = fmtTimeInput(ep.intro_end);
       $('epOutroStart').value = fmtTimeInput(ep.outro_start);
@@ -2997,9 +2995,7 @@ $('episodeForm')?.addEventListener('submit', async (e) => {
   const payload = {
     season: seasonNum($('epSeason').value),
     episode: kindBase($('epKind')?.value) + (Number($('epNumber').value) || 0),
-    title: $('epTitle').value.trim(),
     duration: $('epDuration').value.trim(),
-    description: $('epDesc').value.trim(),
     video_url: rawVideo,
   };
 
@@ -3176,7 +3172,7 @@ async function autoFetchAnimeMeta() {
   } catch (err) {
     toast(err.message || "Could not fetch", "error");
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "Auto-fetch title info (name, description, poster)"; }
+    if (btn) { btn.disabled = false; btn.textContent = "Fetch anime details & description from AniList"; }
   }
 }
 
@@ -3744,7 +3740,7 @@ function buildBulkRows() {
   bulkRows().forEach((tr) => {
     old[tr.dataset.ep] = {
       url: tr.querySelector('.b-url').value, dur: tr.querySelector('.b-dur').value,
-      season: tr.querySelector('.b-season')?.value, name: tr.querySelector('.b-name').value, desc: tr.querySelector('.b-desc').value,
+      season: tr.querySelector('.b-season')?.value,
     };
   });
   const seasons = bulkSeasonOptions();
@@ -3756,8 +3752,6 @@ function buildBulkRows() {
       <td><input class="b-url" type="url" placeholder="https://..." value="${esc(o.url || '')}"></td>
       <td><input class="b-dur" type="text" value="${esc(o.dur || defDur)}"></td>
       <td><select class="b-season">${seasons}</select></td>
-      <td><input class="b-name" type="text" placeholder="Episode ${n}" value="${esc(o.name || '')}"></td>
-      <td><textarea class="b-desc" rows="2">${esc(o.desc || '')}</textarea></td>
     </tr>`;
   }
   $('bulkEpRows').innerHTML = html;
@@ -3808,8 +3802,6 @@ async function submitBulkEpisodes(e) {
     episodes.push({
       season: rowSeason, episode: kindBase($('bulkKind')?.value) + Number(tr.dataset.ep), video_url,
       duration: tr.querySelector('.b-dur').value.trim() || '24min',
-      title: tr.querySelector('.b-name').value.trim(),
-      description: tr.querySelector('.b-desc').value.trim(),
     });
   }
   if (!episodes.length) { if (msg) msg.textContent = 'Add at least one Ep URL.'; return; }
@@ -3821,7 +3813,7 @@ async function submitBulkEpisodes(e) {
     });
     if (msg) msg.textContent = res.message;
     toast(res.message);
-    $('bulkEpRows').innerHTML = '<tr><td colspan="5" class="muted">Set an Ep range to create rows.</td></tr>';
+    $('bulkEpRows').innerHTML = '<tr><td colspan="4" class="muted">Set an Ep range to create rows.</td></tr>';
   } catch (err) {
     if (msg) msg.textContent = err.message;
     toast(err.message, 'err');
