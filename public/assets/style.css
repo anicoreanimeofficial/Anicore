@@ -4110,6 +4110,79 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .avatar-loading { font-size:12px; }
 
 
+/* Loading polish: poster shimmer, staggered cards and softer page changes */
+.poster-wrap.poster-loading {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(115deg, rgba(255,255,255,.035), rgba(255,105,170,.09), rgba(255,255,255,.035));
+}
+.poster-wrap.poster-loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  transform: translateX(-110%);
+  background: linear-gradient(105deg, transparent 25%, rgba(255,255,255,.16) 48%, rgba(255,150,190,.13) 54%, transparent 76%);
+  animation: posterLoadingShimmer 1.35s ease-in-out infinite;
+}
+.poster-wrap img {
+  opacity: 1;
+  transition: opacity .38s ease, transform .35s ease;
+}
+.poster-wrap.poster-loading img { opacity: 0; }
+@keyframes posterLoadingShimmer {
+  to { transform: translateX(110%); }
+}
+.skeleton-grid {
+  width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(min(155px, 40vw), 1fr));
+  gap: clamp(10px, 2vw, 19px);
+  animation: skeletonAppear .24s ease both;
+}
+.skeleton-card {
+  overflow: hidden;
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--panel, #17131d) 88%, transparent);
+  border: 1px solid var(--border, rgba(255,255,255,.08));
+}
+.skeleton-poster {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, rgba(255,255,255,.045) 8%, rgba(255,255,255,.09) 18%, rgba(255,255,255,.045) 33%);
+  background-size: 220% 100%;
+  animation: shimmer 1.45s ease-in-out infinite;
+}
+.skeleton-text {
+  background: linear-gradient(110deg, rgba(255,255,255,.045) 8%, rgba(255,255,255,.10) 18%, rgba(255,255,255,.045) 33%);
+  background-size: 220% 100%;
+  animation: shimmer 1.45s ease-in-out infinite;
+}
+@keyframes skeletonAppear {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.media-card.card-enter {
+  animation: cardEnter .42s cubic-bezier(.2,.7,.25,1) both;
+}
+.media-card.card-enter:nth-child(2) { animation-delay: 35ms; }
+.media-card.card-enter:nth-child(3) { animation-delay: 70ms; }
+.media-card.card-enter:nth-child(4) { animation-delay: 105ms; }
+.media-card.card-enter:nth-child(5) { animation-delay: 140ms; }
+.media-card.card-enter:nth-child(6) { animation-delay: 175ms; }
+.media-card.card-enter:nth-child(n+7) { animation-delay: 200ms; }
+.page {
+  animation: pageEnter .34s cubic-bezier(.2,.7,.25,1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster-wrap.poster-loading::after,
+  .skeleton-poster,
+  .skeleton-text { animation: none !important; }
+  .poster-wrap img { transition: none; }
+  .media-card.card-enter, .page { animation: none !important; }
+}
+
 /* =========================================================
    PURE WEBSITE LAYOUT — responsive browser-first navigation
    ========================================================= */
