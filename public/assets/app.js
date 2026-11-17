@@ -706,7 +706,7 @@ function renderGrid(grid, items, type, { append = false, empty = 'Nothing here y
   const frag = document.createDocumentFragment();
   items.forEach((item) => {
     const card = document.createElement('div');
-    card.className = 'media-card';
+    card.className = 'media-card card-enter';
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
     card.setAttribute('aria-label', item.title || 'Untitled');
