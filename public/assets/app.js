@@ -2668,6 +2668,7 @@ async function loadLibrary(reset = false) {
         fillScheduleFields(item);
         $('aHero').checked = !!item.hero;
         $('aHeroOrder').value = item.hero_order || '';
+        if ($('aHeroSeason')) $('aHeroSeason').value = item.hero_season || '';
         $('aTopAiring').checked = !!item.top_airing;
         $('aTopRank').value = item.top_rank || '';
         $('adminFormTitle').textContent = 'Edit Content';
@@ -2723,6 +2724,7 @@ $('adminForm')?.addEventListener('submit', async (e) => {
     ...readScheduleFields(),
     hero: $('aHero').checked,
     hero_order: Number($('aHeroOrder').value) || 0,
+    hero_season: Number($('aHeroSeason')?.value) || 0,
     top_airing: $('aTopAiring').checked,
     top_rank: Number($('aTopRank').value) || 0,
   };
