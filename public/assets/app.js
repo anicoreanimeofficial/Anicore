@@ -564,7 +564,7 @@ function showPage(page) {
   const target = $(`page-${page}`);
   if (!target) return;
 
-  // A normal website loads a new page for every link: send the browser there instead of swapping in place.
+  // Normal website navigation: load the destination page fresh to avoid stale page state.
   const swap = allowSwap; allowSwap = false;
   if (!swap && page !== state.page) {
     if (page === 'detail' || page === 'video') {
@@ -576,16 +576,12 @@ function showPage(page) {
         return;
       }
     } else if (PAGE_PATH[page]) {
-      // Keep bottom-tab navigation in the current document; this prevents the Home page
-      // from flashing while a full page reload boots the requested destination.
-      try {
-        const entry = { key: page, page, detailType: null, detailId: null, watchS: null, watchE: null };
-        const url = new URL(location.href);
-        url.pathname = PAGE_PATH[page];
-        url.hash = '';
-        url.searchParams.delete('season');
-        if (location.pathname !== PAGE_PATH[page] || location.search !== url.search) history.pushState(entry, '', url.pathname + (url.search || ''));
-      } catch (e) { /* keep the current view if history is unavailable */ }
+      const url = new URL(location.href);
+      url.pathname = PAGE_PATH[page];
+      url.hash = '';
+      url.searchParams.delete('season');
+      gotoUrl(url.pathname + (url.search || ''));
+      return;
     }
   }
 
