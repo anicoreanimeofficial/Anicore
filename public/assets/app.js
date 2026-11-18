@@ -3246,16 +3246,17 @@ function heroRestartTimer() {
 
 async function heroWatch(item) {
   const type = item._type;
-  if (type === 'movie') { openDetail(type, item._id, item); return; }
+  if (type === 'movie') { allowSwap = true; openDetail(type, item._id, item); return; }
   try {
     const full = await api(`/api/content/${type}/${item._id}`);
     const season = heroSeason(item);
     const allEps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     const eps = season == null ? allEps : allEps.filter((e) => Number(e.season) === season);
     const ep = eps.find((e) => e.video_url);
-    if (!ep) { openDetail(type, item._id, season == null ? item : { ...item, _season: season }); return; }
+    if (!ep) { allowSwap = true; openDetail(type, item._id, season == null ? item : { ...item, _season: season }); return; }
     state.detailId = item._id;
     state.detailType = type;
+    allowSwap = true;
     openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
   } catch (err) {
     toast(err.message || 'Could not open', 'error');
@@ -3270,6 +3271,7 @@ function bindHero(root) {
       const i = Number(slide.dataset.i);
       if (i === hero.index) {
         const it = hero.items[i];
+        allowSwap = true;
         openDetail(it._type, it._id, heroSeason(it) == null ? it : { ...it, _season: heroSeason(it) });
       } else {
         heroShow(i);
@@ -3283,7 +3285,7 @@ function bindHero(root) {
     if (act) {
       const it = hero.items[hero.index];
       if (act.dataset.act === 'watch') heroWatch(it);
-      else openDetail(it._type, it._id, it);
+      else { allowSwap = true; openDetail(it._type, it._id, heroSeason(it) == null ? it : { ...it, _season: heroSeason(it) }); }
     }
   });
   root.addEventListener('touchstart', (e) => {
