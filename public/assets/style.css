@@ -5158,3 +5158,115 @@ hr,.divider { border-color:#dce8f5 !important; }
  .side-nav button.active { background:#e8f2ff !important; color:#2869c9 !important; }
  .bottom-nav button.active { background:#e8f2ff !important; color:#2869c9 !important; }
 }
+
+
+/* ANICORE — MIDNIGHT AURORA DARK THEME (v93) */
+:root {
+  color-scheme:dark !important;
+  --bg:#0b101b !important; --panel:#121b2a !important; --text:#e8f0fb !important;
+  --muted:#91a2ba !important; --border:#26364d !important;
+  --pink:#65a7ff !important; --purple:#9a8bff !important; --blue:#43c5d4 !important;
+  --shadow:0 14px 38px rgba(0,0,0,.28) !important;
+}
+html,body,#app,.app,.app-shell,#appMain,.main-content,.page,
+#page-home,#page-series,#page-movies,#page-schedule,#page-search,
+#page-detail,#page-video,#page-profile,#page-admin {
+  background-color:#0b101b !important; color:#e8f0fb !important;
+}
+body { background:#0b101b !important; color:#e8f0fb !important; }
+.app-header,.topbar,.header,.sidebar,.side-panel {
+  background:#101827 !important; color:#e8f0fb !important; border-color:#26364d !important;
+}
+.app-header { box-shadow:0 5px 24px rgba(0,0,0,.25) !important; }
+.brand,.brand-text,.app-header a,.side-nav button,.section-title,
+h1,h2,h3,h4,label,.media-info h3,.sc-title { color:#e5eefb !important; }
+.brand span { color:#72adff !important; }
+.header-icon-btn,.header-actions .outline,.app-header .menu-btn {
+  background:#172337 !important; color:#c7d8ef !important; border:1px solid #2b3e58 !important;
+}
+.side-nav button { color:#9aabc1 !important; }
+.side-nav button:hover,.side-nav button.active,.side-nav button[aria-current="page"] {
+  background:#1a2c45 !important; color:#82b8ff !important;
+}
+#page-home .hero {
+  background:linear-gradient(125deg,#14253b 0%,#17243b 54%,#211e3b 100%) !important;
+  border:1px solid #2b4262 !important; color:#eaf2ff !important;
+  box-shadow:0 18px 42px rgba(0,0,0,.25) !important;
+}
+#page-home .hero::before { background:radial-gradient(ellipse at 80% 15%,rgba(94,157,255,.2),transparent 50%) !important; }
+#page-home .hero-title { color:#f0f6ff !important; }
+#page-home .hero-desc { color:#a9bad1 !important; }
+#page-home .hero-chip { background:#1d3049 !important; color:#b8cce5 !important; border-color:#344b68 !important; }
+#page-home .hero-chip.gold { background:#392f20 !important; color:#e6c27d !important; border-color:#66502d !important; }
+#page-home .hero-watch,.primary,.ep-go,.play-button,.submit-btn {
+  background:linear-gradient(110deg,#397fe8,#665fe0) !important; color:#fff !important;
+  border:0 !important; box-shadow:0 8px 22px rgba(57,127,232,.22) !important;
+}
+#page-home .hero-circle { background:#1c2b40 !important; color:#d8e7fa !important; border:1px solid #3a506d !important; }
+#page-home .hero-dot.active { background:#72adff !important; }
+.media-card,.poster-card,.anime-card,.panel,.stat-card,.request-row,.season-card,
+.filters,.modal-card,.profile-card,.admin-card,.form-card,.content-card,
+.empty-state,.schedule-card {
+  background:#121b2a !important; color:#dce8f8 !important;
+  border:1px solid #26364d !important; box-shadow:0 8px 26px rgba(0,0,0,.22) !important;
+}
+.media-card:hover,.anime-card:hover { border-color:#426b9c !important; box-shadow:0 14px 32px rgba(0,0,0,.34) !important; }
+.poster-wrap { background:#1a2638 !important; box-shadow:0 8px 22px rgba(0,0,0,.28) !important; }
+.media-info h3 { color:#e4eefb !important; }
+.media-info p,.muted,.text-muted { color:#91a2ba !important; }
+.rating-badge { color:#f0c56f !important; }
+.filters input,.filters select,input,textarea,select {
+  background:#0d1624 !important; color:#e1ecfa !important;
+  border:1px solid #2b3d56 !important;
+}
+input::placeholder,textarea::placeholder { color:#7488a3 !important; }
+select option { background:#121b2a !important; color:#e1ecfa !important; }
+input:focus,textarea:focus,select:focus {
+  border-color:#5c9bea !important; box-shadow:0 0 0 3px rgba(75,145,230,.16) !important;
+}
+.outline,.chip,.genre-chip {
+  background:#172337 !important; color:#b8cbe3 !important; border-color:#2b3e58 !important;
+}
+.outline:hover,.chip:hover { background:#1d3049 !important; border-color:#5279a7 !important; }
+.genre-chip.active,.chip.active,.badge,.tag {
+  background:#1b3452 !important; color:#8fc0ff !important; border-color:#365b83 !important;
+}
+#page-detail .season-card .detail-ep,.episode,.detail-ep,.ep-row,.episode-row {
+  background:#172337 !important; color:#c5d7ed !important; border-color:#2a3d57 !important;
+}
+#page-detail .season-card .detail-ep:hover,.episode:hover,.detail-ep:hover,.ep-row:hover,.episode-row:hover {
+  background:#1d3049 !important;
+}
+#page-detail .season-card .detail-ep .ep-badge,#page-detail .sc-count,#page-detail .sc-toggle {
+  background:#20334c !important; color:#a9c5e8 !important;
+}
+#page-detail .sc-title { color:#e1ecfa !important; }
+.profile-avatar { background:linear-gradient(135deg,#397fe8,#8068df,#35b7c8) !important; }
+.bottom-nav {
+  background:rgba(16,24,39,.97) !important; border:1px solid #2b3d56 !important;
+  box-shadow:0 10px 32px rgba(0,0,0,.42) !important;
+}
+.bottom-nav button { color:#8397b1 !important; }
+.bottom-nav button.active { color:#8fc0ff !important; background:#1b3452 !important; }
+a,.link,.text-button,#playerFallback a { color:#79b4ff !important; }
+.toast { background:linear-gradient(110deg,#2869c9,#625bd2) !important; color:#fff !important; }
+.modal { background:rgba(0,0,0,.72) !important; }
+.modal-card { background:#121b2a !important; }
+.close { background:#1d2c41 !important; color:#d8e7fa !important; }
+.site-footer,footer { background:transparent !important; color:#8397b1 !important; border-color:#26364d !important; }
+hr,.divider { border-color:#26364d !important; }
+.error-message { background:#351d29 !important; color:#ff9aa9 !important; border-color:#653344 !important; }
+@media(max-width:899px) {
+  html,body,#appMain { background:#0b101b !important; }
+  .app-header { background:#101827 !important; border-bottom:1px solid #26364d !important; }
+  .app-header .menu-btn,.app-header .header-icon-btn { background:#172337 !important; border-color:#2b3e58 !important; color:#c7d8ef !important; }
+  .brand-text { color:#e5eefb !important; -webkit-text-fill-color:#e5eefb !important; }
+  .sidebar { background:#101827 !important; border-right:1px solid #26364d !important; }
+  .side-nav button.active { background:#1a2c45 !important; color:#82b8ff !important; }
+  #page-home .hero { background:linear-gradient(145deg,#14253b 0%,#17243b 58%,#211e3b 100%) !important; border-color:#2b4262 !important; }
+  #page-home .hero-title { color:#f0f6ff !important; }
+  #page-home .hero-watch { background:linear-gradient(110deg,#397fe8,#665fe0) !important; }
+  .bottom-nav { background:rgba(16,24,39,.98) !important; border-color:#2b3d56 !important; }
+  .bottom-nav button.active { background:#1b3452 !important; color:#8fc0ff !important; }
+  .modal-card { background:#121b2a !important; }
+}
