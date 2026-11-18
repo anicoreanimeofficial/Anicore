@@ -65,10 +65,31 @@
 
   <div class="app-shell">
     <header class="app-header">
-      <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
-      <a class="brand mobile-brand" href="/" data-page="home"><span class="brand-text">ANICORE</span></a>
+      <div class="header-left">
+        <button type="button" class="menu-btn outline small" id="menuBtn" aria-label="Open menu">☰</button>
+        <a class="brand" href="/" data-page="home"><span class="brand-text">ANICORE</span></a>
+        
+        <!-- Desktop Web Navigation Bar -->
+        <nav class="desktop-nav" aria-label="Main Navigation">
+          <button type="button" data-page="home" class="d-nav-item active">Home</button>
+          <button type="button" data-page="series" class="d-nav-item">Series &amp; Anime</button>
+          <button type="button" data-page="movies" class="d-nav-item">Movies</button>
+          <button type="button" data-page="schedule" class="d-nav-item">Schedule</button>
+          <button type="button" id="randomAnimeTopBtn" class="d-nav-item random-pill" title="Surprise Me (Play Random Anime)">
+            🎲 Random
+          </button>
+        </nav>
+      </div>
+
       <div class="header-actions">
-        <button id="searchOpenBtn" class="header-icon-btn" type="button" aria-label="Search" title="Search"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg></button>
+        <!-- Desktop Quick Search Bar -->
+        <div class="header-search-bar" id="headerSearchBar">
+          <svg viewBox="0 0 24 24" class="h-search-icon" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg>
+          <input type="text" id="desktopSearchInput" placeholder="Quick search anime, movies..." autocomplete="off">
+          <kbd class="search-kbd" title="Press / to search">/</kbd>
+        </div>
+
+        <button id="searchOpenBtn" class="header-icon-btn mobile-only" type="button" aria-label="Search" title="Search"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21"/></svg></button>
         <button id="adminBtn" class="outline small hidden" type="button" data-page="admin">Admin</button>
         <button id="signInBtn" class="outline small" type="button">Sign In</button>
         <button id="logoutBtn" class="outline small hidden" type="button">Logout</button>
@@ -86,6 +107,15 @@
             <div class="sk sk-line"></div>
             <div class="sk sk-line short"></div>
           </div>
+        </div>
+
+        <!-- Continue Watching Shelf (Web feature) -->
+        <div id="continueWatchingSection" class="hidden">
+          <div class="section-heading-row">
+            <h3 class="section-title"><span class="cw-dot" aria-hidden="true">&#9654;</span> Continue Watching</h3>
+            <button type="button" class="text-button" id="clearContinueWatching">Clear history</button>
+          </div>
+          <div id="continueWatchingGrid" class="media-grid horizontal"></div>
         </div>
         <div id="topAiringSection" class="hidden">
           <h3 class="section-title top-title"><span class="top-bar" aria-hidden="true"></span>Top 10 Popular <span class="top-live" aria-hidden="true">&#9679;</span></h3>
@@ -419,8 +449,27 @@
       </section>
 
       <section class="page" id="page-video" aria-label="Video Player">
-        <div class="section detail-page">
-          <button type="button" class="outline small" id="videoBack">← Back</button>
+        <div class="section detail-page" id="videoPageContainer">
+          <div class="video-top-bar">
+            <button type="button" class="outline small" id="videoBack">← Back</button>
+            <div class="video-web-actions">
+              <button type="button" class="outline small v-tool-btn" id="videoTheaterBtn" title="Toggle Theater Mode (T)">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16"/></svg>
+                <span>Theater</span>
+              </button>
+              <button type="button" class="outline small v-tool-btn" id="videoLightsBtn" title="Turn Off Lights">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                <span>Lights</span>
+              </button>
+              <button type="button" class="outline small v-tool-btn" id="videoShareBtn" title="Copy Episode Link">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                <span>Share</span>
+              </button>
+              <button type="button" class="outline small v-tool-btn" id="videoShortcutsBtn" title="Keyboard Shortcuts (?)">
+                <span>⌨️ Shortcuts</span>
+              </button>
+            </div>
+          </div>
           <div class="video-header">
             <h2 id="videoTitle"></h2>
             <p id="videoSubtitle" class="muted"></p>
@@ -545,6 +594,34 @@
     <button type="button" data-page="profile"><span class="nav-icon"><svg class="sketch-ic" viewBox="0 0 24 24" aria-hidden="true"><g style="filter:url(#pencil)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g><g transform="translate(.7 .6)" opacity=".5" style="filter:url(#pencil2)"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1-4 4-6 7.5-6s6.5 2 7.5 6"/></g></svg></span>Profile</button>
   </nav>
 
-  <script src="/assets/app.js?v=98"></script>
+  <!-- Lights Off Cinema Overlay -->
+  <div id="lightsOffOverlay" class="lights-overlay hidden" aria-hidden="true"></div>
+
+  <!-- Keyboard Shortcuts Guide Modal -->
+  <div id="shortcutsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+    <div class="modal-card">
+      <button class="close" type="button" id="shortcutsClose" aria-label="Close">×</button>
+      <h2 id="shortcutsTitle">Keyboard Shortcuts</h2>
+      <div class="shortcuts-grid">
+        <div class="shortcut-row"><kbd>Space</kbd> / <kbd>K</kbd> <span>Play / Pause</span></div>
+        <div class="shortcut-row"><kbd>F</kbd> <span>Toggle Fullscreen</span></div>
+        <div class="shortcut-row"><kbd>T</kbd> <span>Toggle Theater Mode</span></div>
+        <div class="shortcut-row"><kbd>M</kbd> <span>Mute / Unmute</span></div>
+        <div class="shortcut-row"><kbd>←</kbd> / <kbd>J</kbd> <span>Seek Back 10s</span></div>
+        <div class="shortcut-row"><kbd>→</kbd> / <kbd>L</kbd> <span>Seek Forward 10s</span></div>
+        <div class="shortcut-row"><kbd>N</kbd> <span>Next Episode</span></div>
+        <div class="shortcut-row"><kbd>P</kbd> <span>Previous Episode</span></div>
+        <div class="shortcut-row"><kbd>/</kbd> <span>Focus Search Bar</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd> <span>Exit Theater / Close Modals</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Back to Top Button -->
+  <button type="button" id="backToTopBtn" class="back-to-top hidden" title="Back to top" aria-label="Back to top">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg>
+  </button>
+
+  <script src="/assets/app.js?v=99"></script>
 </body>
 </html>

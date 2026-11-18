@@ -5085,3 +5085,387 @@ $('uploaderCreateForm')?.addEventListener('submit', async (e) => {
   // ---------- 18. Apply list view to search results when they render ----------
   const sg = $('searchGrid'); if (sg) new MutationObserver(applyView).observe(sg, { childList: true });
 })();
+
+
+/* ==========================================================================
+   ANICORE PURE WEBSITE FEATURES MODULE
+   Includes: Continue Watching, Desktop Nav, Random Picker,
+   Theater Mode, Lights Off, Keyboard Shortcuts, and Back to Top
+   ========================================================================== */
+(function initAnicoreWebFeatures() {
+  'use strict';
+
+  // ---------- 1. Continue Watching System ----------
+  const CW_KEY = 'anicore_continue_watching';
+
+  function getContinueWatchingList() {
+    try {
+      const data = localStorage.getItem(CW_KEY);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function recordContinueWatching(entry) {
+    if (!entry || !entry.id) return;
+    try {
+      let list = getContinueWatchingList();
+      list = list.filter((it) => it.id !== entry.id);
+      list.unshift({
+        id: entry.id,
+        type: entry.type || 'anime',
+        title: entry.title || 'Untitled',
+        poster: entry.poster || '',
+        season: entry.season || 1,
+        episode: entry.episode || 1,
+        updatedAt: Date.now()
+      });
+      // Keep up to 12 recent titles
+      if (list.length > 12) list = list.slice(0, 12);
+      localStorage.setItem(CW_KEY, JSON.stringify(list));
+      if (document.getElementById('page-home')?.classList.contains('active')) {
+        renderContinueWatching();
+      }
+    } catch (e) {
+      console.warn('CW save error', e);
+    }
+  }
+
+  function renderContinueWatching() {
+    const section = document.getElementById('continueWatchingSection');
+    const grid = document.getElementById('continueWatchingGrid');
+    if (!section || !grid) return;
+
+    const list = getContinueWatchingList();
+    if (!list.length) {
+      section.classList.add('hidden');
+      grid.innerHTML = '';
+      return;
+    }
+
+    section.classList.remove('hidden');
+    grid.innerHTML = list.map((item) => {
+      const posterUrl = item.poster || 'https://placehold.co/400x225/17101e/ffffff?text=ANICORE';
+      return `
+        <div class="cw-card" onclick="openVideoFromLink('${item.type}', '${item.id}', ${item.season}, ${item.episode})">
+          <div class="cw-poster-box">
+            <img src="${posterUrl}" alt="${esc(item.title)}" loading="lazy">
+            <span class="cw-badge">Resume S${item.season} · E${item.episode}</span>
+          </div>
+          <div class="cw-info">
+            <h4 class="cw-title" title="${esc(item.title)}">${esc(item.title)}</h4>
+            <span class="cw-meta">${item.type === 'movie' ? 'Movie' : 'Series'}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  document.getElementById('clearContinueWatching')?.addEventListener('click', () => {
+    if (confirm('Clear your continue watching history?')) {
+      localStorage.removeItem(CW_KEY);
+      renderContinueWatching();
+      if (typeof toast === 'function') toast('Continue watching history cleared');
+    }
+  });
+
+  // Track episode play to continue watching
+  if (typeof openVideo === 'function') {
+    const origOpenVideo = openVideo;
+    openVideo = function(type, id, title, episodes, s, e, banner, resumeSec, thumbs) {
+      recordContinueWatching({
+        id: id,
+        type: type,
+        title: title,
+        poster: banner || (state && state.detailPoster) || '',
+        season: s,
+        episode: e
+      });
+      return origOpenVideo.apply(this, arguments);
+    };
+  }
+
+  // Hook into loadHome to draw continue watching
+  if (typeof loadHome === 'function') {
+    const origLoadHome = loadHome;
+    loadHome = async function() {
+      renderContinueWatching();
+      return origLoadHome.apply(this, arguments);
+    };
+  }
+
+  // ---------- 2. Desktop Navigation & Random Picker ----------
+  function syncDesktopNav(activePage) {
+    document.querySelectorAll('.desktop-nav .d-nav-item').forEach((btn) => {
+      if (btn.dataset.page) {
+        btn.classList.toggle('active', btn.dataset.page === activePage);
+      }
+    });
+  }
+
+  // Hook into showPage to sync desktop nav
+  if (typeof showPage === 'function') {
+    const origShowPage = showPage;
+    showPage = function(page) {
+      syncDesktopNav(page);
+      if (page === 'home') setTimeout(renderContinueWatching, 50);
+      return origShowPage.apply(this, arguments);
+    };
+  }
+
+  // Surprise Me / Random Anime Button
+  async function pickRandomAnime() {
+    if (typeof topLoader !== 'undefined') topLoader.start();
+    try {
+      if (typeof toast === 'function') toast('🎲 Finding a surprise title for you...');
+      const res = await api('/api/anime?page=1&limit=30&sort=views');
+      const items = Array.isArray(res) ? res : res.items || [];
+      if (items && items.length) {
+        const choice = items[Math.floor(Math.random() * items.length)];
+        allowSwap = true;
+        openDetail('anime', choice._id || choice.id, choice);
+      } else {
+        if (typeof toast === 'function') toast('No titles available for random pick');
+      }
+    } catch (err) {
+      if (typeof toast === 'function') toast('Could not load random title', 'error');
+    } finally {
+      if (typeof topLoader !== 'undefined') topLoader.done();
+    }
+  }
+
+  document.getElementById('randomAnimeTopBtn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    pickRandomAnime();
+  });
+
+  // Desktop Search Input
+  const dtSearch = document.getElementById('desktopSearchInput');
+  if (dtSearch) {
+    let dtTimer = null;
+    dtSearch.addEventListener('input', (e) => {
+      const q = e.target.value.trim();
+      clearTimeout(dtTimer);
+      dtTimer = setTimeout(() => {
+        if (q.length >= 2) {
+          const soInput = document.getElementById('soInput');
+          const searchOpenBtn = document.getElementById('searchOpenBtn');
+          if (searchOpenBtn && soInput) {
+            searchOpenBtn.click();
+            soInput.value = q;
+            soInput.dispatchEvent(new Event('input'));
+          }
+        }
+      }, 350);
+    });
+
+    dtSearch.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const q = dtSearch.value.trim();
+        if (q) {
+          allowSwap = true;
+          showPage('search');
+          const gs = document.getElementById('globalSearch');
+          if (gs) {
+            gs.value = q;
+            gs.dispatchEvent(new Event('input'));
+          }
+        }
+      }
+    });
+  }
+
+  // ---------- 3. Video Player Web Tools (Theater Mode, Lights Off, Share) ----------
+  const theaterBtn = document.getElementById('videoTheaterBtn');
+  const videoContainer = document.getElementById('videoPageContainer');
+  const lightsBtn = document.getElementById('videoLightsBtn');
+  const lightsOverlay = document.getElementById('lightsOffOverlay');
+  const shareBtn = document.getElementById('videoShareBtn');
+  const shortcutsBtn = document.getElementById('videoShortcutsBtn');
+  const shortcutsModal = document.getElementById('shortcutsModal');
+  const shortcutsClose = document.getElementById('shortcutsClose');
+
+  function toggleTheaterMode(force) {
+    if (!videoContainer) return;
+    const isTheater = typeof force === 'boolean' 
+      ? force 
+      : !videoContainer.classList.contains('theater-mode');
+    
+    videoContainer.classList.toggle('theater-mode', isTheater);
+    theaterBtn?.classList.toggle('active', isTheater);
+    if (typeof toast === 'function') {
+      toast(isTheater ? 'Theater Mode ON' : 'Theater Mode OFF');
+    }
+  }
+
+  function toggleLights(force) {
+    const isLightsOff = typeof force === 'boolean'
+      ? force
+      : !document.body.classList.contains('lights-off');
+
+    document.body.classList.toggle('lights-off', isLightsOff);
+    lightsOverlay?.classList.toggle('hidden', !isLightsOff);
+    lightsBtn?.classList.toggle('active', isLightsOff);
+  }
+
+  theaterBtn?.addEventListener('click', () => toggleTheaterMode());
+  lightsBtn?.addEventListener('click', () => toggleLights());
+  lightsOverlay?.addEventListener('click', () => toggleLights(false));
+
+  // Copy Direct Episode Link
+  shareBtn?.addEventListener('click', async () => {
+    try {
+      const shareUrl = location.href;
+      await navigator.clipboard.writeText(shareUrl);
+      if (typeof toast === 'function') toast('Episode link copied to clipboard!');
+    } catch (e) {
+      window.prompt('Copy episode link:', location.href);
+    }
+  });
+
+  // Shortcuts Modal
+  shortcutsBtn?.addEventListener('click', () => {
+    shortcutsModal?.classList.remove('hidden');
+  });
+
+  shortcutsClose?.addEventListener('click', () => {
+    shortcutsModal?.classList.add('hidden');
+  });
+
+  // Close shortcuts modal on backdrop click
+  shortcutsModal?.addEventListener('click', (e) => {
+    if (e.target === shortcutsModal) {
+      shortcutsModal.classList.add('hidden');
+    }
+  });
+
+  // ---------- 4. Global Web Keyboard Shortcuts ----------
+  window.addEventListener('keydown', (e) => {
+    // Ignore keystrokes when typing into input / textarea fields
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable) {
+      if (e.key === 'Escape') {
+        e.target.blur();
+      }
+      return;
+    }
+
+    // '/' to quickly focus desktop search bar
+    if (e.key === '/') {
+      e.preventDefault();
+      dtSearch?.focus();
+      return;
+    }
+
+    // '?' to open Keyboard Shortcuts modal
+    if (e.key === '?') {
+      e.preventDefault();
+      shortcutsModal?.classList.toggle('hidden');
+      return;
+    }
+
+    // 'Escape' to close modals / exit lights off / exit theater mode
+    if (e.key === 'Escape') {
+      if (shortcutsModal && !shortcutsModal.classList.contains('hidden')) {
+        shortcutsModal.classList.add('hidden');
+        return;
+      }
+      if (document.body.classList.contains('lights-off')) {
+        toggleLights(false);
+        return;
+      }
+      if (videoContainer && videoContainer.classList.contains('theater-mode')) {
+        toggleTheaterMode(false);
+        return;
+      }
+    }
+
+    // Player specific controls when on video page
+    if (state && state.page === 'video') {
+      const videoEl = document.querySelector('#playerWrap video');
+
+      // 'T' = Theater mode
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault();
+        toggleTheaterMode();
+        return;
+      }
+
+      // 'F' = Fullscreen
+      if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
+        const wrap = document.getElementById('playerWrap');
+        if (!document.fullscreenElement) {
+          wrap?.requestFullscreen?.().catch(() => {});
+        } else {
+          document.exitFullscreen?.().catch(() => {});
+        }
+        return;
+      }
+
+      // 'N' = Next Episode
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        document.getElementById('videoNext')?.click();
+        return;
+      }
+
+      // 'P' = Previous Episode
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        document.getElementById('videoPrev')?.click();
+        return;
+      }
+
+      // HTML5 video controls
+      if (videoEl) {
+        // Space or 'K' = Play / Pause
+        if (e.key === ' ' || e.key === 'k' || e.key === 'K') {
+          e.preventDefault();
+          if (videoEl.paused) videoEl.play(); else videoEl.pause();
+          return;
+        }
+
+        // 'M' = Mute / Unmute
+        if (e.key === 'm' || e.key === 'M') {
+          e.preventDefault();
+          videoEl.muted = !videoEl.muted;
+          if (typeof toast === 'function') toast(videoEl.muted ? 'Muted' : 'Unmuted');
+          return;
+        }
+
+        // Left Arrow / 'J' = Seek back 10s
+        if (e.key === 'ArrowLeft' || e.key === 'j' || e.key === 'J') {
+          e.preventDefault();
+          videoEl.currentTime = Math.max(0, videoEl.currentTime - 10);
+          return;
+        }
+
+        // Right Arrow / 'L' = Seek forward 10s
+        if (e.key === 'ArrowRight' || e.key === 'l' || e.key === 'L') {
+          e.preventDefault();
+          if (videoEl.duration) {
+            videoEl.currentTime = Math.min(videoEl.duration, videoEl.currentTime + 10);
+          }
+          return;
+        }
+      }
+    }
+  });
+
+  // ---------- 5. Back to Top Floating Button ----------
+  const btt = document.getElementById('backToTopBtn');
+  if (btt) {
+    window.addEventListener('scroll', () => {
+      btt.classList.toggle('hidden', window.scrollY < 400);
+    }, { passive: true });
+
+    btt.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  // Initial draw
+  setTimeout(renderContinueWatching, 300);
+})();
