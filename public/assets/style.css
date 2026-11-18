@@ -5270,3 +5270,33 @@ hr,.divider { border-color:#26364d !important; }
   .bottom-nav button.active { background:#1b3452 !important; color:#8fc0ff !important; }
   .modal-card { background:#121b2a !important; }
 }
+
+
+/* ANICORE v94 — remove the light search/episode results surface */
+#searchOverlay,
+#searchOverlay .so-bar,
+#searchOverlay .so-body {
+  background:#0b101b !important;
+  color:#e8f0fb !important;
+  border-color:#26364d !important;
+  box-shadow:none !important;
+}
+#searchOverlay .so-bar {
+  border-bottom:1px solid #26364d !important;
+}
+#searchOverlay .so-bar input,
+#searchOverlay input#soInput {
+  background:#121b2a !important;
+  color:#e8f0fb !important;
+  border:1px solid #2b3d56 !important;
+  box-shadow:none !important;
+}
+#searchOverlay .so-bar input::placeholder { color:#8397b1 !important; }
+#searchOverlay .so-result { color:#e8f0fb !important; background:transparent !important; }
+#searchOverlay .so-result:hover,
+#searchOverlay .so-result:active { background:#172337 !important; }
+#searchOverlay .so-all { color:#8fc0ff !important; border-color:#2b3d56 !important; background:#121b2a !important; }
+#searchOverlay .so-chip { color:#c5d7ed !important; background:#172337 !important; border-color:#2b3d56 !important; }
+#searchOverlay .so-head,
+#searchOverlay .so-hint,
+#searchOverlay .so-result small { color:#91a2ba !important; }
