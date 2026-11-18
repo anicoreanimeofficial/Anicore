@@ -83,7 +83,7 @@ function syncHapticControls() {
 function buzz() { /* haptics removed: the site behaves like a normal website */ }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v54';
+const APP_JS_VERSION = 'v55';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -438,11 +438,11 @@ function applyDefaultAccent() {
 }
 
 function applyTheme(_theme) {
-  state.theme = 'dark';
-  document.documentElement.setAttribute('data-theme', 'dark');
-  localStorage.setItem('anicore-theme', 'dark');
+  state.theme = 'light';
+  document.documentElement.setAttribute('data-theme', 'light');
+  localStorage.setItem('anicore-theme', 'light');
   const meta = $('themeColorMeta');
-  if (meta) meta.content = '#09090f';
+  if (meta) meta.content = '#f7f7f4';
 }
 
 function toggleTheme() {
