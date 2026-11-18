@@ -375,6 +375,7 @@ export const contentRules = (movie: boolean): Rules => ({
   studio: R.str({ max: 80, def: "" }),
   hero: R.bool(false),
   hero_order: R.int({ min: 0, max: 999, def: 0 }),
+  hero_season: R.int({ min: 0, max: 50, def: 0 }),
   top_airing: R.bool(false),
   top_rank: R.int({ min: 0, max: 999, def: 0 }),
   ...(movie ? { quality_links: R.obj() } : {}),
