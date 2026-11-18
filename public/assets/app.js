@@ -1460,7 +1460,7 @@ function episodesHtml(episodes, type, contentId, contentCtx) {
         <span class="sc-foot"><span class="sc-toggle" aria-hidden="true"><i>▾</i></span></span>
       </button>
       <div class="sc-body">
-        ${list.length > EP_PREVIEW ? '<input type="search" class="ep-filter season-filter" placeholder="Filter episodes..." autocomplete="off">' : ''}
+        
         <div class="ep-rows">${rowsWithDividers(list, rowHtml, Number(s))}</div>
         <p class="muted ep-none hidden">No episodes found.</p>
         ${list.length > EP_PREVIEW ? '<button type="button" class="ep-more"></button>' : ''}
@@ -2297,7 +2297,6 @@ function renderVideoEpList() {
     <div class="ep-list">
       ${seasons.length > 1 ? `<div class="ep-seasons">${seasons.map((n) =>
         `<button type="button" class="ep-season-btn ${n === videoContext.listSeason ? 'active' : ''}" data-season="${esc(n)}">${esc(seasonLabel(n))}</button>`).join('')}</div>` : ''}
-      <input type="search" id="epFilter" class="ep-filter" placeholder="Filter episodes..." autocomplete="off" value="${esc(videoContext.epFilter || '')}">
       <div class="ep-rows" id="epRows"></div>
       <button type="button" class="ep-more hidden" id="epMore"></button>
       ${nextAt ? `<div class="ep-next">${bell}<span><strong>Episode ${esc(nextNo)}</strong> in <strong id="epNextIn">${fmtCountdown(nextAt - Date.now())}</strong> <span class="ep-next-date">· ${nextAt.toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${pad2(nextAt.getHours())}:${pad2(nextAt.getMinutes())}</span></span></div>` : ''}
