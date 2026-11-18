@@ -5300,3 +5300,75 @@ hr,.divider { border-color:#26364d !important; }
 #searchOverlay .so-head,
 #searchOverlay .so-hint,
 #searchOverlay .so-result small { color:#91a2ba !important; }
+
+
+/* ANICORE v95 — eliminate remaining light surfaces site-wide */
+:root { color-scheme:dark !important; }
+html,body,#app,.app,.app-shell,#appMain,.main-content,.page,
+#page-home,#page-series,#page-movies,#page-schedule,#page-search,
+#page-detail,#page-video,#page-profile,#page-admin,
+.site-bg,.site-bg-overlay {
+  background-color:#0b101b !important; color:#e8f0fb !important;
+}
+.app-header,.topbar,.top-bar,.header,.sidebar,.side-panel,.side-footer,
+.search-overlay,.so-bar,.so-body,.filters,.filter-row,.panel,.modal-card,
+.stat-card,.request-row,.season-card,.profile-card,.admin-card,.form-card,
+.content-card,.empty-state,.schedule-card,.bulk-table-wrap,.fx-sheet,
+.fx-sheet-content,.dropdown-menu,.popover,.tooltip {
+  background-color:#121b2a !important; color:#e2ecfa !important;
+  border-color:#26364d !important; box-shadow:0 8px 26px rgba(0,0,0,.24) !important;
+}
+.media-card,.media-grid .media-card,.anime-card,.poster-card {
+  background-color:#121b2a !important; color:#e2ecfa !important;
+  border-color:#26364d !important; box-shadow:0 8px 24px rgba(0,0,0,.22) !important;
+}
+.media-info,.media-info h3,.media-info p,.section-title,.section-kicker,
+h1,h2,h3,h4,h5,label,.muted,.text-muted,.hint,.so-head,.so-hint,
+.so-result,.search-suggestion,.mini-title,.ep-name,.sc-title {
+  color:#e2ecfa !important;
+}
+input,textarea,select,button:not(.primary):not(.hero-watch):not(.ep-go):not(.play-button):not(.submit-btn),
+.search-overlay input,.so-bar input,#soInput {
+  background-color:#0d1624 !important; color:#e2ecfa !important;
+  border-color:#2b3d56 !important;
+}
+input::placeholder,textarea::placeholder { color:#8295af !important; }
+select option { background:#121b2a !important; color:#e2ecfa !important; }
+.outline,.chip,.genre-chip,.ep-season-btn,.fx-chip,.wl-tab,.home-genre-chip,
+.sc-toggle,.season-scope .scope-all,.detail-actions > #wlBtn,
+.header-icon-btn,.header-actions .outline {
+  background-color:#172337 !important; color:#c5d7ed !important;
+  border-color:#2b3e58 !important;
+}
+.outline:hover,.chip:hover,.genre-chip:hover,.ep-season-btn:hover,
+.search-suggestion:hover,.so-result:hover {
+  background-color:#1d3049 !important; color:#eff6ff !important;
+}
+.genre-chip.active,.chip.active,.ep-season-btn.active,.fx-chip.active,
+.wl-tab.active,.side-nav button.active,.bottom-nav button.active {
+  background-color:#1b3452 !important; color:#91c2ff !important; border-color:#365b83 !important;
+}
+.episode,.detail-ep,.ep-row,.episode-row,.bulk-table td,
+#page-detail .season-card .detail-ep,.ep-extras,.day-tabs button,
+.schedule-list,.schedule-list>* {
+  background-color:#172337 !important; color:#d5e3f5 !important; border-color:#2a3d57 !important;
+}
+.episode:hover,.detail-ep:hover,.ep-row:hover,.episode-row:hover {
+  background-color:#1d3049 !important;
+}
+.bulk-table,.bulk-table tbody,.bulk-table tr,.bulk-table td,
+.bulk-table input,.bulk-table select {
+  background-color:#121b2a !important; color:#dce8f8 !important; border-color:#2b3d56 !important;
+}
+.bulk-table th { background:#1a2a40 !important; color:#e8f0fb !important; }
+.modal { background:rgba(0,0,0,.76) !important; }
+.close { background:#1d2c41 !important; color:#d8e7fa !important; }
+.bottom-nav { background:rgba(16,24,39,.98) !important; border-color:#2b3d56 !important; }
+.toast { color:#fff !important; }
+.error-message { background:#351d29 !important; color:#ff9aa9 !important; border-color:#653344 !important; }
+hr,.divider { border-color:#26364d !important; }
+@media(max-width:899px) {
+  .app-header,.sidebar,.side-footer,.bottom-nav { background:#101827 !important; }
+  .search-overlay,.so-bar,.so-body { background:#0b101b !important; }
+  .modal-card,.filters,.panel,.season-card { background:#121b2a !important; }
+}
