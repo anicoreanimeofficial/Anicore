@@ -5001,3 +5001,125 @@ input:focus,textarea:focus,select:focus { border-color:#e48ca1 !important; box-s
   .media-grid.horizontal .media-card { flex-basis:112px !important; width:112px !important; }
   .bottom-nav { left:8px !important; right:8px !important; }
 }
+
+
+/* ==========================================================
+   ANICORE — AURORA SKY THEME
+   A fresh cool-toned identity: porcelain, glacier blue and ink.
+   ========================================================== */
+:root {
+  --bg:#f3f7fc;
+  --panel:#ffffff;
+  --text:#17283f;
+  --muted:#71839a;
+  --border:#dce7f2;
+  --pink:#397fe8;
+  --purple:#8068df;
+  --blue:#35b9c9;
+  --radius:16px;
+  --shadow:0 14px 38px rgba(36,75,125,.10);
+}
+html,body { background:#f3f7fc !important; color:#17283f !important; }
+body { font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif !important; }
+.app-header {
+  background:rgba(249,252,255,.94) !important;
+  border-color:#dce7f2 !important;
+  box-shadow:0 3px 18px rgba(42,78,123,.045) !important;
+}
+.brand,.brand-text { color:#1b3555 !important; -webkit-text-fill-color:#1b3555 !important; }
+.brand span { color:#397fe8 !important; }
+.header-icon-btn,.header-actions .outline {
+  background:#fff !important; border:1px solid #dce7f2 !important;
+  color:#315274 !important; border-radius:12px !important;
+}
+.side-nav button { color:#71839a !important; border-radius:11px !important; }
+.side-nav button:hover { background:#edf5ff !important; color:#2869c9 !important; }
+.side-nav button.active { color:#2869c9 !important; background:#e8f2ff !important; }
+#page-home .hero {
+  background:linear-gradient(125deg,#e4f1ff 0%,#edf6ff 48%,#f1edff 100%) !important;
+  border:1px solid #d9e8fa !important;
+  box-shadow:0 16px 38px rgba(54,104,164,.09) !important;
+}
+#page-home .hero::before {
+  background:radial-gradient(ellipse at 80% 15%,rgba(119,174,255,.18),transparent 48%) !important;
+}
+#page-home .hero-title { color:#183452 !important; }
+#page-home .hero-desc { color:#637b96 !important; }
+#page-home .hero-chip { background:rgba(255,255,255,.82) !important; color:#55718e !important; border-color:#d6e5f5 !important; }
+#page-home .hero-chip.gold { background:#fff8e8 !important; color:#9a7734 !important; border-color:#f0dfb9 !important; }
+#page-home .hero-watch,.primary {
+  background:linear-gradient(110deg,#397fe8,#5570df) !important;
+  color:#fff !important; border:0 !important; border-radius:11px !important;
+  box-shadow:0 7px 18px rgba(57,127,232,.18) !important;
+}
+#page-home .hero-watch:hover,.primary:hover { box-shadow:0 10px 24px rgba(57,127,232,.24) !important; }
+#page-home .hero-circle { background:#fff !important; color:#315274 !important; border:1px solid #d9e6f3 !important; }
+#page-home .hero-dot.active { background:#397fe8 !important; }
+.section-title,#page-home .section-title,
+#page-series h2,#page-movies h2,#page-schedule h2,#page-search h2,#page-profile h2,#page-admin h2 {
+  color:#1b3555 !important;
+}
+.text-button,.link,#playerFallback a { color:#397fe8 !important; }
+.media-card { border-radius:13px !important; }
+.poster-wrap { border-radius:13px !important; box-shadow:0 7px 20px rgba(38,75,120,.11) !important; }
+.media-card:hover .poster-wrap { box-shadow:0 13px 28px rgba(38,96,169,.17) !important; }
+.media-info h3 { color:#203a59 !important; }
+.media-info p { color:#7b8da3 !important; }
+.rating-badge { color:#bd8731 !important; }
+.filters,.panel,.modal-card,.stat-card,.request-row,.season-card {
+  background:#fff !important; border:1px solid #dce7f2 !important;
+  box-shadow:0 7px 24px rgba(36,75,125,.055) !important;
+}
+.filters input,.filters select,input,textarea,select {
+  background:#f8fbff !important; color:#203a59 !important; border-color:#dce7f2 !important;
+}
+select option { background:#fff !important; color:#203a59 !important; }
+input:focus,textarea:focus,select:focus {
+  border-color:#75a9ef !important; box-shadow:0 0 0 3px rgba(57,127,232,.12) !important;
+}
+.outline,.chip,.genre-chip {
+  background:#fff !important; border-color:#dce7f2 !important; color:#55718e !important;
+}
+.outline:hover,.chip:hover { border-color:#8db8f0 !important; background:#f1f7ff !important; }
+.genre-chip.active { color:#2869c9 !important; background:#edf5ff !important; border-color:#b9d4f5 !important; }
+#page-detail .season-card .detail-ep { background:#f5f9fe !important; border-color:#e1ebf6 !important; }
+#page-detail .season-card .detail-ep .ep-go { background:#397fe8 !important; }
+#page-detail .season-card .detail-ep .ep-badge,
+#page-detail .sc-count,#page-detail .sc-toggle { background:#eaf2fb !important; color:#55718e !important; }
+#page-detail .sc-title { color:#203a59 !important; }
+.episode { background:#f4f8fd !important; color:#315274 !important; }
+.episode:hover { background:#eaf3ff !important; }
+.profile-avatar { background:linear-gradient(135deg,#397fe8,#8068df,#35b9c9) !important; }
+.bottom-nav {
+  background:rgba(255,255,255,.97) !important; border:1px solid #dce7f2 !important;
+  box-shadow:0 9px 30px rgba(35,70,115,.14) !important;
+}
+.bottom-nav button { color:#8293a8 !important; }
+.bottom-nav button.active { color:#2869c9 !important; background:#edf5ff !important; }
+.toast { background:linear-gradient(110deg,#397fe8,#665fda) !important; }
+.modal { background:rgba(24,43,68,.42) !important; }
+.close { background:#edf4fb !important; color:#315274 !important; }
+.site-footer,footer { color:#7b8da3 !important; border-color:#dce7f2 !important; }
+.error-message { background:#fff0f1 !important; color:#bd4357 !important; border-color:#f1c8ce !important; }
+@media(max-width:899px) {
+  html,body { background:#f3f7fc !important; }
+  .app-header { background:rgba(249,252,255,.97) !important; border-bottom:1px solid #dce7f2 !important; }
+  .app-header .menu-btn,.app-header .header-icon-btn {
+    background:#edf4fc !important; border-color:#dce7f2 !important; color:#315274 !important;
+  }
+  .brand-text { color:#1b3555 !important; -webkit-text-fill-color:#1b3555 !important; }
+  .sidebar { background:#fff !important; border-right:1px solid #dce7f2 !important; }
+  .side-nav button.active { background:#edf5ff !important; color:#2869c9 !important; }
+  #page-home .hero {
+    background:linear-gradient(145deg,#e5f2ff 0%,#f0f5ff 58%,#f1edff 100%) !important;
+    border:1px solid #d9e8fa !important; box-shadow:0 9px 25px rgba(54,104,164,.09) !important;
+  }
+  #page-home .hero-title { color:#183452 !important; }
+  #page-home .hero-watch { background:linear-gradient(110deg,#397fe8,#5570df) !important; }
+  .bottom-nav { background:rgba(255,255,255,.97) !important; border-color:#dce7f2 !important; }
+  .bottom-nav button.active { background:#edf5ff !important; color:#2869c9 !important; }
+  .modal-card { background:#fff !important; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .media-card,.primary,.outline,.bottom-nav button { transition-duration:.22s !important; }
+}
