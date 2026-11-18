@@ -5476,3 +5476,54 @@ html, body, body[data-theme="light"] {
 [data-theme="light"] .hero-title,
 [data-theme="light"] .hero-info,
 [data-theme="light"] .hero-chip { color: #f4f6fb !important; }
+
+
+/* v98 — remove leftover light detail/episode surfaces */
+html[data-theme="dark"], html[data-theme="dark"] body {
+  color-scheme:dark !important;
+  background:#080b12 !important;
+  color:#f4f6fb !important;
+}
+#page-detail, #page-detail .section, #page-detail .detail-page,
+#page-detail #detailPageContent, #page-detail .detail-content,
+#page-detail .detail-main, #page-detail .detail-info,
+#page-detail .detail-overview {
+  background:transparent !important;
+  color:#f4f6fb !important;
+}
+#page-detail .season-card,
+#page-detail .season-card-header,
+#page-detail .sc-head,
+#page-detail .detail-ep,
+#page-detail .episode,
+#page-detail .ep-row,
+#page-detail .episode-row,
+#page-detail .sc-count,
+#page-detail .sc-toggle,
+#page-detail .ep-badge,
+#page-detail .detail-actions > #wlBtn {
+  background-color:#121b2a !important;
+  color:#e2ecfa !important;
+  border-color:#2b3d56 !important;
+  box-shadow:none !important;
+}
+#page-detail .detail-ep:hover,
+#page-detail .episode:hover,
+#page-detail .ep-row:hover,
+#page-detail .episode-row:hover {
+  background-color:#1d3049 !important;
+}
+#page-detail .sc-title,
+#page-detail h1,#page-detail h2,#page-detail h3,
+#page-detail .detail-title {
+  color:#f4f6fb !important;
+}
+#page-detail .detail-meta,
+#page-detail .detail-description,
+#page-detail .detail-subtitle,
+#page-detail .muted {
+  color:#a3adbd !important;
+}
+#page-detail .detail-actions > #wlBtn {
+  border:1px solid rgba(255,255,255,.16) !important;
+}
