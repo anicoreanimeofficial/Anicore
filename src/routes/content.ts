@@ -535,7 +535,7 @@ content.get("/api/home-featured", async (c) => {
   for (const [flag, orderKey, cap] of [["hero", "hero_order", 8], ["top_airing", "top_rank", 10]] as const) {
     const rows: Doc[] = [];
     for (const t of MEDIA) for (const d of (await db.content(t)!.find(withVisibility({ [flag]: true }), { limit: 50 }))) {
-      rows.push({ ...d, _type: t, episodes: (d.episodes || []).map((e: Doc) => ({ season: e.season, episode: e.episode, duration: e.duration || "" })) });
+      rows.push({ ...d, _type: t, hero_season: d.hero_season || 0, episodes: (d.episodes || []).map((e: Doc) => ({ season: e.season, episode: e.episode, duration: e.duration || "" })) });
     }
     rows.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
     rows.sort((a, b) => (a[orderKey] || 999) - (b[orderKey] || 999));
