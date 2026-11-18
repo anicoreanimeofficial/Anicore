@@ -5372,3 +5372,46 @@ hr,.divider { border-color:#26364d !important; }
   .search-overlay,.so-bar,.so-body { background:#0b101b !important; }
   .modal-card,.filters,.panel,.season-card { background:#121b2a !important; }
 }
+
+
+/* ANICORE v96 — keep hero actions clear of the bottom fade and lift them up */
+#page-home .hero {
+  -webkit-mask-image:none !important;
+  mask-image:none !important;
+  padding-bottom:18px !important;
+}
+#page-home .hero-info {
+  position:relative !important;
+  z-index:6 !important;
+  padding-bottom:8px !important;
+}
+#page-home .hero-desc {
+  margin-bottom:12px !important;
+}
+#page-home .hero-actions {
+  position:relative !important;
+  z-index:8 !important;
+  display:flex !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  margin-top:4px !important;
+  transform:translateY(-8px) !important;
+  pointer-events:auto !important;
+}
+#page-home .hero-watch,
+#page-home .hero-circle {
+  position:relative !important;
+  z-index:9 !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+#page-home .hero-dots { z-index:7 !important; }
+@media(max-width:899px) {
+  #page-home .hero { padding-bottom:12px !important; margin-bottom:24px !important; }
+  #page-home .hero-info { padding-top:0 !important; padding-bottom:4px !important; }
+  #page-home .hero-desc { margin:7px 0 8px !important; -webkit-line-clamp:2 !important; }
+  #page-home .hero-actions { margin-top:0 !important; transform:translateY(-5px) !important; }
+  #page-home .hero-watch { min-height:42px !important; padding:10px 18px !important; }
+  #page-home .hero-circle { width:42px !important; height:42px !important; }
+}
