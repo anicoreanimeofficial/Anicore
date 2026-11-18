@@ -438,11 +438,12 @@ function applyDefaultAccent() {
 }
 
 function applyTheme(_theme) {
-  state.theme = 'light';
-  document.documentElement.setAttribute('data-theme', 'light');
-  localStorage.setItem('anicore-theme', 'light');
+  // Dark is the only supported site theme. Override stale saved light preferences.
+  state.theme = 'dark';
+  document.documentElement.setAttribute('data-theme', 'dark');
+  localStorage.setItem('anicore-theme', 'dark');
   const meta = $('themeColorMeta');
-  if (meta) meta.content = '#f7f7f4';
+  if (meta) meta.content = '#080b12';
 }
 
 function toggleTheme() {
@@ -3245,19 +3246,28 @@ function heroRestartTimer() {
 }
 
 async function heroWatch(item) {
-  const type = item._type;
-  if (type === 'movie') { allowSwap = true; openDetail(type, item._id, item); return; }
+  if (!item) return;
+  const type = item._type || item.type || 'anime';
+  const id = item._id || item.id || item.content_id;
+  if (!id) { toast('This featured title is unavailable.', 'error'); return; }
+  const title = item.title || '';
+  // Use the canonical URL route instead of the fragile in-place page swap.
+  // This also makes the Watch action work from mobile and from a loaded hero slide.
+  if (type === 'movie') {
+    gotoUrl(detailPath(type, detailRef(id, title)));
+    return;
+  }
   try {
-    const full = await api(`/api/content/${type}/${item._id}`);
+    const full = await api(`/api/content/${type}/${id}`);
     const season = heroSeason(item);
     const allEps = [...(full.episodes || [])].sort((a, b) => cmpEp(a, b));
     const eps = season == null ? allEps : allEps.filter((e) => Number(e.season) === season);
     const ep = eps.find((e) => e.video_url);
-    if (!ep) { allowSwap = true; openDetail(type, item._id, season == null ? item : { ...item, _season: season }); return; }
-    state.detailId = item._id;
-    state.detailType = type;
-    allowSwap = true;
-    openVideo(type, item._id, full.title, eps, ep.season, ep.episode, full.banner || full.poster, 0, full.season_thumbnails || {});
+    if (!ep) {
+      gotoUrl(detailPath(type, detailRef(id, full.title || title)) + (season == null ? '' : `?season=${season}`));
+      return;
+    }
+    gotoUrl(watchPath(type, id, full.title || title, ep.season, ep.episode));
   } catch (err) {
     toast(err.message || 'Could not open', 'error');
   }
