@@ -5415,3 +5415,64 @@ hr,.divider { border-color:#26364d !important; }
   #page-home .hero-watch { min-height:42px !important; padding:10px 18px !important; }
   #page-home .hero-circle { width:42px !important; height:42px !important; }
 }
+
+
+/* v97 — FINAL DARK SURFACE OVERRIDE
+   Keep the site dark even when an old saved light-theme preference is present. */
+:root,
+html[data-theme="light"],
+body[data-theme="light"],
+[data-theme="light"] {
+  color-scheme: dark !important;
+  --bg: #080b12 !important;
+  --panel: #111827 !important;
+  --text: #f4f6fb !important;
+  --muted: #a3adbd !important;
+  --border: rgba(255,255,255,.12) !important;
+  --glass: rgba(17,24,39,.82) !important;
+  --glass-strong: rgba(12,18,30,.96) !important;
+  --glass-border: rgba(255,255,255,.13) !important;
+}
+html, body, body[data-theme="light"] {
+  background: #080b12 !important;
+  color: #f4f6fb !important;
+}
+[data-theme="light"] .app-header,
+[data-theme="light"] .sidebar,
+[data-theme="light"] .panel,
+[data-theme="light"] .media-card,
+[data-theme="light"] .modal-card,
+[data-theme="light"] .bottom-nav,
+[data-theme="light"] .search-overlay,
+[data-theme="light"] .so-bar,
+[data-theme="light"] .so-body,
+[data-theme="light"] .episode,
+[data-theme="light"] .schedule-item,
+[data-theme="light"] .day-tab,
+[data-theme="light"] .stat-card,
+[data-theme="light"] .request-row,
+[data-theme="light"] .profile-panel,
+[data-theme="light"] .install-popup,
+[data-theme="light"] .bg-preview {
+  background-color: #111827 !important;
+  color: #f4f6fb !important;
+  border-color: rgba(255,255,255,.12) !important;
+}
+[data-theme="light"] input,
+[data-theme="light"] textarea,
+[data-theme="light"] select,
+[data-theme="light"] .search-input,
+[data-theme="light"] #soInput {
+  background: #0b1220 !important;
+  color: #f4f6fb !important;
+  border-color: rgba(255,255,255,.16) !important;
+}
+[data-theme="light"] select option {
+  background: #111827 !important;
+  color: #f4f6fb !important;
+}
+[data-theme="light"] .bottom-nav button { color: #a3adbd !important; }
+[data-theme="light"] .bottom-nav button.active { color: #ff8ab5 !important; }
+[data-theme="light"] .hero-title,
+[data-theme="light"] .hero-info,
+[data-theme="light"] .hero-chip { color: #f4f6fb !important; }
