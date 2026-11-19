@@ -4271,3 +4271,20 @@ body.lights-off #page-video .player-wrap {
 @media (prefers-reduced-motion: reduce) {
   .brand-text { animation: none; background-position: 50% 50%; }
 }
+
+
+/* v102 — Popular ranking numbers sit inside the poster artwork */
+.top-item { isolation: isolate; }
+.top-rank {
+  left: 64px;
+  bottom: 50px;
+  z-index: 2;
+  color: rgba(255, 255, 255, .10);
+  -webkit-text-fill-color: rgba(255, 255, 255, .10);
+  -webkit-text-stroke: 1.8px rgba(255, 255, 255, .72);
+  text-shadow: 0 0 16px rgba(255, 63, 130, .24);
+  mix-blend-mode: screen;
+}
+.top-poster { z-index: 1; }
+.top-name { z-index: 1; }
+.top-tag { z-index: 3; }
