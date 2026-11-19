@@ -83,7 +83,7 @@ function syncHapticControls() {
 function buzz() { /* haptics removed: the site behaves like a normal website */ }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v55';
+const APP_JS_VERSION = 'v56';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
@@ -644,7 +644,13 @@ document.addEventListener('click', (e) => {
   if (el) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button > 0) return; // let the browser open it in a new tab
     e.preventDefault();
-    showPage(el.dataset.page);
+    const nextPage = el.dataset.page;
+    // Re-opening the active navigation item should refresh that route too.
+    if (nextPage === state.page) {
+      location.reload();
+      return;
+    }
+    showPage(nextPage);
   }
 });
 
