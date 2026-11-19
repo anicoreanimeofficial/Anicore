@@ -4239,3 +4239,35 @@ body.lights-off #page-video .player-wrap {
   transform: translateY(-3px);
   box-shadow: 0 10px 28px rgba(255, 63, 130, .4);
 }
+
+
+/* Anicore wordmark: subtle animated neon shimmer */
+.brand-text {
+  display: inline-block;
+  background: linear-gradient(105deg,
+    #ff477e 0%,
+    #ff8ab0 22%,
+    #ffffff 40%,
+    #c18aff 62%,
+    #ff477e 82%,
+    #ff8ab0 100%);
+  background-size: 240% 100%;
+  background-position: 100% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: anicoreWordmarkShine 5s ease-in-out infinite;
+  filter: drop-shadow(0 0 7px rgba(255, 63, 130, .28));
+}
+@keyframes anicoreWordmarkShine {
+  0%, 12% { background-position: 100% 50%; }
+  58%, 100% { background-position: 0% 50%; }
+}
+.brand:hover .brand-text {
+  filter: drop-shadow(0 0 5px rgba(255, 63, 130, .55))
+          drop-shadow(0 0 13px rgba(164, 102, 255, .35));
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-text { animation: none; background-position: 50% 50%; }
+}
