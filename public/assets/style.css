@@ -4276,7 +4276,7 @@ body.lights-off #page-video .player-wrap {
 /* v102 — Popular ranking numbers sit inside the poster artwork */
 .top-item { isolation: isolate; }
 .top-rank {
-  left: 64px;
+  left: 18px;
   bottom: 50px;
   z-index: 2;
   color: rgba(255, 255, 255, .10);
