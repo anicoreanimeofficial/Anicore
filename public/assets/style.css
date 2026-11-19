@@ -4288,3 +4288,159 @@ body.lights-off #page-video .player-wrap {
 .top-poster { position: relative; z-index: 1; }
 .top-name { position: relative; z-index: 1; }
 .top-tag { position: relative; z-index: 3; }
+
+
+/* =========================================================
+   ANICROX-INSPIRED FULL UI — v105
+   Black editorial layout, crimson accents, portrait anime art.
+   Keeps all existing page markup and interactions intact.
+   ========================================================= */
+:root {
+  --bg:#080808; --panel:#111114; --text:#f5f4f5; --muted:#929196;
+  --border:rgba(255,255,255,.10); --pink:#e93650; --purple:#a51e38;
+  --accent:#e93650; --accent-2:#a51e38; --radius:14px;
+}
+html, body { background:#080808 !important; color:#f5f4f5; }
+.site-bg { background-image:none !important; background:#080808 !important; }
+.site-bg-overlay { display:none !important; }
+.app-shell { background:#080808; }
+.app-header {
+  min-height:72px; padding:12px 5%; background:rgba(8,8,8,.96) !important;
+  border-bottom:1px solid rgba(255,255,255,.12); box-shadow:none;
+  backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px);
+}
+.brand {
+  font-family:'Bebas Neue',Impact,sans-serif; font-size:34px; letter-spacing:4px;
+  font-weight:400; color:#f4f2f2; line-height:1;
+}
+.brand span,.brand .brand-text { color:#f4f2f2; }
+.brand .brand-text::first-letter { color:#f4f2f2; }
+.header-icon-btn { color:#aaa; background:transparent; border:0; }
+.header-icon-btn svg { width:27px; height:27px; }
+.menu-btn { background:transparent !important; border:0 !important; box-shadow:none !important; font-size:0; }
+.menu-btn::before { content:"☰"; font-size:28px; color:#eee; }
+.desktop-nav .d-nav-item { color:#aaa; }
+.desktop-nav .d-nav-item.active,.desktop-nav .d-nav-item:hover { color:#e93650; }
+.primary,.hero-watch { background:#b71932; border:1px solid #e93650; box-shadow:0 8px 24px rgba(220,35,65,.22); }
+.primary:hover,.hero-watch:hover { background:#d32240; }
+.panel,.media-card,.modal-card { background:#111113; border-color:rgba(255,255,255,.10); box-shadow:none; }
+.media-card { border-radius:13px; }
+.media-grid.horizontal { gap:14px; padding:14px 4%; }
+.media-grid.horizontal .media-card { flex:0 0 clamp(132px, 34vw, 190px); }
+.poster-wrap { border-radius:12px; }
+.media-info { padding:9px 3px 5px; }
+.media-info h3 { font-size:13px; font-weight:650; color:#d0cfd1; }
+.media-info p { color:#77767b; }
+.section-heading-row { margin:28px 0 12px; padding:0 4%; }
+.section-title { padding:0 4%; margin:26px 0 12px; font-family:'Bebas Neue',Impact,sans-serif; font-size:29px; letter-spacing:1.5px; text-transform:uppercase; }
+.section-heading-row .section-title { padding:0; margin:0; }
+.section-title::before {
+  content:""; display:inline-block; width:6px; height:1.25em; margin-right:12px;
+  vertical-align:-.2em; border-radius:8px; background:#e93650; box-shadow:0 0 14px rgba(233,54,80,.35);
+}
+.section-title .top-bar { display:none; }
+.top-title { color:#f3f1f1; }
+.top-title .top-live { color:#e93650; margin-left:8px; }
+.top-row {
+  display:flex; gap:22px; overflow-x:auto; padding:10px 4% 18px;
+  scroll-snap-type:x mandatory; scrollbar-width:none;
+}
+.top-row::-webkit-scrollbar { display:none; }
+.top-item {
+  flex:0 0 clamp(215px, 68vw, 300px); position:relative; isolation:isolate;
+  padding:0 0 4px; scroll-snap-align:start; cursor:pointer;
+}
+.top-rank {
+  position:absolute; left:-8px; bottom:40px; z-index:0; font-family:'Bebas Neue',Impact,sans-serif;
+  font-size:clamp(170px,48vw,260px); line-height:.8; color:transparent;
+  -webkit-text-fill-color:transparent; -webkit-text-stroke:3px rgba(230,225,225,.82);
+  text-shadow:none; pointer-events:none;
+}
+.top-poster { position:relative; z-index:1; width:76%; margin-left:auto; height:auto; aspect-ratio:3/4; border-radius:15px; overflow:hidden; background:#161616; border:1px solid rgba(255,255,255,.12); }
+.top-poster img { width:100%; height:100%; object-fit:cover; }
+.top-tag { background:rgba(10,10,10,.78); color:#eee; border:1px solid rgba(255,255,255,.18); }
+.top-name { position:relative; z-index:2; text-align:center; padding:8px 0 0 24%; color:#c9c7c9; font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hero { position:relative; min-height:650px; padding:0 0 28px; overflow:hidden; background:#0b0b0e; }
+.hero-bg { opacity:0; filter:blur(30px) brightness(.35); transform:scale(1.12); }
+.hero-bg.on { opacity:.85; }
+.hero-stage { height:390px; perspective:1000px; }
+.hero-slide { width:56vw; max-width:340px; height:100%; border-radius:24px; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.13); }
+.hero-slide img { object-fit:cover; }
+.hero-slide.is-active { transform:translate(-50%,0) scale(1); }
+.hero-info { position:relative; z-index:4; max-width:720px; margin:24px auto 0; padding:0 5%; text-align:center; }
+.hero-title { font-family:'Bebas Neue',Impact,sans-serif; font-size:clamp(30px,6vw,46px); letter-spacing:1.2px; line-height:1.08; text-transform:uppercase; margin:0 0 16px; }
+.hero-chips { justify-content:center; gap:8px; margin:10px 0; }
+.hero-chip { background:rgba(255,255,255,.09); border:1px solid rgba(255,255,255,.15); color:#ddd; border-radius:999px; padding:8px 14px; font-size:13px; }
+.hero-chip.gold { color:#ffd12e; border-color:rgba(255,209,46,.45); }
+.hero-chip.ghost { background:transparent; }
+.hero-desc { color:#bbb9bd; font-size:14px; line-height:1.55; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.hero-actions { justify-content:center; gap:12px; }
+.hero-watch { min-width:190px; border-radius:999px; padding:15px 28px; font-size:16px; }
+.hero-circle { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.22); color:#fff; }
+.hero-dots { bottom:8px; }
+.hero-dot.active { background:#e93650; }
+.detail-page { max-width:900px; }
+#page-detail { background:radial-gradient(ellipse at 50% 20%,#163a49 0%,#102630 42%,#080b0e 78%); min-height:100vh; }
+#page-detail > .section { padding:18px 5% 125px; }
+#page-detail #detailBack { background:rgba(0,0,0,.35); }
+#detailPageContent { display:flex; flex-direction:column; align-items:center; text-align:center; }
+#detailPageContent .detail-banner {
+  width:min(62%,390px); aspect-ratio:3/4; height:auto; max-height:620px; object-fit:cover;
+  border-radius:28px; margin:8px auto 28px; box-shadow:0 24px 70px rgba(0,0,0,.5);
+  border:1px solid rgba(255,255,255,.12);
+}
+#detailPageContent > h2 {
+  max-width:780px; margin:8px auto 14px; font-family:'Bebas Neue',Impact,sans-serif;
+  font-size:clamp(34px,7vw,54px); line-height:1.08; letter-spacing:1px; text-transform:uppercase;
+}
+#detailPageContent #dMeta { color:#c2cbd0; font-size:14px !important; }
+#detailPageContent .synopsis { max-width:760px; color:#c5c7ca; }
+#detailPageContent .desc { font-size:15px; line-height:1.65; }
+#detailPageContent > p { color:#c7cbd0; }
+#detailPageContent .links { justify-content:center; }
+#detailPageContent .chip { padding:9px 16px; background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.15); }
+#detailPageContent .detail-actions { width:100%; max-width:520px; justify-content:center; }
+#detailPageContent .detail-actions button { border-radius:999px; min-height:54px; }
+#detailPageContent > h3 { align-self:stretch; text-align:left; margin-top:28px; }
+#detailPageContent #dRecapSlot,#detailPageContent #similarSlot,
+#detailPageContent #commentList,#detailPageContent #commentForm,
+#detailPageContent .season-block,#detailPageContent .episodes { width:100%; text-align:left; }
+#detailPageContent .season-card,#detailPageContent .episode { background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.09); border-radius:13px; }
+.bottom-nav {
+  left:0 !important; right:0 !important; bottom:0 !important; transform:none !important;
+  width:100% !important; max-width:none !important; min-height:76px !important;
+  padding:7px 3px max(7px,env(safe-area-inset-bottom)) !important; gap:0 !important;
+  border-radius:0 !important; border:0 !important; border-top:1px solid rgba(255,255,255,.12) !important;
+  background:rgba(8,8,8,.96) !important; box-shadow:none !important;
+  backdrop-filter:blur(18px) !important; -webkit-backdrop-filter:blur(18px) !important;
+}
+.bottom-nav button { color:#68686d !important; font-size:11px !important; gap:4px !important; }
+.bottom-nav button.active { color:#e93650 !important; background:transparent !important; }
+.bottom-nav .nav-pill { display:none !important; }
+.bottom-nav .nav-icon { font-size:22px; }
+body { padding-bottom:105px; }
+footer { background:#080808; }
+@media (min-width:900px) {
+  .hero { min-height:620px; }
+  .hero-stage { height:430px; }
+  .hero-slide { width:260px; }
+  .hero-info { margin-top:22px; }
+  .top-row { padding-left:5%; padding-right:5%; }
+  #detailPageContent .detail-banner { width:min(36%,390px); }
+}
+@media (max-width:600px) {
+  .app-header { min-height:70px; padding:10px 5%; }
+  .brand { font-size:32px; letter-spacing:3px; }
+  .hero { min-height:620px; padding-top:4px; }
+  .hero-stage { height:390px; }
+  .hero-slide { width:56vw; height:100%; }
+  .hero-info { margin-top:22px; padding:0 6%; }
+  .hero-title { font-size:32px; }
+  .hero-chips { gap:7px; }
+  .hero-chip { padding:7px 11px; font-size:12px; }
+  .section-title { font-size:27px; }
+  .top-item { flex-basis:76vw; }
+  #detailPageContent .detail-banner { width:min(62%,390px); margin-bottom:24px; }
+  #detailPageContent > h2 { font-size:36px; }
+  #page-detail > .section { padding-left:4%; padding-right:4%; }
+}
