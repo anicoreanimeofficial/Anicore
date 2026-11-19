@@ -4273,18 +4273,18 @@ body.lights-off #page-video .player-wrap {
 }
 
 
-/* v102 — Popular ranking numbers sit inside the poster artwork */
+/* v104 — Popular rank sits behind the poster, never over its artwork */
 .top-item { isolation: isolate; }
 .top-rank {
-  left: 18px;
+  left: 0;
   bottom: 50px;
-  z-index: 2;
+  z-index: 0;
   color: rgba(255, 255, 255, .10);
   -webkit-text-fill-color: rgba(255, 255, 255, .10);
   -webkit-text-stroke: 1.8px rgba(255, 255, 255, .72);
   text-shadow: 0 0 16px rgba(255, 63, 130, .24);
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
 }
-.top-poster { z-index: 1; }
-.top-name { z-index: 1; }
-.top-tag { z-index: 3; }
+.top-poster { position: relative; z-index: 1; }
+.top-name { position: relative; z-index: 1; }
+.top-tag { position: relative; z-index: 3; }
