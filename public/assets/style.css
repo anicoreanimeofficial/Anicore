@@ -4022,3 +4022,116 @@ input:focus, textarea:focus, select:focus {
   .app-shell { max-width: 1600px; margin: 0 auto; }
   .section { padding-left: 4%; padding-right: 4%; }
 }
+
+
+/* Mobile header repair v110: one clean, aligned toolbar */
+@media (max-width: 899px) {
+  .app-header {
+    position: sticky !important;
+    top: 0;
+    z-index: 1000;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 66px !important;
+    height: 66px;
+    padding: 9px 16px !important;
+    display: flex !important;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 12px;
+    background: rgba(13,13,16,.97) !important;
+    border-bottom: 1px solid rgba(255,255,255,.08) !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+  .app-header .header-left {
+    display: flex !important;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start;
+    gap: 12px;
+  }
+  .app-header .menu-btn {
+    display: inline-flex !important;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border-radius: 12px !important;
+    font-size: 18px;
+  }
+  .app-header .brand {
+    display: inline-flex !important;
+    flex: 0 1 auto;
+    min-width: 0;
+    align-items: center;
+    white-space: nowrap;
+    font-family: "Bebas Neue", Impact, sans-serif;
+    font-size: 29px !important;
+    line-height: 1;
+    letter-spacing: .09em !important;
+    color: #f4f4f5;
+  }
+  .app-header .brand span { color: #ff3b60 !important; }
+  .app-header .desktop-nav,
+  .app-header .header-search-bar {
+    display: none !important;
+  }
+  .app-header .header-actions {
+    display: flex !important;
+    flex: 0 0 auto;
+    flex-flow: row nowrap !important;
+    align-items: center !important;
+    justify-content: flex-end;
+    gap: 9px !important;
+    margin: 0;
+  }
+  .app-header .mobile-only,
+  .app-header #searchOpenBtn {
+    display: inline-flex !important;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 !important;
+    border: 1px solid rgba(255,255,255,.12) !important;
+    border-radius: 12px !important;
+    background: rgba(255,255,255,.055) !important;
+    color: #f4f4f5 !important;
+  }
+  .app-header #searchOpenBtn svg { width: 21px; height: 21px; }
+  .app-header #signInBtn,
+  .app-header #logoutBtn {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 13px !important;
+    border-radius: 12px !important;
+    white-space: nowrap;
+    font-size: 13px !important;
+  }
+  .app-header #adminBtn.hidden,
+  .app-header #signInBtn.hidden,
+  .app-header #logoutBtn.hidden { display: none !important; }
+}
+@media (max-width: 380px) {
+  .app-header { padding-inline: 11px !important; gap: 8px; }
+  .app-header .header-left { gap: 8px; }
+  .app-header .brand { font-size: 26px !important; }
+  .app-header .header-actions { gap: 6px !important; }
+  .app-header #signInBtn,
+  .app-header #logoutBtn { padding-inline: 10px !important; }
+}
+@media (min-width: 900px) {
+  .app-header .desktop-nav { display: none !important; }
+}
