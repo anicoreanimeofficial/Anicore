@@ -3918,3 +3918,107 @@ html[data-density="compact"] .media-info p { font-size: 11px; }
 .season-scope { display: flex; justify-content: flex-end; margin: 0 0 12px; }
 .season-scope .scope-all { all: unset; cursor: pointer; padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); color: #fff; font-size: 12px; font-weight: 700; }
 .season-card.hidden { display: none; }
+
+
+/* Anicore clean simple UI — v109 */
+:root {
+  --bg: #0d0d10;
+  --panel: #17171c;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --border: #292930;
+  --pink: #e54865;
+  --purple: #e54865;
+  --blue: #7777a8;
+  --radius: 12px;
+  --card-hover: translateY(-2px);
+  --shadow: 0 8px 24px rgba(0,0,0,.22);
+}
+body {
+  background: var(--bg) !important;
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  line-height: 1.55;
+}
+.site-bg, #snow { display: none !important; }
+.app-header {
+  background: rgba(13,13,16,.96);
+  border-bottom: 1px solid var(--border);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+.brand { letter-spacing: .02em; text-shadow: none !important; }
+.brand span { color: var(--pink); }
+.primary {
+  background: var(--pink);
+  border-radius: 9px;
+  box-shadow: none;
+}
+.primary:hover { box-shadow: none; transform: translateY(-1px); }
+.outline, .panel, .modal-card, .stat-card, .episode, .request-row {
+  border-radius: 10px;
+  box-shadow: none;
+}
+.panel { background: var(--panel); border-color: var(--border); }
+.media-card {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.media-card:hover { border-color: transparent; box-shadow: none; transform: translateY(-2px); }
+.poster-wrap { border-radius: 8px; background: #202027; }
+.media-card:hover .poster-wrap img { transform: none; }
+.media-info { padding: 9px 2px 4px; }
+.media-info h3 { font-size: 14px; font-weight: 650; }
+.media-info p { color: var(--muted); }
+.section-title { margin-top: 22px; }
+.section-title h2, .section h2 { font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+.genre-chip { border-radius: 8px; }
+.genre-chip:hover, .genre-chip.active { background: rgba(229,72,101,.12); }
+input, textarea, select {
+  background: #17171c;
+  border-color: var(--border);
+  border-radius: 9px;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--pink);
+  box-shadow: 0 0 0 2px rgba(229,72,101,.12);
+}
+.detail-banner { border-radius: 10px; }
+.recap {
+  background: #19191f;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.recap strong { color: var(--pink); }
+.chip { border-radius: 8px; }
+.episode { background: #19191f; border: 1px solid transparent; }
+.episode:hover { background: #202027; }
+.modal-card { background: #17171c; border-color: var(--border); }
+.close { border-radius: 9px; }
+.sidebar { background: #111115; border-color: var(--border); backdrop-filter: none; }
+.side-nav button { border-radius: 9px; }
+.side-nav button.active { background: rgba(229,72,101,.12); color: var(--pink); }
+.bottom-nav, .mobile-nav, .floating-nav {
+  box-shadow: 0 4px 22px rgba(0,0,0,.28);
+}
+@media (max-width: 700px) {
+  body { padding-bottom: 88px; }
+  .app-header { min-height: 58px; padding: 10px 4%; }
+  .brand { font-size: 20px; }
+  .intro { padding: 26px 4% 8px; }
+  .section { padding: 16px 4%; }
+  .section-title { padding: 0 4%; }
+  .media-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 13px 10px; padding: 14px 4%; }
+  .media-grid.horizontal { gap: 12px; padding: 14px 4%; }
+  .media-grid.horizontal .media-card { flex-basis: 126px; }
+  .media-info { padding: 8px 1px 2px; }
+  .media-info h3 { font-size: 12px; line-height: 1.35; }
+  .media-info p { font-size: 11px; }
+  .poster-wrap { border-radius: 7px; }
+}
+@media (min-width: 701px) {
+  .app-shell { max-width: 1600px; margin: 0 auto; }
+  .section { padding-left: 4%; padding-right: 4%; }
+}
