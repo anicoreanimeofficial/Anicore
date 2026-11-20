@@ -4146,3 +4146,75 @@ input:focus, textarea:focus, select:focus {
 body {
   background: transparent !important;
 }
+
+
+/* Mobile performance pass v112: keep the design, reduce expensive paint work */
+@media (max-width: 899px) {
+  /* Large fixed blurred layers are costly while scrolling on mid-range phones. */
+  .site-bg {
+    position: absolute !important;
+    inset: 0 0 auto !important;
+    height: 100vh !important;
+    min-height: 100vh;
+    transform: none !important;
+    background-attachment: scroll !important;
+  }
+  .site-bg, #snow { display: block; }
+  .site-bg-overlay {
+    background: linear-gradient(180deg, rgba(9,9,15,.48), rgba(9,9,15,.76)) !important;
+  }
+
+  /* Use solid translucent surfaces instead of repeatedly blurring the page behind them. */
+  .app-header,
+  .bottom-nav,
+  .sidebar,
+  .modal-card,
+  .install-banner,
+  .recap,
+  .alp-card,
+  .air-cal-cell {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .app-header { background: rgba(13,13,16,.97) !important; }
+  .bottom-nav {
+    background: rgba(24,22,29,.97) !important;
+    box-shadow: 0 5px 18px rgba(0,0,0,.28) !important;
+  }
+
+  /* Avoid animating every poster into view and continuously shimmering skeletons. */
+  .media-card,
+  .media-card.card-enter {
+    animation: none !important;
+    will-change: auto !important;
+    transition: transform .16s ease !important;
+  }
+  .media-card:hover,
+  .media-card:hover .poster-wrap,
+  .media-card:focus-visible .poster-wrap {
+    transform: none !important;
+    box-shadow: none !important;
+  }
+  .media-card .poster-wrap,
+  .media-card .poster-wrap img {
+    transition: none !important;
+  }
+  .skeleton,
+  .skeleton-card,
+  .skeleton-text,
+  .sk {
+    animation-duration: 2.8s !important;
+  }
+  .page.from-left,
+  .page.from-right,
+  .page.active {
+    animation-duration: .16s !important;
+  }
+}
+@media (max-width: 899px) and (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: auto !important; }
+  .bottom-nav .nav-pill,
+  .bottom-nav .nav-indicator {
+    transition-duration: .2s !important;
+  }
+}
