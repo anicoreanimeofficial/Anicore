@@ -32,7 +32,7 @@ function detailRef(id, title) { return slugify(title) || id; }
 const TYPE_SEG = { anime: 'anime', tv_show: 'tvshow', movie: 'movie' };
 const SEG_TYPE = { anime: 'anime', tvshow: 'tv_show', movie: 'movie' };
 const detailPath = (type, ref) => `/${TYPE_SEG[type] || type}/${ref}`;
-const watchPath = (type, id, title, s, e) => `${detailPath(type, detailRef(id, title))}/s${s}e${e}`;
+const watchPath = (type, id, title, s, e) => `${detailPath(type, id)}/s${s}e${e}`;
 const PAGE_PATH = { home: '/', series: '/series', movies: '/movies', schedule: '/schedule', search: '/search', profile: '/profile', admin: '/admin' };
 // Every in-app move is a real page load. Only the first page the browser opens may be drawn in place.
 let allowSwap = false;
@@ -83,7 +83,7 @@ function syncHapticControls() {
 function buzz() { /* haptics removed: the site behaves like a normal website */ }
 const PLACEHOLDER = 'https://placehold.co/400x600/17101e/ffffff?text=ANICORE';
 const PAGE_SIZE = 20;
-const APP_JS_VERSION = 'v56';
+const APP_JS_VERSION = 'v57';
 
 console.log('[anicore] app.js loaded —', APP_JS_VERSION);
 
