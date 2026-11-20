@@ -4135,3 +4135,14 @@ input:focus, textarea:focus, select:focus {
 @media (min-width: 900px) {
   .app-header .desktop-nav { display: none !important; }
 }
+
+
+/* Restore the site background artwork (clean UI should not hide it) v111 */
+.site-bg {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+body {
+  background: transparent !important;
+}
